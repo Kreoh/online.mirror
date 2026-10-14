@@ -8,7 +8,6 @@ pipeline {
     environment {
         IMAGE_BASE_NAME = 'ghcr.io/kreoh/online-office'
         SOURCE_BRANCH = 'kreoh-main-agent-port'
-        SOURCE_VERSION = '26.04.4.0-agent-save'
     }
     options {
         skipDefaultCheckout(true)
@@ -49,6 +48,14 @@ pipeline {
                     ])
                     env.ONLINE_OFFICE_SOURCE_REVISION =
                         scmVars.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    def sourceVersion = sh(
+                        script: '''awk -F'[][]' '$2 == "coolwsd" { print $4; exit }' configure.ac''',
+                        returnStdout: true
+                    ).trim()
+                    if (!sourceVersion) {
+                        error('Could not read the source version from configure.ac')
+                    }
+                    env.SOURCE_VERSION = "${sourceVersion}-agent-save"
                     env.IMAGE_TAG = "${env.SOURCE_VERSION}-${env.ONLINE_OFFICE_SOURCE_REVISION.take(12)}"
                     echo "Checked out ${env.ONLINE_OFFICE_SOURCE_REVISION}; image tag is ${env.IMAGE_TAG}"
                 }
@@ -68,7 +75,6 @@ pipeline {
                         *) echo "ONLINE_OFFICE_SOURCE_REVISION must be a full lower-case Git revision." >&2; exit 1 ;;
                     esac
                     test "$(git rev-parse HEAD)" = "$ONLINE_OFFICE_SOURCE_REVISION"
-                    test "$(awk -F'[][]' '$2 == "coolwsd" { print $4; exit }' configure.ac)" = '26.04.4.0'
                     test "$(grep -Fxc -- '--without-branding' engine/distro-configs/OnlineLinuxCommon.conf)" -eq 1
                     ! grep -Eq -- '--with-branding|--with-vendor' \
                         engine/distro-configs/OnlineLinuxCommon.conf \
