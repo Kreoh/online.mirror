@@ -104,7 +104,14 @@ grep -Fqx -- '--with-product-name=Online Office' \
   "$repo_root/engine/distro-configs/OnlineLinuxCommon.conf"
 grep -Fq 'online-office-sbom.spdx.json' "$repo_root/Makefile.am"
 grep -Fq 'dist_doc_DATA = COPYING' "$repo_root/Makefile.am"
-grep -Fq '"name": "Online Office"' "$repo_root/cool-sbom-template.spdx.json"
+# SPDX3 is generated directly; packaging changes only its document display name.
+grep -Fq '"type": "SpdxDocument"' "$repo_root/scripts/create-sbom.py"
+grep -Fq '"online-office-sbom.spdx.json"' "$repo_root/scripts/create-sbom.py"
+grep -Fqx 'PRODUCT_NAME = "Online Office"' "$repo_root/docker/from-source/debrand.py"
+grep -Fq 'documents[0]["name"] = PRODUCT_NAME' "$repo_root/docker/from-source/debrand.py"
+grep -Fq 'documents[0].get("name") != PRODUCT_NAME' "$repo_root/docker/from-source/debrand.py"
+# Keep package identities and provenance out of generic product-text rewriting.
+grep -Fq 'if not path.name.endswith("-sbom.spdx.json")' "$repo_root/docker/from-source/debrand.py"
 grep -Fq "IMAGE_BASE_NAME = 'ghcr.io/kreoh/online-office'" "$repo_root/Jenkinsfile"
 grep -Fq 'ONLINE_OFFICE_SOURCE_REVISION' "$repo_root/Jenkinsfile"
 grep -Fq 'ONLINE_OFFICE_SOURCE_REVISION' "$repo_root/docker/from-source/build.sh"
