@@ -7,7 +7,7 @@ pipeline {
     }
     environment {
         IMAGE_BASE_NAME = 'ghcr.io/kreoh/online-office'
-        SOURCE_BRANCH = 'kreoh-main-agent-port'
+        SOURCE_BRANCH = 'main'
     }
     options {
         skipDefaultCheckout(true)
@@ -158,6 +158,7 @@ pipeline {
                         -e DOCKER_HUB_REPO="$IMAGE_BASE_NAME" \
                         -e DOCKER_HUB_TAG="$IMAGE_TAG" \
                         -e ONLINE_OFFICE_SOURCE_REVISION="$ONLINE_OFFICE_SOURCE_REVISION" \
+                        -e ONLINE_OFFICE_SOURCE_BRANCH="$SOURCE_BRANCH" \
                         -e ONLINE_OFFICE_FINAL_DOCKERFILE=Distroless \
                         -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \
                         -e CCACHE_DIR=/workspace-cache/ccache \

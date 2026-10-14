@@ -26,16 +26,6 @@ if [[ ! "${ONLINE_OFFICE_SOURCE_REVISION:-}" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-EXPECTED_DOCKER_HUB_TAG="26.04.4.0-agent-save-${ONLINE_OFFICE_SOURCE_REVISION:0:12}"
-if [ -z "${DOCKER_HUB_TAG:-}" ]; then
-  DOCKER_HUB_TAG="$EXPECTED_DOCKER_HUB_TAG"
-fi;
-if [ "$DOCKER_HUB_TAG" != "$EXPECTED_DOCKER_HUB_TAG" ]; then
-  echo "DOCKER_HUB_TAG must be $EXPECTED_DOCKER_HUB_TAG" >&2
-  exit 1
-fi
-echo "Using Docker Hub Repository: '$DOCKER_HUB_REPO' with tag '$DOCKER_HUB_TAG'."
-
 if [ -n "${ONLINE_OFFICE_SOURCE_REPOSITORY:-}" ] && [ "$ONLINE_OFFICE_SOURCE_REPOSITORY" != "https://github.com/Kreoh/online.mirror.git" ]; then
   echo "ONLINE_OFFICE_SOURCE_REPOSITORY must be https://github.com/Kreoh/online.mirror.git" >&2
   exit 1
@@ -43,12 +33,12 @@ fi
 if [ -z "${ONLINE_OFFICE_SOURCE_REPOSITORY:-}" ]; then
   ONLINE_OFFICE_SOURCE_REPOSITORY="https://github.com/Kreoh/online.mirror.git"
 fi;
-if [ -n "${ONLINE_OFFICE_SOURCE_BRANCH:-}" ] && [ "$ONLINE_OFFICE_SOURCE_BRANCH" != "kreoh-main-agent-port" ]; then
-  echo "ONLINE_OFFICE_SOURCE_BRANCH must be kreoh-main-agent-port" >&2
+if [ -n "${ONLINE_OFFICE_SOURCE_BRANCH:-}" ] && [ "$ONLINE_OFFICE_SOURCE_BRANCH" != "main" ]; then
+  echo "ONLINE_OFFICE_SOURCE_BRANCH must be main" >&2
   exit 1
 fi
 if [ -z "${ONLINE_OFFICE_SOURCE_BRANCH:-}" ]; then
-  ONLINE_OFFICE_SOURCE_BRANCH="kreoh-main-agent-port"
+  ONLINE_OFFICE_SOURCE_BRANCH="main"
 fi;
 echo "Building exact revision '$ONLINE_OFFICE_SOURCE_REVISION' from '$ONLINE_OFFICE_SOURCE_REPOSITORY'"
 
@@ -113,6 +103,21 @@ fi
   git clean -f -d &&
   test "$(git rev-parse HEAD)" = "$ONLINE_OFFICE_SOURCE_REVISION"
 ) || exit 1
+
+source_version=$(awk -F'[][]' '$2 == "coolwsd" { print $4; exit }' online/configure.ac) || exit 1
+if [ -z "$source_version" ]; then
+  echo "Could not read the source version from configure.ac" >&2
+  exit 1
+fi
+EXPECTED_DOCKER_HUB_TAG="${source_version}-agent-save-${ONLINE_OFFICE_SOURCE_REVISION:0:12}"
+if [ -z "${DOCKER_HUB_TAG:-}" ]; then
+  DOCKER_HUB_TAG="$EXPECTED_DOCKER_HUB_TAG"
+fi;
+if [ "$DOCKER_HUB_TAG" != "$EXPECTED_DOCKER_HUB_TAG" ]; then
+  echo "DOCKER_HUB_TAG must be $EXPECTED_DOCKER_HUB_TAG" >&2
+  exit 1
+fi
+echo "Using Docker Hub Repository: '$DOCKER_HUB_REPO' with tag '$DOCKER_HUB_TAG'."
 
 python3 "$SRCDIR/debrand.py" source "$BUILDDIR/online" || exit 1
 python3 "$SRCDIR/debrand.py" scan-source "$BUILDDIR/online" || exit 1
