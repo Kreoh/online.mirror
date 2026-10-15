@@ -88,7 +88,7 @@ constexpr OUString sXML_contentStreamName = u"content.xml"_ustr;
 constexpr OUString sWorkbookState = u"ooxml-chart-workbook-state.bin"_ustr;
 constexpr OUString sWorkbookPayload = u"ooxml-chart-workbook.xlsx"_ustr;
 constexpr sal_Int32 nWorkbookLimit = 64 * 1024 * 1024;
-constexpr sal_uInt32 nWorkbookVersion = 0x57424302;
+constexpr sal_uInt32 nWorkbookVersion = 0x57424303;
 using uno::Any;
 using chart2::XChartDocument;
 using chart2::XCoordinateSystemContainer;
@@ -98,48 +98,121 @@ using chart2::data::XDataSource;
 using chart2::data::XDataSequence;
 using chart2::data::XLabeledDataSequence;
 using uno::UNO_QUERY_THROW;
-std::vector<Reference<XDataSequence>> workbookSequences(const Reference<XChartDocument>& xChart)
+struct WorkbookSequence
 {
-    std::vector<Reference<XDataSequence>> aSequences;
-    auto append = [&aSequences](const Reference<XLabeledDataSequence>& xLabeled)
+    Reference<XDataSequence> xSequence;
+    OUString aOwner;
+    OUString aRange;
+};
+
+std::vector<WorkbookSequence> workbookSequences(const Reference<XChartDocument>& xChart)
+{
+    // InternalDataProvider converts these tokens to local-table addresses and back.
+    // SchXMLExport also orders the local table by these indices, retaining gaps.
+    ENSURE_OR_THROW(xChart->hasInternalDataProvider(), "Unsupported chart workbook provider");
+    std::vector<WorkbookSequence> aSequences;
+    auto append = [&aSequences](const Reference<XLabeledDataSequence>& xLabeled,
+                                const OUString& rOwner, bool bCategories)
     {
         if (!xLabeled.is())
             return;
+        sal_Int32 nPart = 0;
         for (const auto& xSequence : { xLabeled->getLabel(), xLabeled->getValues() })
         {
+            const bool bLabel = nPart++ == 0;
             if (!xSequence.is())
                 continue;
             ENSURE_OR_THROW(aSequences.size() < 16384, "Chart workbook exceeds the sequence limit");
-            aSequences.push_back(xSequence);
+            const OUString aRange = xSequence->getSourceRangeRepresentation();
+            if (bCategories)
+                ENSURE_OR_THROW(!bLabel && aRange == "categories",
+                                "Unsupported chart workbook categories");
+            else
+            {
+                const OUString aIndex
+                    = bLabel && aRange.startsWith("label ") ? aRange.copy(6) : aRange;
+                const sal_Int32 nIndex = aIndex.toInt32();
+                ENSURE_OR_THROW(nIndex >= 0 && nIndex < 16384 && aIndex == OUString::number(nIndex)
+                                    && (!bLabel || aRange.startsWith("label ")),
+                                "Noncanonical chart workbook range");
+            }
+            aSequences.push_back(
+                { xSequence, rOwner + (bLabel ? u"/label"_ustr : u"/values"_ustr), aRange });
         }
     };
     Reference<XCoordinateSystemContainer> xSystems(xChart->getFirstDiagram(), UNO_QUERY_THROW);
-    for (const auto& xSystem : xSystems->getCoordinateSystems())
+    const auto aSystems = xSystems->getCoordinateSystems();
+    ENSURE_OR_THROW(aSystems.getLength() == 1, "Unsupported chart workbook coordinate systems");
+    const auto& xSystem = aSystems[0];
+    const sal_Int32 nDimensions = xSystem->getDimension();
+    ENSURE_OR_THROW(nDimensions == 2 || nDimensions == 3, "Unsupported chart workbook dimensions");
+    const OUString aSystem
+        = xSystem->getCoordinateSystemType() + "/" + OUString::number(nDimensions);
+    for (sal_Int32 nDimension = 0; nDimension < nDimensions; ++nDimension)
     {
-        for (sal_Int32 nDimension = 0; nDimension < xSystem->getDimension(); ++nDimension)
-            for (sal_Int32 nAxis = 0; nAxis <= xSystem->getMaximumAxisIndexByDimension(nDimension);
-                 ++nAxis)
-                if (auto xAxis = xSystem->getAxisByDimension(nDimension, nAxis); xAxis.is())
-                    append(xAxis->getScaleData().Categories);
-        Reference<XChartTypeContainer> xTypes(xSystem, UNO_QUERY_THROW);
-        for (const auto& xType : xTypes->getChartTypes())
+        const sal_Int32 nMaximumAxis = xSystem->getMaximumAxisIndexByDimension(nDimension);
+        ENSURE_OR_THROW(nMaximumAxis <= 1, "Unsupported chart workbook axes");
+        for (sal_Int32 nAxis = 0; nAxis <= nMaximumAxis; ++nAxis)
+            if (auto xAxis = xSystem->getAxisByDimension(nDimension, nAxis); xAxis.is())
+                append(xAxis->getScaleData().Categories,
+                       aSystem + "/axis/" + OUString::number(nDimension) + "/"
+                           + OUString::number(nAxis),
+                       true);
+    }
+    Reference<XChartTypeContainer> xTypes(xSystem, UNO_QUERY_THROW);
+    // ODF groups imported series by chart type, and can reorder the type containers.
+    std::map<OUString, Reference<chart2::XChartType>> aTypes;
+    for (const auto& xType : xTypes->getChartTypes())
+    {
+        const OUString aType = xType->getChartType();
+        ENSURE_OR_THROW(aType == "com.sun.star.chart2.ColumnChartType"
+                            || aType == "com.sun.star.chart2.LineChartType"
+                            || aType == "com.sun.star.chart2.AreaChartType"
+                            || aType == "com.sun.star.chart2.PieChartType"
+                            || aType == "com.sun.star.chart2.NetChartType"
+                            || aType == "com.sun.star.chart2.FilledNetChartType",
+                        "Unsupported chart workbook series projection");
+        ENSURE_OR_THROW(aTypes.emplace(aType, xType).second, "Ambiguous chart workbook chart type");
+    }
+    for (const auto& [aType, xType] : aTypes)
+    {
+        Reference<XDataSeriesContainer> xSeriesContainer(xType, UNO_QUERY_THROW);
+        sal_Int32 nSeries = 0;
+        for (const auto& xSeries : xSeriesContainer->getDataSeries())
         {
-            Reference<XDataSeriesContainer> xSeriesContainer(xType, UNO_QUERY_THROW);
-            for (const auto& xSeries : xSeriesContainer->getDataSeries())
+            ENSURE_OR_THROW(nSeries < 16384, "Chart workbook exceeds the series limit");
+            Reference<XDataSource> xSource(xSeries, UNO_QUERY_THROW);
+            const auto aData = xSource->getDataSequences();
+            ENSURE_OR_THROW(aData.getLength() == 1 && aData[0].is() && aData[0]->getValues().is(),
+                            "Unsupported chart workbook sequence projection");
+            Reference<beans::XPropertySet> xValues(aData[0]->getValues(), UNO_QUERY_THROW);
+            OUString aRole;
+            ENSURE_OR_THROW((xValues->getPropertyValue(u"Role"_ustr) >>= aRole)
+                                && aRole == xType->getRoleOfSequenceForSeriesLabel(),
+                            "Unsupported chart workbook main sequence");
+            Reference<beans::XPropertySet> xProperties(xSeries, UNO_QUERY_THROW);
+            sal_Int32 nAxis = 0;
+            ENSURE_OR_THROW((xProperties->getPropertyValue(u"AttachedAxisIndex"_ustr) >>= nAxis)
+                                && nAxis >= 0 && nAxis <= 1,
+                            "Unsupported chart workbook attached axis");
+            for (const OUString& rName : { u"ErrorBarX"_ustr, u"ErrorBarY"_ustr })
             {
-                Reference<XDataSource> xSource(xSeries, UNO_QUERY_THROW);
-                for (const auto& xSequence : xSource->getDataSequences())
-                    append(xSequence);
-                Reference<beans::XPropertySet> xProperties(xSeries, UNO_QUERY_THROW);
-                for (const OUString& rName : { u"ErrorBarX"_ustr, u"ErrorBarY"_ustr })
-                {
-                    Reference<XDataSource> xErrorBars;
-                    xProperties->getPropertyValue(rName) >>= xErrorBars;
-                    if (xErrorBars.is())
-                        for (const auto& xSequence : xErrorBars->getDataSequences())
-                            append(xSequence);
-                }
+                Reference<XDataSource> xErrorBars;
+                xProperties->getPropertyValue(rName) >>= xErrorBars;
+                ENSURE_OR_THROW(!xErrorBars.is() || !xErrorBars->getDataSequences().hasElements(),
+                                "Unsupported chart workbook error-bar sequences");
             }
+            // Owner ordinals alone are insufficient: every occurrence also carries its
+            // persisted range and exact typed data, checked before formulas are restored.
+            append(aData[0],
+                   aSystem + "/" + aType + "/" + OUString::number(nSeries++) + "/axis/"
+                       + OUString::number(nAxis),
+                   false);
+            if (aData[0]->getLabel().is())
+                ENSURE_OR_THROW(aData[0]->getLabel()->getSourceRangeRepresentation()
+                                    == "label "
+                                           + aData[0]->getValues()->getSourceRangeRepresentation(),
+                                "Unsupported chart workbook label binding");
         }
     }
     return aSequences;
@@ -155,14 +228,14 @@ void workbookCurrentIdentity(const Reference<XChartDocument>& xChart, Sequence<A
     sal_Int64 nText = 0;
     sal_Int64 nCells = 0;
     sal_Int64 nIdentityBytes = 0;
-    std::map<const XDataSequence*, sal_Int32> aReferences;
-    std::map<std::vector<sal_Int8>, const XDataSequence*> aIdentities;
-    for (const auto& xSequence : workbookSequences(xChart))
+    std::map<OUString, std::vector<sal_Int8>> aRangeIdentities;
+    std::map<OUString, OUString> aRangeFormulas;
+    for (const auto& rSequence : workbookSequences(xChart))
     {
-        const auto [aReference, bNewReference]
-            = aReferences.emplace(xSequence.get(), static_cast<sal_Int32>(aReferences.size()));
-        // Preserve repeated-reference topology independently of names remapped by ODF.
-        aData.emplace_back(aReference->second);
+        const auto& xSequence = rSequence.xSequence;
+        nText += sal_Int64(rSequence.aOwner.getLength()) + rSequence.aRange.getLength();
+        aData.emplace_back(rSequence.aOwner);
+        aData.emplace_back(rSequence.aRange);
         const size_t nIdentityStart = aData.size();
         Reference<beans::XPropertySet> xProperties(xSequence, UNO_QUERY_THROW);
         const Any aRole = xProperties->getPropertyValue(u"Role"_ustr);
@@ -183,11 +256,9 @@ void workbookCurrentIdentity(const Reference<XChartDocument>& xChart, Sequence<A
             aData.push_back(rValue.has<double>() && std::isnan(rValue.get<double>()) ? Any()
                                                                                      : rValue);
         }
-        if (bNewReference)
         {
-            // Positional restoration is safe only when distinct sequences are distinguishable.
-            // Native ODF import may remap range names, so identical role/data identities are
-            // deliberately rejected rather than guessing which formula belongs to each owner.
+            // Equal data at different persisted ranges is unambiguous. A reused range
+            // must describe the same typed data, including after ODF splits an alias.
             sal_Int64 nEstimatedBytes = 4;
             for (size_t n = nIdentityStart; n < aData.size(); ++n)
                 nEstimatedBytes += aData[n].has<OUString>()
@@ -205,17 +276,20 @@ void workbookCurrentIdentity(const Reference<XChartDocument>& xChart, Sequence<A
             ENSURE_OR_THROW(nIdentityBytes <= nWorkbookLimit,
                             "Chart sequence identities exceed the byte limit");
             const auto* pBytes = static_cast<const sal_Int8*>(aIdentity.GetData());
-            const bool bUnique
-                = aIdentities
-                      .emplace(std::vector<sal_Int8>(pBytes, pBytes + nBytes), xSequence.get())
-                      .second;
-            ENSURE_OR_THROW(bUnique, "Ambiguous chart workbook sequence correspondence");
+            std::vector<sal_Int8> aBytes(pBytes, pBytes + nBytes);
+            const auto [aIdentityIt, bNewRange]
+                = aRangeIdentities.emplace(rSequence.aRange, aBytes);
+            ENSURE_OR_THROW(bNewRange || aIdentityIt->second == aBytes,
+                            "Conflicting chart workbook range identity");
         }
         OUString sFormula;
         if (xProperties->getPropertySetInfo()->hasPropertyByName(u"ChartExFormula"_ustr))
             xProperties->getPropertyValue(u"ChartExFormula"_ustr) >>= sFormula;
         nText += sFormula.getLength();
         ENSURE_OR_THROW(nText <= 16 * 1024 * 1024, "Chart workbook formulas exceed the text limit");
+        const auto [aFormulaIt, bNewFormula] = aRangeFormulas.emplace(rSequence.aRange, sFormula);
+        ENSURE_OR_THROW(bNewFormula || aFormulaIt->second == sFormula,
+                        "Conflicting chart workbook range formulas");
         aFormulas.emplace_back(sFormula);
     }
     rData = comphelper::containerToSequence(aData);
@@ -409,7 +483,7 @@ void loadWorkbook(const Reference<lang::XComponent>& xDocument,
         Sequence<Any> aUnusedFormulas;
         workbookCurrentIdentity(xChart, aCurrent, aUnusedFormulas);
         const auto aSequences = workbookSequences(xChart);
-        // Use the same typed byte encoding as the uniqueness check. UNO Any equality
+        // Use the same typed byte encoding as the range check. UNO Any equality
         // can equate different numeric types and signed zero, which would hide a permutation.
         SvMemoryStream aCurrentBytes;
         SvMemoryStream aStoredBytes;
@@ -423,11 +497,24 @@ void loadWorkbook(const Reference<lang::XComponent>& xDocument,
                                    == 0
                             && aSequences.size() == static_cast<size_t>(aFormulas.getLength()),
                         "Chart workbook sequence identity changed during native reload");
+        std::map<const XDataSequence*, OUString> aObjectFormulas;
+        std::map<OUString, OUString> aRangeFormulas;
+        for (size_t n = 0; n < aSequences.size(); ++n)
+        {
+            OUString aFormula;
+            ENSURE_OR_THROW(aFormulas[n] >>= aFormula, "Invalid saved chart formula");
+            const auto [aObject, bNewObject]
+                = aObjectFormulas.emplace(aSequences[n].xSequence.get(), aFormula);
+            const auto [aRange, bNewRange] = aRangeFormulas.emplace(aSequences[n].aRange, aFormula);
+            ENSURE_OR_THROW((bNewObject || aObject->second == aFormula)
+                                && (bNewRange || aRange->second == aFormula),
+                            "Conflicting restored chart workbook formulas");
+        }
         for (size_t n = 0; n < aSequences.size(); ++n)
         {
             OUString sFormula;
             ENSURE_OR_THROW(aFormulas[n] >>= sFormula, "Invalid saved chart formula");
-            Reference<beans::XPropertySet> xProperties(aSequences[n], UNO_QUERY_THROW);
+            Reference<beans::XPropertySet> xProperties(aSequences[n].xSequence, UNO_QUERY_THROW);
             if (xProperties->getPropertySetInfo()->hasPropertyByName(u"ChartExFormula"_ustr))
                 xProperties->setPropertyValue(u"ChartExFormula"_ustr, Any(sFormula));
             else
