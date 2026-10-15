@@ -11,18 +11,16 @@ export LD_LIBRARY_PATH="$engine/instdir/program:$engine/workdir/LinkTarget/Libra
 for setting in 'MERGELIBS=TRUE' 'DISABLE_DYNLOADING='; do
     grep -Fxq "export $setting" "$engine/config_host.mk" || fail "unsupported cached configuration: expected $setting"
 done
-libraries=("$engine/instdir/program/libmergedlo.so" "$engine/instdir/program/libuno_sal.so.3")
+libraries=("$engine/instdir/program/libmergedlo.so" "$engine/instdir/program/libsallo.so")
 for library in "${libraries[@]}"; do
     cmp -s "$library" "$image_program/$(basename "$library")" || fail "cached library differs from exact image or is missing: $library; restore the matching cache, no library rebuild fallback"
 done
 # Linker aliases must resolve to those same bytes, even if a failed build left a
 # different workdir copy. No cached library is repaired or overwritten here.
-for name in libmergedlo.so libuno_sal.so libuno_sal.so.3; do
+for name in libmergedlo.so libsallo.so; do
     alias="$engine/workdir/LinkTarget/Library/$name"
     if [[ -e $alias || -L $alias ]]; then
-        reference=$name
-        [[ $name != libuno_sal.so ]] || reference=libuno_sal.so.3
-        cmp -s "$alias" "$image_program/$reference" || fail "cached linker alias differs from image: $alias"
+        cmp -s "$alias" "$image_program/$name" || fail "cached linker alias differs from image: $alias"
     fi
 done
 ldd "${libraries[@]}" "$@" > "$output.loader"
