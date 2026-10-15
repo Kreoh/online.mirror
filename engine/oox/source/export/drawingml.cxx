@@ -2286,6 +2286,122 @@ void DrawingML::WriteXGraphicCustomPosition(uno::Reference<beans::XPropertySet> 
 
 namespace
 {
+Sequence<Any> groupNativeGeometry(const Reference<XShape>& xShape)
+{
+    SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
+    Reference<XPropertySet> xProperties(xShape, UNO_QUERY);
+    if (!pObject || !xProperties.is() || pObject->getDiagramHelper())
+        return {};
+    const auto xInfo = xProperties->getPropertySetInfo();
+    if (!xInfo->hasPropertyByName(u"InteropGrabBag"_ustr))
+        return {};
+    comphelper::SequenceAsHashMap aGrabBag(xProperties->getPropertyValue(u"InteropGrabBag"_ustr));
+    if (aGrabBag.find(u"3DEffectProperties"_ustr) != aGrabBag.end())
+        return {};
+    Any aRotation;
+    Any aCustomGeometry;
+    if (xInfo->hasPropertyByName(u"RotateAngle"_ustr))
+        aRotation = xProperties->getPropertyValue(u"RotateAngle"_ustr);
+    if (xInfo->hasPropertyByName(u"CustomShapeGeometry"_ustr))
+        aCustomGeometry = xProperties->getPropertyValue(u"CustomShapeGeometry"_ustr);
+    // Lifetime IDs detect structural edits without owning references to the group or children.
+    return { Any(pObject->GetUniqueID()),
+             Any(xShape->getShapeType()),
+             Any(xShape->getPosition()),
+             Any(xShape->getSize()),
+             xProperties->getPropertyValue(u"Transformation"_ustr),
+             aRotation,
+             aCustomGeometry };
+}
+
+bool matchGroupTransforms(const Reference<XShape>& xShape,
+                          const Sequence<Sequence<PropertyValue>>& rNodes, sal_Int32& rIndex,
+                          sal_Int32 nDepth, sal_uInt64 nTargetId, Sequence<PropertyValue>& rTarget)
+{
+    if (nDepth > 16 || rIndex >= rNodes.getLength())
+        return false;
+    const auto& rRecord = rNodes[rIndex++];
+    if (rRecord.getLength() != 9)
+        return false;
+    comphelper::SequenceAsHashMap aRecord(rRecord);
+    awt::Point aPosition;
+    awt::Point aChildPosition;
+    awt::Size aSize;
+    awt::Size aChildSize;
+    sal_Int32 nRotation = 0;
+    bool bFlipH = false;
+    bool bFlipV = false;
+    if (!(aRecord[u"Position"_ustr] >>= aPosition) || !(aRecord[u"Size"_ustr] >>= aSize)
+        || !(aRecord[u"Rotation"_ustr] >>= nRotation) || !(aRecord[u"FlipH"_ustr] >>= bFlipH)
+        || !(aRecord[u"FlipV"_ustr] >>= bFlipV)
+        || !(aRecord[u"ChildPosition"_ustr] >>= aChildPosition)
+        || !(aRecord[u"ChildSize"_ustr] >>= aChildSize) || aSize.Width <= 0 || aSize.Height <= 0
+        || aChildSize.Width < 0 || aChildSize.Height < 0)
+        return false;
+    const auto aNative = groupNativeGeometry(xShape);
+    if (!aNative.hasElements() || aRecord[u"Native"_ustr] != Any(aNative))
+        return false;
+    sal_Int32 nChildren = 0;
+    if (!(aRecord[u"ChildCount"_ustr] >>= nChildren) || nChildren < 0 || nChildren > 256)
+        return false;
+    Reference<XShapes> xChildren(xShape, UNO_QUERY);
+    if ((xChildren.is() ? xChildren->getCount() : 0) != nChildren)
+        return false;
+    if (aNative[0] == Any(nTargetId))
+        rTarget = rRecord;
+    for (sal_Int32 n = 0; n < nChildren; ++n)
+        if (!matchGroupTransforms(Reference<XShape>(xChildren->getByIndex(n), UNO_QUERY_THROW),
+                                  rNodes, rIndex, nDepth + 1, nTargetId, rTarget))
+            return false;
+    return true;
+}
+
+bool unchangedGroupTransform(const Reference<XShape>& xShape, Sequence<PropertyValue>& rTransform)
+{
+    SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
+    if (!pObject)
+        return false;
+    const sal_uInt64 nTargetId = pObject->GetUniqueID();
+    sal_Int32 nDepth = 0;
+    while (auto pParent = pObject->getParentSdrObjectFromSdrObject())
+    {
+        if (++nDepth > 16)
+            return false;
+        pObject = pParent;
+    }
+    if (!pObject->IsGroupObject())
+        return false;
+    try
+    {
+        const auto xRoot = pObject->getUnoShape();
+        Reference<XPropertySet> xProperties(xRoot, UNO_QUERY_THROW);
+        if (!xProperties->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+            return false;
+        comphelper::SequenceAsHashMap aGrabBag(
+            xProperties->getPropertyValue(u"InteropGrabBag"_ustr));
+        const auto it = aGrabBag.find(u"PptxGroupTransforms"_ustr);
+        if (it == aGrabBag.end())
+            return false;
+        Sequence<PropertyValue> aGroupProperties;
+        if (!(it->second >>= aGroupProperties) || aGroupProperties.getLength() != 2)
+            return false;
+        comphelper::SequenceAsHashMap aGroup(aGroupProperties);
+        sal_Int32 nVersion = 0;
+        Sequence<Sequence<PropertyValue>> aNodes;
+        if (!(aGroup[u"Version"_ustr] >>= nVersion) || nVersion != 1
+            || !(aGroup[u"Nodes"_ustr] >>= aNodes) || !aNodes.hasElements()
+            || aNodes.getLength() > 256)
+            return false;
+        sal_Int32 nIndex = 0;
+        return matchGroupTransforms(xRoot, aNodes, nIndex, 0, nTargetId, rTransform)
+               && nIndex == aNodes.getLength() && rTransform.hasElements();
+    }
+    catch (const uno::Exception&)
+    {
+        return false;
+    }
+}
+
 bool IsTopGroupObj(const uno::Reference<drawing::XShape>& xShape)
 {
     SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
@@ -2323,7 +2439,7 @@ void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const too
 
     // PPTX text import rounds EMU coordinates to native units. Reuse the source
     // coordinates only while the complete native transform remains unchanged.
-    // Groups use a different coordinate system and must follow normal export.
+    // Group mappings are validated separately against their complete subtree.
     SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
     if (GetDocumentType() == DOCUMENT_PPTX && !bIsGroupShape && pObject
         && !pObject->getParentSdrObjectFromSdrObject())
@@ -2377,6 +2493,38 @@ void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const too
         }
     }
 
+    // All nodes must still match before any original parent/child coordinate mapping is reused.
+    bool bOriginalGroupMapping = false;
+    awt::Point aOriginalChildPosition;
+    awt::Size aOriginalChildSize;
+    Sequence<PropertyValue> aGroupTransform;
+    if (GetDocumentType() == DOCUMENT_PPTX && unchangedGroupTransform(xShape, aGroupTransform))
+    {
+        comphelper::SequenceAsHashMap aOriginal(aGroupTransform);
+        awt::Point aOriginalPosition;
+        awt::Size aOriginalSize;
+        sal_Int32 nOriginalRotation = 0;
+        bool bOriginalFlipH = false;
+        bool bOriginalFlipV = false;
+        if ((aOriginal[u"Position"_ustr] >>= aOriginalPosition)
+            && (aOriginal[u"Size"_ustr] >>= aOriginalSize)
+            && (aOriginal[u"Rotation"_ustr] >>= nOriginalRotation)
+            && (aOriginal[u"FlipH"_ustr] >>= bOriginalFlipH)
+            && (aOriginal[u"FlipV"_ustr] >>= bOriginalFlipV)
+            && (aOriginal[u"ChildPosition"_ustr] >>= aOriginalChildPosition)
+            && (aOriginal[u"ChildSize"_ustr] >>= aOriginalChildSize))
+        {
+            nX = aOriginalPosition.X;
+            nY = aOriginalPosition.Y;
+            nCx = aOriginalSize.Width;
+            nCy = aOriginalSize.Height;
+            nRotation = nOriginalRotation;
+            bFlipH = bOriginalFlipH;
+            bFlipV = bOriginalFlipV;
+            bOriginalGroupMapping = true;
+        }
+    }
+
     mpFS->startElementNS(
         nXmlNamespace, XML_xfrm, XML_flipH, sax_fastparser::UseIf("1", bFlipH), XML_flipV,
         sax_fastparser::UseIf("1", bFlipV), XML_rot,
@@ -2388,8 +2536,16 @@ void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const too
 
     if (bIsGroupShape && (GetDocumentType() != DOCUMENT_DOCX || IsTopGroupObj(xShape)))
     {
-        nX = std::min(oox::drawingml::convertHmmToEmu(nChildLeft), MAX_SIZE);
-        nY = std::min(oox::drawingml::convertHmmToEmu(nChildTop), MAX_SIZE);
+        nX = bOriginalGroupMapping
+                 ? aOriginalChildPosition.X
+                 : std::min(oox::drawingml::convertHmmToEmu(nChildLeft), MAX_SIZE);
+        nY = bOriginalGroupMapping ? aOriginalChildPosition.Y
+                                   : std::min(oox::drawingml::convertHmmToEmu(nChildTop), MAX_SIZE);
+        if (bOriginalGroupMapping)
+        {
+            nCx = aOriginalChildSize.Width;
+            nCy = aOriginalChildSize.Height;
+        }
         mpFS->singleElementNS(
             XML_a, XML_chOff, XML_x, OString::number(nX), XML_y, OString::number(nY));
         mpFS->singleElementNS(

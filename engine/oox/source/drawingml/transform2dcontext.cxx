@@ -403,6 +403,7 @@ ContextHandlerRef Transform2DContext::onCreateContext( sal_Int32 aElementToken, 
     case A_TOKEN( chExt ):  // horz/vert size of children
         {
             sal_Int32 nChExtCx = rAttribs.getInteger(XML_cx, 0);
+            mrShape.setOriginalChildSize(awt::Size(nChExtCx, rAttribs.getInteger(XML_cy, 0)));
 
             if(nChExtCx == 0)
                 nChExtCx = mrShape.getSize().Width;

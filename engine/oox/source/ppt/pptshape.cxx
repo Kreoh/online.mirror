@@ -25,6 +25,9 @@
 #include <drawingml/textfield.hxx>
 #include <editeng/flditem.hxx>
 #include <comphelper/propertysequence.hxx>
+#include <comphelper/sequence.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <svx/svdobj.hxx>
 
 #include <com/sun/star/text/XTextField.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
@@ -62,6 +65,113 @@ using namespace ::com::sun::star::container;
 using namespace ::com::sun::star::presentation;
 
 namespace oox::ppt {
+
+namespace
+{
+struct GroupTransformSource
+{
+    Shape* pShape;
+    Sequence<PropertyValue> aTransform;
+};
+
+bool collectGroupTransforms(Shape& rShape, std::vector<GroupTransformSource>& rNodes,
+                            sal_Int32 nDepth)
+{
+    if (nDepth > 16 || rNodes.size() >= 256 || rShape.getDiagramRotation() != 0
+        || rShape.getDiagramHelper() || !rShape.getDiagramDataModelID().isEmpty()
+        || rShape.getDiagramTextPreRotation().has_value() || rShape.getSize().Width <= 0
+        || rShape.getSize().Height <= 0)
+        return false;
+    const bool bGroup = rShape.getServiceName() == "com.sun.star.drawing.GroupShape";
+    if (bGroup)
+    {
+        if (!rShape.getOriginalChildSize().has_value() || rShape.getOriginalChildSize()->Width < 0
+            || rShape.getOriginalChildSize()->Height < 0 || rShape.getChildren().empty()
+            || rShape.getChildren().size() > 256)
+            return false;
+    }
+    else if (!rShape.getChildren().empty()
+             || !((rShape.getServiceName() == "com.sun.star.drawing.CustomShape"
+                   && rShape.getCustomShapeProperties()->representsDefaultShape())
+                  || rShape.getServiceName() == "com.sun.star.drawing.TextShape"))
+        return false;
+    rNodes.push_back(
+        { &rShape,
+          comphelper::InitPropertySequence({
+              { u"Position"_ustr, Any(rShape.getPosition()) },
+              { u"Size"_ustr, Any(rShape.getSize()) },
+              { u"Rotation"_ustr, Any(rShape.getRotation()) },
+              { u"FlipH"_ustr, Any(rShape.getFlipH()) },
+              { u"FlipV"_ustr, Any(rShape.getFlipV()) },
+              { u"ChildPosition"_ustr, Any(rShape.getChildPosition()) },
+              { u"ChildSize"_ustr, Any(rShape.getOriginalChildSize().value_or(awt::Size())) },
+              { u"ChildCount"_ustr, Any(static_cast<sal_Int32>(rShape.getChildren().size())) },
+          }) });
+    for (const auto& pChild : rShape.getChildren())
+        if (!collectGroupTransforms(*pChild, rNodes, nDepth + 1))
+            return false;
+    return true;
+}
+
+Sequence<Any> groupNativeGeometry(const Reference<XShape>& xShape)
+{
+    SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
+    Reference<XPropertySet> xProperties(xShape, UNO_QUERY);
+    if (!pObject || !xProperties.is() || pObject->getDiagramHelper())
+        return {};
+    const auto xInfo = xProperties->getPropertySetInfo();
+    if (!xInfo->hasPropertyByName(u"InteropGrabBag"_ustr))
+        return {};
+    comphelper::SequenceAsHashMap aGrabBag(xProperties->getPropertyValue(u"InteropGrabBag"_ustr));
+    if (aGrabBag.find(u"3DEffectProperties"_ustr) != aGrabBag.end())
+        return {};
+    Any aRotation;
+    Any aCustomGeometry;
+    if (xInfo->hasPropertyByName(u"RotateAngle"_ustr))
+        aRotation = xProperties->getPropertyValue(u"RotateAngle"_ustr);
+    if (xInfo->hasPropertyByName(u"CustomShapeGeometry"_ustr))
+        aCustomGeometry = xProperties->getPropertyValue(u"CustomShapeGeometry"_ustr);
+    // Lifetime IDs detect structural edits without owning references to the group or children.
+    return { Any(pObject->GetUniqueID()),
+             Any(xShape->getShapeType()),
+             Any(xShape->getPosition()),
+             Any(xShape->getSize()),
+             xProperties->getPropertyValue(u"Transformation"_ustr),
+             aRotation,
+             aCustomGeometry };
+}
+
+Sequence<Sequence<PropertyValue>>
+finishGroupTransforms(const std::vector<GroupTransformSource>& rNodes)
+{
+    std::vector<Sequence<PropertyValue>> aRecords;
+    for (const auto& rNode : rNodes)
+    {
+        const auto& xShape = rNode.pShape->getXShape();
+        if (!xShape.is())
+            return {};
+        const auto aGeometry = groupNativeGeometry(xShape);
+        if (!aGeometry.hasElements())
+            return {};
+        Reference<XShapes> xChildren(xShape, UNO_QUERY);
+        const auto& rChildren = rNode.pShape->getChildren();
+        if ((xChildren.is() ? xChildren->getCount() : 0)
+            != static_cast<sal_Int32>(rChildren.size()))
+            return {};
+        for (size_t n = 0; n < rChildren.size(); ++n)
+            if (Reference<XShape>(xChildren->getByIndex(static_cast<sal_Int32>(n)), UNO_QUERY)
+                != rChildren[n]->getXShape())
+                return {};
+        auto aRecord = rNode.aTransform;
+        const auto nLength = aRecord.getLength();
+        aRecord.realloc(nLength + 1);
+        aRecord.getArray()[nLength].Name = u"Native"_ustr;
+        aRecord.getArray()[nLength].Value <<= aGeometry;
+        aRecords.push_back(std::move(aRecord));
+    }
+    return comphelper::containerToSequence(aRecords);
+}
+}
 
 PPTShape::PPTShape( const oox::ppt::ShapeLocation eShapeLocation, const OUString& rServiceName )
 : Shape( rServiceName )
@@ -530,6 +640,13 @@ void PPTShape::addShape(
                 return;
             }
 
+            // Capture the entire source tree before createAndInsert composes parent flips.
+            std::vector<GroupTransformSource> aGroupSources;
+            Reference<XDrawPage> xGroupPage(rxShapes, UNO_QUERY);
+            if (xGroupPage.is() && sServiceName == "com.sun.star.drawing.GroupShape"
+                && !collectGroupTransforms(*this, aGroupSources, 0))
+                aGroupSources.clear();
+
             Reference< XShape > xShape( createAndInsert( rFilterBase, sServiceName, pTheme, rxShapes, bClearText, mpPlaceholder, aTransformation, getFillProperties() ) );
 
             // Apply text properties on placeholder text inside this placeholder shape
@@ -638,6 +755,26 @@ void PPTShape::addShape(
 
                 // restore remembered setting
                 rFilterBase.setDiagramFontHeights(pDiagramFontHeights);
+
+                if (!aGroupSources.empty())
+                {
+                    // These IDs describe only this live model. PPTX reimport captures a new
+                    // baseline; reconstructed ODF objects must use normal native export.
+                    try
+                    {
+                        auto aGroupRecords = finishGroupTransforms(aGroupSources);
+                        if (aGroupRecords.hasElements())
+                            putPropertyToGrabBag(u"PptxGroupTransforms"_ustr,
+                                                 Any(comphelper::InitPropertySequence({
+                                                     { u"Version"_ustr, Any(sal_Int32(1)) },
+                                                     { u"Nodes"_ustr, Any(aGroupRecords) },
+                                                 })));
+                    }
+                    catch (const Exception&)
+                    {
+                        SAL_WARN("oox.ppt", "Cannot retain the original group transform mapping");
+                    }
+                }
 
                 for (size_t i = 0; i < this->getChildren().size(); i++)
                 {

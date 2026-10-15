@@ -162,6 +162,12 @@ public:
     EffectProperties&               getEffectProperties() const { return *mpEffectPropertiesPtr; }
 
     void                            setChildPosition( css::awt::Point nPosition ){ maChPosition = nPosition; }
+    const css::awt::Point& getChildPosition() const { return maChPosition; }
+    void setOriginalChildSize(css::awt::Size aSize) { maOriginalChildSize = aSize; }
+    const std::optional<css::awt::Size>& getOriginalChildSize() const
+    {
+        return maOriginalChildSize;
+    }
     void                            setChildSize( css::awt::Size aSize ){ maChSize = aSize; }
 
     void                            setPosition( css::awt::Point nPosition ){ maPosition = nPosition; }
@@ -365,6 +371,8 @@ protected:
     SAL_DLLPRIVATE EffectProperties    getActualEffectProperties(const Theme* pTheme) const;
 
     std::vector< ShapePtr >     maChildren;               // only used for group shapes
+    std::optional<css::awt::Size>
+        maOriginalChildSize; // source chExt before zero-size normalisation
     css::awt::Size   maChSize;                 // only used for group shapes
     css::awt::Point  maChPosition;             // only used for group shapes
 
