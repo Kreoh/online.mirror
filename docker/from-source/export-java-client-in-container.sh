@@ -4,8 +4,10 @@ fail() { echo "Java client export: $*" >&2; exit 1; }
 source_root=/workspace-cache/build/builddir/online
 engine="$source_root/engine"
 [[ $(git -C "$source_root" rev-parse HEAD) == "$CLIENT_SOURCE_REVISION" ]] || fail 'cache revision differs from selected source; restore matching cache'
-# Branding edits in other modules are expected from the ordinary image build.
-git -C "$source_root" diff --quiet HEAD -- engine/codemaker engine/unoidl engine/sal engine/salhelper engine/registry engine/store engine/include engine/solenv engine/external engine/ridljar engine/udkapi engine/offapi engine/Makefile.gbuild engine/RepositoryModule_host.mk engine/RepositoryExternal.mk engine/Repository.mk engine/RepositoryFixes.mk engine/configure.ac || fail 'generator source inputs differ from the selected revision'
+# The image build debrands tracked engine inputs. Validate that exact transform
+# against pinned Git objects without changing the configured source cache.
+bash /pipeline/docker/from-source/verify-java-client-source.sh \
+    "$source_root" "$CLIENT_SOURCE_REVISION" /output/generator-source.patch
 [[ -f $engine/config_host.mk && -f $engine/config_host.h ]] || fail 'configured engine cache is incomplete'
 for setting in "SRCDIR=$engine" "BUILDDIR=$engine" "WORKDIR=$engine/workdir" "INSTDIR=$engine/instdir"; do
     grep -Fxq "export $setting" "$engine/config_host.mk" || fail "configured cache root mismatch: $setting"
@@ -22,6 +24,8 @@ export LD_LIBRARY_PATH="$engine/instdir/program:$engine/workdir/LinkTarget/Libra
 tool="$engine/workdir/LinkTarget/Executable/javamaker"
 [[ -x $tool ]] || fail 'target did not produce javamaker'
 mkdir /output/generated /output/generator /output/licences
+mv /output/generator-source.patch /output/generator/source-transform.patch
+git -C "$source_root" show "$CLIENT_SOURCE_REVISION:docker/from-source/debrand.py" > /output/generator/debrand.py
 "$tool" -O/output/generated /output/registries/types.rdb /output/registries/offapi.rdb
 [[ -f /output/generated/cpo/uno/XInterface.class && -f /output/generated/com/sun/star/frame/XDesktop.class ]] || fail 'generation omitted required API roots'
 cp "$tool" /output/generator/javamaker
@@ -57,6 +61,7 @@ builder_id=$CLIENT_BUILDER_ID
 build_url=$BUILD_URL
 generator_target=make -f Makefile.gbuild -B -j2 Executable_javamaker
 generator_provenance=forced-target-and-prerequisites-network-disabled
+source_validation=pinned-source-with-exact-pinned-debranding
 runtime_source_count=${#sources[@]}
 PROVENANCE
 cd /output
