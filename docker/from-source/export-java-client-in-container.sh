@@ -29,15 +29,23 @@ grep -Fxq 'export CROSS_COMPILING=' "$engine/config_host.mk" || fail 'configured
 cmp /output/registries/types.rdb "$engine/instdir/program/types.rdb" || fail 'cached types.rdb differs from image'
 cmp /output/registries/offapi.rdb "$engine/instdir/program/types/offapi.rdb" || fail 'cached offapi.rdb differs from image'
 cd "$engine"
-# Bypass the outer Makefile bootstrap, fetch and configuration. Force this target's
-# prerequisite closure so an unverified cached executable or object is never trusted.
-# Network is disabled by the caller. Missing prerequisite inputs stop this build.
-unset MAKEFLAGS MFLAGS MAKEOVERRIDES
-make -f Makefile.gbuild -B -j2 Executable_javamaker
+# The maintained partial build loads only codemaker. Global gbuild would pull
+# libmerged and its unrelated external projects into the dependency graph.
+# Verify reused shared libraries before cleaning only the three generator targets.
+bash /pipeline/docker/from-source/verify-java-client-libraries.sh \
+    "$engine" /output/image-program /output/cached-libraries.sha256
+unset MAKEFLAGS MFLAGS MAKEOVERRIDES GNUMAKEFLAGS
+make -C codemaker Executable_javamaker.clean StaticLibrary_codemaker.clean StaticLibrary_codemaker_java.clean
+make -C codemaker -j2 Executable_javamaker
 export LD_LIBRARY_PATH="$engine/instdir/program:$engine/workdir/LinkTarget/Library"
 tool="$engine/workdir/LinkTarget/Executable/javamaker"
 [[ -x $tool ]] || fail 'target did not produce javamaker'
+bash /pipeline/docker/from-source/verify-java-client-libraries.sh \
+    "$engine" /output/image-program /output/rebuilt-libraries.sha256 "$tool"
+cmp /output/cached-libraries.sha256 /output/rebuilt-libraries.sha256 || fail 'rebuilt generator uses a different engine library closure'
 mkdir /output/generated /output/generator /output/licences
+mv /output/cached-libraries.sha256 /output/cached-libraries.sha256.loader \
+    /output/rebuilt-libraries.sha256 /output/rebuilt-libraries.sha256.loader /output/generator/
 mv /output/generator-source.patch /output/generator/source-transform.patch
 git -C "$source_root" show "$CLIENT_SOURCE_REVISION:docker/from-source/debrand.py" > /output/generator/debrand.py
 "$tool" -O/output/generated /output/registries/types.rdb /output/registries/offapi.rdb
@@ -73,8 +81,9 @@ image=$CLIENT_IMAGE
 image_id=$CLIENT_IMAGE_ID
 builder_id=$CLIENT_BUILDER_ID
 build_url=$BUILD_URL
-generator_target=make -f Makefile.gbuild -B -j2 Executable_javamaker
-generator_provenance=forced-target-and-prerequisites-network-disabled
+generator_target=make -C codemaker -j2 Executable_javamaker
+generator_clean_targets=Executable_javamaker.clean StaticLibrary_codemaker.clean StaticLibrary_codemaker_java.clean
+generator_provenance=rebuilt-generator-statics-image-verified-shared-libraries
 source_validation=pinned-source-with-exact-pinned-debranding
 runtime_source_count=${#sources[@]}
 PROVENANCE

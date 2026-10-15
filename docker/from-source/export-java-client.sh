@@ -21,6 +21,8 @@ container=$(docker create "$image_id")
 trap 'docker rm "$container" >/dev/null' EXIT
 docker cp "$container:/opt/online-office/program/types.rdb" "$output/registries/types.rdb"
 docker cp "$container:/opt/online-office/program/types/offapi.rdb" "$output/registries/offapi.rdb"
+mkdir "$output/image-program"
+docker cp "$container:/opt/online-office/program/." "$output/image-program/"
 docker rm "$container" >/dev/null
 trap - EXIT
 builder='ghcr.io/kreoh/online-office:source-builder'
