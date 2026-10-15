@@ -2930,7 +2930,14 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
 
         mAny >>= usTypeface;
 
-        if (!mbEmbedFonts || EmbeddedFontsManager::isCommonFont(usTypeface))
+        // PPTX stores one family. Keep the first requested family instead of changing
+        // the document font to a Microsoft substitute when it is reopened.
+        if (GetDocumentType() == DOCUMENT_PPTX)
+        {
+            sal_Int32 nIndex = 0;
+            usTypeface = GetNextFontToken(usTypeface, nIndex);
+        }
+        else if (!mbEmbedFonts || EmbeddedFontsManager::isCommonFont(usTypeface))
         {
             OUString aSubstName( GetSubsFontName( usTypeface, SubsFontFlags::ONLYONE | SubsFontFlags::MS ) );
             if (!aSubstName.isEmpty())
@@ -2952,7 +2959,12 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
         OUString usTypeface;
 
         mAny >>= usTypeface;
-        if (!mbEmbedFonts || EmbeddedFontsManager::isCommonFont(usTypeface))
+        if (GetDocumentType() == DOCUMENT_PPTX)
+        {
+            sal_Int32 nIndex = 0;
+            usTypeface = GetNextFontToken(usTypeface, nIndex);
+        }
+        else if (!mbEmbedFonts || EmbeddedFontsManager::isCommonFont(usTypeface))
         {
             OUString aSubstName( GetSubsFontName( usTypeface, SubsFontFlags::ONLYONE | SubsFontFlags::MS ) );
             if (!aSubstName.isEmpty())
