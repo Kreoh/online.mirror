@@ -2302,12 +2302,6 @@ bool IsTopGroupObj(const uno::Reference<drawing::XShape>& xShape)
 void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const tools::Rectangle& rRect,
         sal_Int32 nXmlNamespace, bool bFlipH, bool bFlipV, sal_Int32 nRotation, bool bIsGroupShape)
 {
-
-    mpFS->startElementNS( nXmlNamespace, XML_xfrm,
-                          XML_flipH, sax_fastparser::UseIf("1", bFlipH),
-                          XML_flipV, sax_fastparser::UseIf("1", bFlipV),
-                          XML_rot, sax_fastparser::UseIf(OString::number(nRotation), nRotation % 21600000 != 0));
-
     sal_Int32 nLeft = rRect.Left();
     sal_Int32 nTop = rRect.Top();
 
@@ -2331,8 +2325,8 @@ void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const too
     // coordinates only while the complete native transform remains unchanged.
     // Groups use a different coordinate system and must follow normal export.
     SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
-    if (GetDocumentType() == DOCUMENT_PPTX && !bIsGroupShape && !bFlipH && !bFlipV && nRotation == 0
-        && pObject && !pObject->getParentSdrObjectFromSdrObject())
+    if (GetDocumentType() == DOCUMENT_PPTX && !bIsGroupShape && pObject
+        && !pObject->getParentSdrObjectFromSdrObject())
     {
         Reference<XPropertySet> xProperties(xShape, UNO_QUERY);
         if (xProperties.is()
@@ -2342,13 +2336,30 @@ void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const too
             comphelper::SequenceAsHashMap aGrabBag(
                 xProperties->getPropertyValue(UNO_NAME_MISC_OBJ_INTEROPGRABBAG));
             auto it = aGrabBag.find(u"PptxTextTransform"_ustr);
-            if (it != aGrabBag.end())
+            if (it != aGrabBag.end() && aGrabBag.find(u"3DEffectProperties"_ustr) == aGrabBag.end())
             {
                 comphelper::SequenceAsHashMap aTransform(it->second);
                 awt::Point aPosition;
                 awt::Size aSize;
+                sal_Int32 nOriginalRotation = 0;
+                bool bOriginalFlipH = false;
+                bool bOriginalFlipV = false;
+                Any aNativeRotation;
+                if (xProperties->getPropertySetInfo()->hasPropertyByName(u"RotateAngle"_ustr))
+                    aNativeRotation = xProperties->getPropertyValue(u"RotateAngle"_ustr);
+                Any aNativeCustomGeometry;
+                if (xProperties->getPropertySetInfo()->hasPropertyByName(
+                        u"CustomShapeGeometry"_ustr))
+                    aNativeCustomGeometry
+                        = xProperties->getPropertyValue(u"CustomShapeGeometry"_ustr);
                 if ((aTransform[u"Position"_ustr] >>= aPosition)
                     && (aTransform[u"Size"_ustr] >>= aSize)
+                    && (aTransform[u"Rotation"_ustr] >>= nOriginalRotation)
+                    && (aTransform[u"FlipH"_ustr] >>= bOriginalFlipH)
+                    && (aTransform[u"FlipV"_ustr] >>= bOriginalFlipV)
+                    && aTransform[u"NativeShapeType"_ustr] == Any(xShape->getShapeType())
+                    && aTransform[u"NativeCustomShapeGeometry"_ustr] == aNativeCustomGeometry
+                    && aTransform[u"NativeRotation"_ustr] == aNativeRotation
                     && aTransform[u"NativePosition"_ustr] == Any(xShape->getPosition())
                     && aTransform[u"NativeSize"_ustr] == Any(xShape->getSize())
                     && aTransform[u"NativeTransformation"_ustr]
@@ -2358,10 +2369,18 @@ void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const too
                     nY = aPosition.Y;
                     nCx = aSize.Width;
                     nCy = aSize.Height;
+                    nRotation = nOriginalRotation;
+                    bFlipH = bOriginalFlipH;
+                    bFlipV = bOriginalFlipV;
                 }
             }
         }
     }
+
+    mpFS->startElementNS(
+        nXmlNamespace, XML_xfrm, XML_flipH, sax_fastparser::UseIf("1", bFlipH), XML_flipV,
+        sax_fastparser::UseIf("1", bFlipV), XML_rot,
+        sax_fastparser::UseIf(OString::number(nRotation), nRotation % 21600000 != 0));
 
     mpFS->singleElementNS(XML_a, XML_off, XML_x, OString::number(nX), XML_y, OString::number(nY));
     mpFS->singleElementNS(XML_a, XML_ext, XML_cx, OString::number(nCx), XML_cy,

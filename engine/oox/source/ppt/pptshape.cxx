@@ -27,6 +27,7 @@
 #include <comphelper/propertysequence.hxx>
 
 #include <com/sun/star/text/XTextField.hpp>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/style/XStyle.hpp>
 #include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
 #include <com/sun/star/container/XNamed.hpp>
@@ -546,11 +547,11 @@ void PPTShape::addShape(
             {
                 setTextMasterStyles(rSlidePersist, rFilterBase, sServiceName);
             }
-            // Keep fractional EMU coordinates only for ordinary, untransformed text shapes.
+            // Keep the original transform for ordinary top-level text shapes.
             // The native geometry baseline lets export distinguish rounding from a real edit.
             Reference<XDrawPage> xPage(rxShapes, UNO_QUERY);
-            if (xShape.is() && xPage.is() && getRotation() == 0 && !getFlipH() && !getFlipV()
-                && getDiagramRotation() == 0 && getSize().Width > 0 && getSize().Height > 0
+            if (xShape.is() && xPage.is() && getDiagramRotation() == 0 && getSize().Width > 0
+                && getSize().Height > 0
                 && ((sServiceName == "com.sun.star.drawing.CustomShape" && getTextBody()
                      && mpCustomShapePropertiesPtr->representsDefaultShape())
                     || sServiceName == "com.sun.star.drawing.TextShape"
@@ -559,15 +560,30 @@ void PPTShape::addShape(
                     || sServiceName == "com.sun.star.presentation.OutlinerShape"))
             {
                 Reference<XPropertySet> xProperties(xShape, UNO_QUERY_THROW);
-                putPropertyToGrabBag(u"PptxTextTransform"_ustr,
-                                     Any(comphelper::InitPropertySequence({
-                                         { u"Position"_ustr, Any(getPosition()) },
-                                         { u"Size"_ustr, Any(getSize()) },
-                                         { u"NativePosition"_ustr, Any(xShape->getPosition()) },
-                                         { u"NativeSize"_ustr, Any(xShape->getSize()) },
-                                         { u"NativeTransformation"_ustr,
-                                           xProperties->getPropertyValue(u"Transformation"_ustr) },
-                                     })));
+                Any aNativeRotation;
+                if (xProperties->getPropertySetInfo()->hasPropertyByName(u"RotateAngle"_ustr))
+                    aNativeRotation = xProperties->getPropertyValue(u"RotateAngle"_ustr);
+                Any aNativeCustomGeometry;
+                if (xProperties->getPropertySetInfo()->hasPropertyByName(
+                        u"CustomShapeGeometry"_ustr))
+                    aNativeCustomGeometry
+                        = xProperties->getPropertyValue(u"CustomShapeGeometry"_ustr);
+                putPropertyToGrabBag(
+                    u"PptxTextTransform"_ustr,
+                    Any(comphelper::InitPropertySequence({
+                        { u"Position"_ustr, Any(getPosition()) },
+                        { u"Size"_ustr, Any(getSize()) },
+                        { u"Rotation"_ustr, Any(getRotation()) },
+                        { u"FlipH"_ustr, Any(getFlipH()) },
+                        { u"FlipV"_ustr, Any(getFlipV()) },
+                        { u"NativeShapeType"_ustr, Any(xShape->getShapeType()) },
+                        { u"NativeCustomShapeGeometry"_ustr, aNativeCustomGeometry },
+                        { u"NativeRotation"_ustr, aNativeRotation },
+                        { u"NativePosition"_ustr, Any(xShape->getPosition()) },
+                        { u"NativeSize"_ustr, Any(xShape->getSize()) },
+                        { u"NativeTransformation"_ustr,
+                          xProperties->getPropertyValue(u"Transformation"_ustr) },
+                    })));
             }
 
             if (pShapeMap)
