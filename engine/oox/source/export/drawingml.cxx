@@ -2327,6 +2327,42 @@ void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const too
     sal_Int32 nX = std::min(oox::drawingml::convertHmmToEmu(nLeft), MAX_SIZE);
     sal_Int32 nY = std::min(oox::drawingml::convertHmmToEmu(nTop), MAX_SIZE);
 
+    // PPTX text import rounds EMU coordinates to native units. Reuse the source
+    // coordinates only while the complete native transform remains unchanged.
+    // Groups use a different coordinate system and must follow normal export.
+    SdrObject* pObject = SdrObject::getSdrObjectFromXShape(xShape);
+    if (GetDocumentType() == DOCUMENT_PPTX && !bIsGroupShape && !bFlipH && !bFlipV && nRotation == 0
+        && pObject && !pObject->getParentSdrObjectFromSdrObject())
+    {
+        Reference<XPropertySet> xProperties(xShape, UNO_QUERY);
+        if (xProperties.is()
+            && xProperties->getPropertySetInfo()->hasPropertyByName(
+                UNO_NAME_MISC_OBJ_INTEROPGRABBAG))
+        {
+            comphelper::SequenceAsHashMap aGrabBag(
+                xProperties->getPropertyValue(UNO_NAME_MISC_OBJ_INTEROPGRABBAG));
+            auto it = aGrabBag.find(u"PptxTextTransform"_ustr);
+            if (it != aGrabBag.end())
+            {
+                comphelper::SequenceAsHashMap aTransform(it->second);
+                awt::Point aPosition;
+                awt::Size aSize;
+                if ((aTransform[u"Position"_ustr] >>= aPosition)
+                    && (aTransform[u"Size"_ustr] >>= aSize)
+                    && aTransform[u"NativePosition"_ustr] == Any(xShape->getPosition())
+                    && aTransform[u"NativeSize"_ustr] == Any(xShape->getSize())
+                    && aTransform[u"NativeTransformation"_ustr]
+                           == xProperties->getPropertyValue(u"Transformation"_ustr))
+                {
+                    nX = aPosition.X;
+                    nY = aPosition.Y;
+                    nCx = aSize.Width;
+                    nCy = aSize.Height;
+                }
+            }
+        }
+    }
+
     mpFS->singleElementNS(XML_a, XML_off, XML_x, OString::number(nX), XML_y, OString::number(nY));
     mpFS->singleElementNS(XML_a, XML_ext, XML_cx, OString::number(nCx), XML_cy,
                           OString::number(nCy));

@@ -24,6 +24,7 @@
 #include <drawingml/textparagraph.hxx>
 #include <drawingml/textfield.hxx>
 #include <editeng/flditem.hxx>
+#include <comphelper/propertysequence.hxx>
 
 #include <com/sun/star/text/XTextField.hpp>
 #include <com/sun/star/style/XStyle.hpp>
@@ -545,6 +546,30 @@ void PPTShape::addShape(
             {
                 setTextMasterStyles(rSlidePersist, rFilterBase, sServiceName);
             }
+            // Keep fractional EMU coordinates only for ordinary, untransformed text shapes.
+            // The native geometry baseline lets export distinguish rounding from a real edit.
+            Reference<XDrawPage> xPage(rxShapes, UNO_QUERY);
+            if (xShape.is() && xPage.is() && getRotation() == 0 && !getFlipH() && !getFlipV()
+                && getDiagramRotation() == 0 && getSize().Width > 0 && getSize().Height > 0
+                && ((sServiceName == "com.sun.star.drawing.CustomShape" && getTextBody()
+                     && mpCustomShapePropertiesPtr->representsDefaultShape())
+                    || sServiceName == "com.sun.star.drawing.TextShape"
+                    || sServiceName == "com.sun.star.presentation.TitleTextShape"
+                    || sServiceName == "com.sun.star.presentation.SubtitleShape"
+                    || sServiceName == "com.sun.star.presentation.OutlinerShape"))
+            {
+                Reference<XPropertySet> xProperties(xShape, UNO_QUERY_THROW);
+                putPropertyToGrabBag(u"PptxTextTransform"_ustr,
+                                     Any(comphelper::InitPropertySequence({
+                                         { u"Position"_ustr, Any(getPosition()) },
+                                         { u"Size"_ustr, Any(getSize()) },
+                                         { u"NativePosition"_ustr, Any(xShape->getPosition()) },
+                                         { u"NativeSize"_ustr, Any(xShape->getSize()) },
+                                         { u"NativeTransformation"_ustr,
+                                           xProperties->getPropertyValue(u"Transformation"_ustr) },
+                                     })));
+            }
+
             if (pShapeMap)
             {
                 // bnc#705982 - if optional model id reference is
