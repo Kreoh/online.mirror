@@ -22,6 +22,25 @@
 #include <oox/token/tokens.hxx>
 #include <oox/core/xmlfilterbase.hxx>
 #include <oox/export/chartexport.hxx>
+#include <oox/drawingml/chart/chartconverter.hxx>
+#include <comphelper/memorystream.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <com/sun/star/frame/XLoadable.hpp>
+#include <com/sun/star/frame/XStorable.hpp>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/sheet/XSpreadsheet.hpp>
+#include <com/sun/star/sheet/XSpreadsheets.hpp>
+#include <com/sun/star/text/XTextRange.hpp>
+#include <com/sun/star/lang/XMultiComponentFactory.hpp>
+#include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/container/XIndexAccess.hpp>
+#include <com/sun/star/table/XCell.hpp>
+#include <com/sun/star/util/XNumberFormatsSupplier.hpp>
+#include <com/sun/star/util/XNumberFormats.hpp>
+#include <com/sun/star/lang/Locale.hpp>
+#include <cppuhelper/implbase.hxx>
 #include <oox/export/chartgeographyexport.hxx>
 #include <oox/export/shapes.hxx>
 #include <oox/token/relationship.hxx>
@@ -156,6 +175,27 @@ namespace cssc = css::chart;
 namespace oox::drawingml {
 
 namespace {
+
+class ChartWorkbookOutputStream final : public cppu::WeakImplHelper<io::XOutputStream>
+{
+    rtl::Reference<comphelper::UNOMemoryStream> mxStream;
+    sal_Int64 mnBytes = 0;
+
+public:
+    explicit ChartWorkbookOutputStream(rtl::Reference<comphelper::UNOMemoryStream> xStream)
+        : mxStream(std::move(xStream))
+    {
+    }
+    void writeBytes(const Sequence<sal_Int8>& rData) override
+    {
+        ENSURE_OR_THROW(mnBytes + rData.getLength() <= 64 * 1024 * 1024,
+                        "Chart workbook exceeds the byte export limit");
+        mxStream->writeBytes(rData);
+        mnBytes += rData.getLength();
+    }
+    void flush() override { mxStream->flush(); }
+    void closeOutput() override { mxStream->closeOutput(); }
+};
 
 bool isPrimaryAxes(sal_Int32 nIndex)
 {
@@ -820,8 +860,12 @@ Sequence< Sequence< OUString > > ChartExport::getSplitCategoriesList( const OUSt
     return Sequence< Sequence< OUString>>(0);
 }
 
-OUString ChartExport::parseFormula( const OUString& rRange )
+OUString ChartExport::parseFormula(const OUString& rRange,
+                                   const chart2::data::XDataSequence* pSequence)
 {
+    if (auto it = maWorkbookRanges.find(pSequence); it != maWorkbookRanges.end())
+        return it->second;
+    ENSURE_OR_THROW(msWorkbookRelation.isEmpty(), "Missing chart workbook formula binding");
     OUString aResult;
     Reference< XFormulaParser > xParser;
     uno::Reference< lang::XMultiServiceFactory > xSF = GetFB()->getModelFactory();
@@ -1465,6 +1509,9 @@ void ChartExport::ExportContent()
 
 void ChartExport::ExportContent_( bool bIsChartex )
 {
+    maWorkbookRanges.clear();
+    maWorkbookLiterals.clear();
+    msWorkbookRelation.clear();
     Reference< css::chart::XChartDocument > xChartDoc( getModel(), uno::UNO_QUERY );
     if( xChartDoc.is())
     {
@@ -1543,6 +1590,9 @@ void ChartExport::exportChartSpace( const Reference< css::chart::XChartDocument 
     // We're not to the plotArea yet, but we need some of the stuff that gets
     // set up in InitPlotArea() in order to do the chartex data export.
     InitPlotArea( );
+    if (GetDocumentType() == DOCUMENT_PPTX && !bIsChartex && xNewDoc.is()
+        && xNewDoc->hasInternalDataProvider() && mbLinkToExternalData)
+        prepareWorkbook(xNewDoc);
 
     // TODO: get the correct editing language
     if (bIsChartex) {
@@ -1786,7 +1836,7 @@ void ChartExport::exportData_chartex( [[maybe_unused]] const Reference< css::cha
                         if (eChartType == chart::TYPEID_HISTO)
                         {
                             OUString aCellRange = xValueSeq.is() ? xValueSeq->getSourceRangeRepresentation() : OUString();
-                            aCellRange = parseFormula(aCellRange);
+                            aCellRange = parseFormula(aCellRange, xValueSeq.get());
 
                             pFS->startElement(FSNS(XML_cx, XML_numDim), XML_type, "val");
 
@@ -1870,7 +1920,7 @@ void ChartExport::exportData_chartex( [[maybe_unused]] const Reference< css::cha
 #ifdef OUTPUT_SPLIT_CATEGORIES
                         const Sequence< Sequence< OUString >> aFinalSplitSource = getSplitCategoriesList(aCellRange);
 #endif
-                        aCellRange = parseFormula( aCellRange );
+                        aCellRange = parseFormula(aCellRange, mxCategoriesValues.get());
 
 #ifdef OUTPUT_SPLIT_CATEGORIES
                         if (aFinalSplitSource.getLength() > 1) {
@@ -2005,7 +2055,7 @@ void ChartExport::exportData_chartex( [[maybe_unused]] const Reference< css::cha
                             pFS->startElement(FSNS(XML_cx, XML_numDim), XML_type, "val");
 
                             aCellRange = xValueSeq.is() ? xValueSeq->getSourceRangeRepresentation() : OUString();
-                            aCellRange = parseFormula( aCellRange );
+                            aCellRange = parseFormula(aCellRange, xValueSeq.get());
                             // TODO: need to handle XML_multiLvlStrRef according to aCellRange
 
                             pFS->startElement(FSNS(XML_cx, XML_f));
@@ -2052,6 +2102,144 @@ void ChartExport::exportData_chartex( [[maybe_unused]] const Reference< css::cha
     }
 }
 
+void ChartExport::prepareWorkbook(const Reference<chart2::XChartDocument>& xChart)
+{
+    const auto aSequences = chart::getWorkbookSequences(xChart);
+    bool bHasLabelRanges = false;
+    const Any aSnapshot(chart::getWorkbookSnapshot(xChart, &bHasLabelRanges));
+    Reference<XPropertySet> xDiagram(xChart->getFirstDiagram(), UNO_QUERY_THROW);
+    comphelper::SequenceAsHashMap aRetained(xDiagram->getPropertyValue(u"OOXMLWorkbook"_ustr));
+    ENSURE_OR_THROW(aRetained.find(u"Unavailable"_ustr) == aRetained.end(),
+                    "The original embedded chart workbook could not be retained");
+    Sequence<sal_Int8> aWorkbook;
+    maWorkbookRanges.clear();
+    maWorkbookLiterals.clear();
+    msWorkbookRelation.clear();
+    if (aRetained[u"Data"_ustr] == aSnapshot && (aRetained[u"Bytes"_ustr] >>= aWorkbook)
+        && aWorkbook.hasElements())
+    {
+        for (const auto& xSequence : aSequences)
+        {
+            const OUString sFormula = chart::getWorkbookFormula(xSequence);
+            if (sFormula.isEmpty())
+                maWorkbookLiterals.insert(xSequence.get());
+            else
+                maWorkbookRanges[xSequence.get()] = sFormula;
+        }
+    }
+    else
+    {
+        ENSURE_OR_THROW(!bHasLabelRanges,
+                        "Generating a workbook for cell-linked chart labels is unsupported");
+        // Multi-level categories need a rectangular range rather than a flattened column.
+        ENSURE_OR_THROW(getSplitCategoriesList(u"categories"_ustr).getLength() <= 1,
+                        "Generating a workbook for multi-level chart categories is unsupported");
+        ENSURE_OR_THROW(aSequences.size() <= 16384, "Chart workbook exceeds the XLSX column limit");
+        sal_Int64 nCellCount = 0;
+        sal_Int64 nTextCount = 0;
+        for (const auto& xSequence : aSequences)
+        {
+            const auto aData = xSequence->getData();
+            const sal_Int32 nRows = aData.getLength();
+            ENSURE_OR_THROW(nRows <= 1048576, "Chart workbook exceeds the XLSX row limit");
+            nCellCount += nRows;
+            for (const auto& rValue : aData)
+                if (rValue.has<OUString>())
+                    nTextCount += rValue.get<OUString>().getLength();
+            ENSURE_OR_THROW(nTextCount <= 16 * 1024 * 1024,
+                            "Chart workbook exceeds the text limit");
+        }
+        ENSURE_OR_THROW(nCellCount <= 1000000, "Chart workbook exceeds the cell export limit");
+
+        const auto& xContext = GetFB()->getComponentContext();
+        Reference<lang::XComponent> xComponent(
+            xContext->getServiceManager()->createInstanceWithContext(
+                u"com.sun.star.sheet.SpreadsheetDocument"_ustr, xContext),
+            UNO_QUERY_THROW);
+        comphelper::ScopeGuard aDispose([&xComponent] { xComponent->dispose(); });
+        Reference<frame::XLoadable>(xComponent, UNO_QUERY_THROW)->initNew();
+        Reference<sheet::XSpreadsheetDocument> xDocument(xComponent, UNO_QUERY_THROW);
+        Reference<container::XIndexAccess> xSheets(xDocument->getSheets(), UNO_QUERY_THROW);
+        Reference<sheet::XSpreadsheet> xSheet(xSheets->getByIndex(0), UNO_QUERY_THROW);
+        Reference<XNamed>(xSheet, UNO_QUERY_THROW)->setName(u"ChartData"_ustr);
+        Reference<util::XNumberFormatsSupplier> xFormats(xComponent, UNO_QUERY_THROW);
+        xFormats->getNumberFormatSettings()->setPropertyValue(u"NullDate"_ustr,
+                                                              Any(chart::getWorkbookDate(xChart)));
+
+        sal_Int32 nColumn = 0;
+        for (const auto& xSequence : aSequences)
+        {
+            const auto aData = xSequence->getData();
+            for (sal_Int32 nRow = 0; nRow < aData.getLength(); ++nRow)
+            {
+                auto xCell = xSheet->getCellByPosition(nColumn, nRow);
+                double fValue;
+                OUString sValue;
+                if (aData[nRow] >>= fValue)
+                {
+                    if (!std::isnan(fValue))
+                    {
+                        ENSURE_OR_THROW(std::isfinite(fValue),
+                                        "Chart workbook has an infinite value");
+                        xCell->setValue(fValue);
+                    }
+                }
+                else if (aData[nRow] >>= sValue)
+                    Reference<text::XTextRange>(xCell, UNO_QUERY_THROW)->setString(sValue);
+                else
+                    ENSURE_OR_THROW(!aData[nRow].hasValue(),
+                                    "Unsupported chart workbook cell type");
+            }
+            const auto aFormat = chart::getWorkbookFormat(xChart, xSequence);
+            const OUString sFormat = aFormat[0].get<OUString>();
+            const lang::Locale aLocale(aFormat[1].get<OUString>(), aFormat[2].get<OUString>(),
+                                       aFormat[3].get<OUString>());
+            auto xNumberFormats = xFormats->getNumberFormats();
+            sal_Int32 nFormat = xNumberFormats->queryKey(sFormat, aLocale, false);
+            if (nFormat < 0)
+                nFormat = xNumberFormats->addNew(sFormat, aLocale);
+            Reference<XPropertySet>(
+                xSheet->getCellRangeByPosition(nColumn, 0, nColumn,
+                                               std::max<sal_Int32>(0, aData.getLength() - 1)),
+                UNO_QUERY_THROW)
+                ->setPropertyValue(u"NumberFormat"_ustr, Any(nFormat));
+            OUString sColumn;
+            for (sal_Int32 n = nColumn + 1; n > 0; n = (n - 1) / 26)
+                sColumn = OUStringChar('A' + (n - 1) % 26) + sColumn;
+            const OUString sRange = "ChartData!$" + sColumn + "$1:$" + sColumn + "$"
+                                    + OUString::number(std::max<sal_Int32>(1, aData.getLength()));
+            maWorkbookRanges[xSequence.get()] = sRange;
+            ++nColumn;
+        }
+
+        rtl::Reference<comphelper::UNOMemoryStream> xStream = new comphelper::UNOMemoryStream;
+        Reference<io::XOutputStream> xLimited = new ChartWorkbookOutputStream(xStream);
+        Reference<frame::XStorable>(xComponent, UNO_QUERY_THROW)
+            ->storeToURL(u"private:stream"_ustr,
+                         comphelper::InitPropertySequence({
+                             { u"OutputStream"_ustr, Any(xLimited) },
+                             { u"FilterName"_ustr, Any(u"Calc MS Excel 2007 XML"_ustr) },
+                         }));
+        xStream->closeOutput();
+        ENSURE_OR_THROW(xStream->getLength() <= 64 * 1024 * 1024,
+                        "Chart workbook exceeds the byte export limit");
+        xStream->seek(0);
+        xStream->readBytes(aWorkbook, static_cast<sal_Int32>(xStream->getLength()));
+    }
+    ENSURE_OR_THROW(aWorkbook.hasElements(), "Chart workbook export produced no bytes");
+    const OUString sName = "chartData" + OUString::number(GetFB()->getNewOLEUniqueId()) + ".xlsx";
+    auto xOutput = GetFB()->openFragmentStream(
+        "ppt/embeddings/" + sName,
+        u"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"_ustr);
+    comphelper::ScopeGuard aClose([&] { xOutput->closeOutput(); });
+    xOutput->writeBytes(aWorkbook);
+    xOutput->closeOutput();
+    aClose.dismiss();
+    msWorkbookRelation = GetFB()->addRelation(GetFS()->getOutputStream(),
+                                              oox::getRelationship(Relationship::PACKAGE),
+                                              "../embeddings/" + sName);
+}
+
 OUString ChartExport::GetExternalDataPath() const
 {
     OUString sRet;
@@ -2078,6 +2266,13 @@ OUString ChartExport::GetExternalDataPath() const
 
 void ChartExport::exportExternalData(bool bIsChartex)
 {
+    if (!bIsChartex && !msWorkbookRelation.isEmpty())
+    {
+        GetFS()->startElementNS(XML_c, XML_externalData, FSNS(XML_r, XML_id), msWorkbookRelation);
+        GetFS()->singleElementNS(XML_c, XML_autoUpdate, XML_val, "0");
+        GetFS()->endElementNS(XML_c, XML_externalData);
+        return;
+    }
     if (bIsChartex) return; // TODO!!
     // Embedded external data is grab bagged for docx file hence adding export part of
     // external data for docx files only.
@@ -4496,8 +4691,16 @@ void ChartExport::exportSeriesText( const Reference< chart2::data::XDataSequence
     } else {
         pFS->startElement(FSNS(XML_c, XML_tx));
 
-        OUString aCellRange =  xValueSeq->getSourceRangeRepresentation();
-        aCellRange = parseFormula( aCellRange );
+        OUString aCellRange = xValueSeq->getSourceRangeRepresentation();
+        if (maWorkbookLiterals.contains(xValueSeq.get()))
+        {
+            pFS->startElement(FSNS(XML_c, XML_v));
+            pFS->writeEscaped(aLabelString);
+            pFS->endElement(FSNS(XML_c, XML_v));
+            pFS->endElement(FSNS(XML_c, XML_tx));
+            return;
+        }
+        aCellRange = parseFormula(aCellRange, xValueSeq.get());
         pFS->startElement(FSNS(XML_c, XML_strRef));
 
         pFS->startElement(FSNS(XML_c, XML_f));
@@ -4524,10 +4727,13 @@ void ChartExport::exportSeriesCategory( const Reference< chart2::data::XDataSequ
 
     OUString aCellRange = xValueSeq.is() ? xValueSeq->getSourceRangeRepresentation() : OUString();
     const Sequence< Sequence< OUString >> aFinalSplitSource = (nValueType == XML_cat) ? getSplitCategoriesList(aCellRange) : Sequence< Sequence< OUString>>(0);
-    aCellRange = parseFormula( aCellRange );
+    const bool bLiteral = maWorkbookLiterals.contains(xValueSeq.get());
+    if (!bLiteral)
+        aCellRange = parseFormula(aCellRange, xValueSeq.get());
 
     if(aFinalSplitSource.getLength() > 1)
     {
+        ENSURE_OR_THROW(!bLiteral, "Literal multi-level chart categories are unsupported");
         // export multi level category axis labels
         pFS->startElement(FSNS(XML_c, XML_multiLvlStrRef));
 
@@ -4579,13 +4785,16 @@ void ChartExport::exportSeriesCategory( const Reference< chart2::data::XDataSequ
                 bWriteDateCategories = false;
         }
 
-        pFS->startElement(FSNS(XML_c, bWriteDateCategories ? XML_numRef : XML_strRef));
-
-        pFS->startElement(FSNS(XML_c, XML_f));
-        pFS->writeEscaped(aCellRange);
-        pFS->endElement(FSNS(XML_c, XML_f));
-
-        pFS->startElement(FSNS(XML_c, bWriteDateCategories ? XML_numCache : XML_strCache));
+        const sal_Int32 nOuter = bLiteral ? (bWriteDateCategories ? XML_numLit : XML_strLit)
+                                          : (bWriteDateCategories ? XML_numRef : XML_strRef);
+        pFS->startElement(FSNS(XML_c, nOuter));
+        if (!bLiteral)
+        {
+            pFS->startElement(FSNS(XML_c, XML_f));
+            pFS->writeEscaped(aCellRange);
+            pFS->endElement(FSNS(XML_c, XML_f));
+            pFS->startElement(FSNS(XML_c, bWriteDateCategories ? XML_numCache : XML_strCache));
+        }
         if (bWriteDateCategories)
         {
             pFS->startElement(FSNS(XML_c, XML_formatCode));
@@ -4623,8 +4832,9 @@ void ChartExport::exportSeriesCategory( const Reference< chart2::data::XDataSequ
             }
         }
 
-        pFS->endElement(FSNS(XML_c, bWriteDateCategories ? XML_numCache : XML_strCache));
-        pFS->endElement(FSNS(XML_c, bWriteDateCategories ? XML_numRef : XML_strRef));
+        if (!bLiteral)
+            pFS->endElement(FSNS(XML_c, bWriteDateCategories ? XML_numCache : XML_strCache));
+        pFS->endElement(FSNS(XML_c, nOuter));
     }
 
     pFS->endElement( FSNS( XML_c, nValueType ) );
@@ -4636,17 +4846,20 @@ void ChartExport::exportSeriesValues( const Reference< chart2::data::XDataSequen
     pFS->startElement(FSNS(XML_c, nValueType));
 
     OUString aCellRange = xValueSeq.is() ? xValueSeq->getSourceRangeRepresentation() : OUString();
-    aCellRange = parseFormula( aCellRange );
-    // TODO: need to handle XML_multiLvlStrRef according to aCellRange
-    pFS->startElement(FSNS(XML_c, XML_numRef));
-
-    pFS->startElement(FSNS(XML_c, XML_f));
-    pFS->writeEscaped( aCellRange );
-    pFS->endElement( FSNS( XML_c, XML_f ) );
+    const bool bLiteral = maWorkbookLiterals.contains(xValueSeq.get());
+    pFS->startElement(FSNS(XML_c, bLiteral ? XML_numLit : XML_numRef));
+    if (!bLiteral)
+    {
+        aCellRange = parseFormula(aCellRange, xValueSeq.get());
+        pFS->startElement(FSNS(XML_c, XML_f));
+        pFS->writeEscaped(aCellRange);
+        pFS->endElement(FSNS(XML_c, XML_f));
+    }
 
     ::std::vector< double > aValues = lcl_getAllValuesFromSequence( xValueSeq );
     sal_Int32 ptCount = aValues.size();
-    pFS->startElement(FSNS(XML_c, XML_numCache));
+    if (!bLiteral)
+        pFS->startElement(FSNS(XML_c, XML_numCache));
     pFS->startElement(FSNS(XML_c, XML_formatCode));
     OUString sNumberFormatString(u"General"_ustr);
     const sal_Int32 nKey = xValueSeq.is() ? xValueSeq->getNumberFormatKeyByIndex(-1) : 0;
@@ -4668,8 +4881,9 @@ void ChartExport::exportSeriesValues( const Reference< chart2::data::XDataSequen
         }
     }
 
-    pFS->endElement( FSNS( XML_c, XML_numCache ) );
-    pFS->endElement( FSNS( XML_c, XML_numRef ) );
+    if (!bLiteral)
+        pFS->endElement(FSNS(XML_c, XML_numCache));
+    pFS->endElement(FSNS(XML_c, bLiteral ? XML_numLit : XML_numRef));
     pFS->endElement( FSNS( XML_c, nValueType ) );
 }
 

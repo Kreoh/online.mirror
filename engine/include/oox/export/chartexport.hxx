@@ -20,6 +20,7 @@
 #ifndef INCLUDED_OOX_EXPORT_CHARTEXPORT_HXX
 #define INCLUDED_OOX_EXPORT_CHARTEXPORT_HXX
 
+#include <map>
 #include <set>
 #include <vector>
 
@@ -175,13 +176,17 @@ private:
     bool                mbHasDateCategories;
 
     std::set<sal_Int32> maExportedAxis;
+    std::map<const css::chart2::data::XDataSequence*, OUString> maWorkbookRanges;
+    std::set<const css::chart2::data::XDataSequence*> maWorkbookLiterals;
+    OUString msWorkbookRelation;
 
 private:
     sal_Int32 getChartType();
 
     cpo::uno::Sequence< cpo::uno::Sequence< rtl::OUString > > getSplitCategoriesList(const OUString& rRange);
 
-    OUString parseFormula( const OUString& rRange );
+    OUString parseFormula(const OUString& rRange,
+                          const css::chart2::data::XDataSequence* pSequence);
     void InitPlotArea();
 
     void ExportContent_(bool bIsChartex);
@@ -195,6 +200,7 @@ private:
     void exportData_chartex( const cpo::uno::Reference<
                               css::chart::XChartDocument >& rChartDoc);
     void exportExternalData(bool bIsChartex);
+    void prepareWorkbook(const cpo::uno::Reference<css::chart2::XChartDocument>& xChart);
     void exportLegend( const cpo::uno::Reference<
                           css::chart::XChartDocument >& rChartDoc,
                           bool bIsChartex);

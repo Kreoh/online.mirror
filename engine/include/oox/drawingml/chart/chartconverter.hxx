@@ -25,6 +25,8 @@
 #include <cpo/uno/Reference.hxx>
 #include <oox/dllapi.h>
 #include <rtl/ustring.hxx>
+#include <vector>
+#include <com/sun/star/util/Date.hpp>
 
 namespace com::sun::star {
     namespace awt { struct Point; }
@@ -40,6 +42,19 @@ namespace com::sun::star {
 namespace oox::core { class XmlFilterBase; }
 
 namespace oox::drawingml::chart {
+
+css::util::Date getWorkbookDate(const cpo::uno::Reference<css::chart2::XChartDocument>& xChart);
+cpo::uno::Sequence<cpo::uno::Any>
+getWorkbookFormat(const cpo::uno::Reference<css::chart2::XChartDocument>& xChart,
+                  const cpo::uno::Reference<css::chart2::data::XDataSequence>& xSequence);
+OUString getWorkbookFormula(const cpo::uno::Reference<css::chart2::data::XDataSequence>& xSequence);
+
+// Ordered sequences include categories, series labels and values, and custom error bars.
+std::vector<cpo::uno::Reference<css::chart2::data::XDataSequence>>
+getWorkbookSequences(const cpo::uno::Reference<css::chart2::XChartDocument>& xChart);
+cpo::uno::Sequence<cpo::uno::Any>
+getWorkbookSnapshot(const cpo::uno::Reference<css::chart2::XChartDocument>& xChart,
+                    bool* pHasLabelRanges = nullptr);
 
 struct ChartSpaceModel;
 struct DataSequenceModel;

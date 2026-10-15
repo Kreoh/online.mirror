@@ -49,6 +49,26 @@
 #include <com/sun/star/document/GraphicStorageHandler.hpp>
 #include <comphelper/diagnose_ex.hxx>
 #include <sal/log.hxx>
+#include <tools/stream.hxx>
+#include <comphelper/scopeguard.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <com/sun/star/chart2/XChartDocument.hpp>
+#include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
+#include <com/sun/star/chart2/XCoordinateSystem.hpp>
+#include <com/sun/star/chart2/XChartTypeContainer.hpp>
+#include <com/sun/star/chart2/XChartType.hpp>
+#include <com/sun/star/chart2/XDataSeriesContainer.hpp>
+#include <com/sun/star/chart2/XDataSeries.hpp>
+#include <com/sun/star/chart2/XAxis.hpp>
+#include <com/sun/star/chart2/data/XDataSource.hpp>
+#include <com/sun/star/chart2/data/XDataSequence.hpp>
+#include <com/sun/star/chart2/data/XLabeledDataSequence.hpp>
+#include <cmath>
+#include <cstring>
+#include <vector>
+#include <map>
 
 using namespace ::com::sun::star;
 using namespace ::cpo;
@@ -63,6 +83,372 @@ constexpr OUString sXML_metaStreamName = u"meta.xml"_ustr;
 constexpr OUString sXML_styleStreamName = u"styles.xml"_ustr;
 constexpr OUString sXML_contentStreamName = u"content.xml"_ustr;
 
+// This private storage record has a fixed scalar schema, not a general UNO serializer.
+// ZIP stream checksums protect the payload; version, bounds and trailing bytes are checked here.
+constexpr OUString sWorkbookState = u"ooxml-chart-workbook-state.bin"_ustr;
+constexpr OUString sWorkbookPayload = u"ooxml-chart-workbook.xlsx"_ustr;
+constexpr sal_Int32 nWorkbookLimit = 64 * 1024 * 1024;
+constexpr sal_uInt32 nWorkbookVersion = 0x57424302;
+using uno::Any;
+using chart2::XChartDocument;
+using chart2::XCoordinateSystemContainer;
+using chart2::XChartTypeContainer;
+using chart2::XDataSeriesContainer;
+using chart2::data::XDataSource;
+using chart2::data::XDataSequence;
+using chart2::data::XLabeledDataSequence;
+using uno::UNO_QUERY_THROW;
+std::vector<Reference<XDataSequence>> workbookSequences(const Reference<XChartDocument>& xChart)
+{
+    std::vector<Reference<XDataSequence>> aSequences;
+    auto append = [&aSequences](const Reference<XLabeledDataSequence>& xLabeled)
+    {
+        if (!xLabeled.is())
+            return;
+        for (const auto& xSequence : { xLabeled->getLabel(), xLabeled->getValues() })
+        {
+            if (!xSequence.is())
+                continue;
+            ENSURE_OR_THROW(aSequences.size() < 16384, "Chart workbook exceeds the sequence limit");
+            aSequences.push_back(xSequence);
+        }
+    };
+    Reference<XCoordinateSystemContainer> xSystems(xChart->getFirstDiagram(), UNO_QUERY_THROW);
+    for (const auto& xSystem : xSystems->getCoordinateSystems())
+    {
+        for (sal_Int32 nDimension = 0; nDimension < xSystem->getDimension(); ++nDimension)
+            for (sal_Int32 nAxis = 0; nAxis <= xSystem->getMaximumAxisIndexByDimension(nDimension);
+                 ++nAxis)
+                if (auto xAxis = xSystem->getAxisByDimension(nDimension, nAxis); xAxis.is())
+                    append(xAxis->getScaleData().Categories);
+        Reference<XChartTypeContainer> xTypes(xSystem, UNO_QUERY_THROW);
+        for (const auto& xType : xTypes->getChartTypes())
+        {
+            Reference<XDataSeriesContainer> xSeriesContainer(xType, UNO_QUERY_THROW);
+            for (const auto& xSeries : xSeriesContainer->getDataSeries())
+            {
+                Reference<XDataSource> xSource(xSeries, UNO_QUERY_THROW);
+                for (const auto& xSequence : xSource->getDataSequences())
+                    append(xSequence);
+                Reference<beans::XPropertySet> xProperties(xSeries, UNO_QUERY_THROW);
+                for (const OUString& rName : { u"ErrorBarX"_ustr, u"ErrorBarY"_ustr })
+                {
+                    Reference<XDataSource> xErrorBars;
+                    xProperties->getPropertyValue(rName) >>= xErrorBars;
+                    if (xErrorBars.is())
+                        for (const auto& xSequence : xErrorBars->getDataSequences())
+                            append(xSequence);
+                }
+            }
+        }
+    }
+    return aSequences;
+}
+
+void writeWorkbookValues(SvStream& rStream, const Sequence<Any>& rValues);
+
+void workbookCurrentIdentity(const Reference<XChartDocument>& xChart, Sequence<Any>& rData,
+                             Sequence<Any>& rFormulas)
+{
+    std::vector<Any> aData;
+    std::vector<Any> aFormulas;
+    sal_Int64 nText = 0;
+    sal_Int64 nCells = 0;
+    sal_Int64 nIdentityBytes = 0;
+    std::map<const XDataSequence*, sal_Int32> aReferences;
+    std::map<std::vector<sal_Int8>, const XDataSequence*> aIdentities;
+    for (const auto& xSequence : workbookSequences(xChart))
+    {
+        const auto [aReference, bNewReference]
+            = aReferences.emplace(xSequence.get(), static_cast<sal_Int32>(aReferences.size()));
+        // Preserve repeated-reference topology independently of names remapped by ODF.
+        aData.emplace_back(aReference->second);
+        const size_t nIdentityStart = aData.size();
+        Reference<beans::XPropertySet> xProperties(xSequence, UNO_QUERY_THROW);
+        const Any aRole = xProperties->getPropertyValue(u"Role"_ustr);
+        ENSURE_OR_THROW(aRole.has<OUString>(), "Invalid chart sequence role");
+        nText += aRole.get<OUString>().getLength();
+        ENSURE_OR_THROW(nText <= 16 * 1024 * 1024, "Chart workbook roles exceed the text limit");
+        aData.push_back(aRole);
+        const auto aValues = xSequence->getData();
+        nCells += aValues.getLength();
+        ENSURE_OR_THROW(nCells <= 1000000, "Chart workbook identity exceeds the cell limit");
+        aData.emplace_back(aValues.getLength());
+        for (const auto& rValue : aValues)
+        {
+            if (rValue.has<OUString>())
+                nText += rValue.get<OUString>().getLength();
+            ENSURE_OR_THROW(nText <= 16 * 1024 * 1024,
+                            "Chart workbook identity exceeds the text limit");
+            aData.push_back(rValue.has<double>() && std::isnan(rValue.get<double>()) ? Any()
+                                                                                     : rValue);
+        }
+        if (bNewReference)
+        {
+            // Positional restoration is safe only when distinct sequences are distinguishable.
+            // Native ODF import may remap range names, so identical role/data identities are
+            // deliberately rejected rather than guessing which formula belongs to each owner.
+            sal_Int64 nEstimatedBytes = 4;
+            for (size_t n = nIdentityStart; n < aData.size(); ++n)
+                nEstimatedBytes += aData[n].has<OUString>()
+                                       ? 5 + sal_Int64(aData[n].get<OUString>().getLength()) * 2
+                                       : 9;
+            ENSURE_OR_THROW(nIdentityBytes + nEstimatedBytes <= nWorkbookLimit,
+                            "Chart sequence identities exceed the byte limit");
+            SvMemoryStream aIdentity;
+            aIdentity.SetEndian(SvStreamEndian::LITTLE);
+            writeWorkbookValues(
+                aIdentity, Sequence<Any>(aData.data() + nIdentityStart,
+                                         static_cast<sal_Int32>(aData.size() - nIdentityStart)));
+            const auto nBytes = aIdentity.TellEnd();
+            nIdentityBytes += nBytes;
+            ENSURE_OR_THROW(nIdentityBytes <= nWorkbookLimit,
+                            "Chart sequence identities exceed the byte limit");
+            const auto* pBytes = static_cast<const sal_Int8*>(aIdentity.GetData());
+            const bool bUnique
+                = aIdentities
+                      .emplace(std::vector<sal_Int8>(pBytes, pBytes + nBytes), xSequence.get())
+                      .second;
+            ENSURE_OR_THROW(bUnique, "Ambiguous chart workbook sequence correspondence");
+        }
+        OUString sFormula;
+        if (xProperties->getPropertySetInfo()->hasPropertyByName(u"ChartExFormula"_ustr))
+            xProperties->getPropertyValue(u"ChartExFormula"_ustr) >>= sFormula;
+        nText += sFormula.getLength();
+        ENSURE_OR_THROW(nText <= 16 * 1024 * 1024, "Chart workbook formulas exceed the text limit");
+        aFormulas.emplace_back(sFormula);
+    }
+    rData = comphelper::containerToSequence(aData);
+    rFormulas = comphelper::containerToSequence(aFormulas);
+}
+
+void writeWorkbookValues(SvStream& rStream, const Sequence<Any>& rValues)
+{
+    ENSURE_OR_THROW(rValues.getLength() <= 2000000, "Chart workbook metadata has too many values");
+    ENSURE_OR_THROW(rStream.Tell() + 4 <= nWorkbookLimit, "Chart metadata exceeds the byte limit");
+    rStream.WriteUInt32(rValues.getLength());
+    sal_Int64 nText = 0;
+    for (const auto& rValue : rValues)
+    {
+        if (rValue.has<OUString>())
+            nText += rValue.get<OUString>().getLength();
+        ENSURE_OR_THROW(nText <= 16 * 1024 * 1024, "Chart metadata exceeds the text limit");
+        const sal_Int64 nSize
+            = rValue.has<OUString>() ? 5 + sal_Int64(rValue.get<OUString>().getLength()) * 2 : 9;
+        ENSURE_OR_THROW(rStream.Tell() + nSize <= nWorkbookLimit,
+                        "Chart workbook metadata exceeds the byte limit");
+        if (!rValue.hasValue())
+            rStream.WriteUInt8(0);
+        else if (rValue.has<bool>())
+            rStream.WriteUInt8(1).WriteUInt8(rValue.get<bool>());
+        else if (rValue.has<sal_Int32>())
+            rStream.WriteUInt8(2).WriteInt32(rValue.get<sal_Int32>());
+        else if (rValue.has<double>())
+            rStream.WriteUInt8(3).WriteDouble(rValue.get<double>());
+        else if (rValue.has<OUString>())
+        {
+            rStream.WriteUInt8(4);
+            write_uInt32_lenPrefixed_uInt16s_FromOUString(rStream, rValue.get<OUString>());
+        }
+        else
+            ENSURE_OR_THROW(false, "Unsupported chart workbook metadata type");
+    }
+    ENSURE_OR_THROW(rStream.good(), "Writing chart workbook metadata failed");
+}
+
+Sequence<Any> readWorkbookValues(SvStream& rStream)
+{
+    sal_uInt32 nCount = 0;
+    rStream.ReadUInt32(nCount);
+    ENSURE_OR_THROW(nCount <= 2000000 && nCount <= rStream.remainingSize(),
+                    "Invalid chart workbook metadata count");
+    Sequence<Any> aValues(nCount);
+    sal_Int64 nText = 0;
+    for (auto& rValue : asNonConstRange(aValues))
+    {
+        sal_uInt8 nType = 0;
+        rStream.ReadUChar(nType);
+        switch (nType)
+        {
+            case 0:
+                break;
+            case 1:
+            {
+                sal_uInt8 nValue = 0;
+                rStream.ReadUChar(nValue);
+                ENSURE_OR_THROW(nValue <= 1, "Invalid chart workbook boolean");
+                rValue <<= bool(nValue);
+                break;
+            }
+            case 2:
+            {
+                sal_Int32 nValue = 0;
+                rStream.ReadInt32(nValue);
+                rValue <<= nValue;
+                break;
+            }
+            case 3:
+            {
+                double fValue = 0;
+                rStream.ReadDouble(fValue);
+                rValue <<= fValue;
+                break;
+            }
+            case 4:
+            {
+                sal_uInt32 nLength = 0;
+                rStream.ReadUInt32(nLength);
+                nText += nLength;
+                ENSURE_OR_THROW(nText <= 16 * 1024 * 1024
+                                    && sal_uInt64(nLength) * 2 <= rStream.remainingSize(),
+                                "Invalid chart workbook text length");
+                rValue <<= read_uInt16s_ToOUString(rStream, nLength);
+                break;
+            }
+            default:
+                ENSURE_OR_THROW(false, "Unknown chart workbook metadata type");
+        }
+        ENSURE_OR_THROW(rStream.good(), "Truncated chart workbook metadata");
+    }
+    return aValues;
+}
+
+Sequence<sal_Int8> readWorkbookStream(const Reference<embed::XStorage>& xStorage,
+                                      const OUString& rName)
+{
+    auto xStream = xStorage->openStreamElement(rName, embed::ElementModes::READ);
+    auto xInput = xStream->getInputStream();
+    comphelper::ScopeGuard aClose([&] { xInput->closeInput(); });
+    Sequence<sal_Int8> aBytes;
+    const sal_Int32 nBytes = xInput->readBytes(aBytes, nWorkbookLimit + 1);
+    ENSURE_OR_THROW(nBytes > 0 && nBytes <= nWorkbookLimit, "Invalid chart workbook stream size");
+    return aBytes;
+}
+
+void writeWorkbookStream(const Reference<embed::XStorage>& xStorage, const OUString& rName,
+                         const Sequence<sal_Int8>& rBytes, const OUString& rMediaType)
+{
+    ENSURE_OR_THROW(rBytes.getLength() <= nWorkbookLimit,
+                    "Chart workbook stream exceeds the byte limit");
+    auto xStream = xStorage->openStreamElement(rName, embed::ElementModes::READWRITE
+                                                          | embed::ElementModes::TRUNCATE);
+    Reference<beans::XPropertySet> xProperties(xStream, UNO_QUERY_THROW);
+    xProperties->setPropertyValue(u"MediaType"_ustr, Any(rMediaType));
+    xProperties->setPropertyValue(u"UseCommonStoragePasswordEncryption"_ustr, Any(true));
+    auto xOutput = xStream->getOutputStream();
+    comphelper::ScopeGuard aClose([&] { xOutput->closeOutput(); });
+    xOutput->writeBytes(rBytes);
+}
+
+void storeWorkbook(const Reference<lang::XComponent>& xDocument,
+                   const Reference<embed::XStorage>& xStorage)
+{
+    Reference<XChartDocument> xChart(xDocument, UNO_QUERY_THROW);
+    Reference<beans::XPropertySet> xDiagram(xChart->getFirstDiagram(), UNO_QUERY_THROW);
+    const Any aProperty = xDiagram->getPropertyValue(u"OOXMLWorkbook"_ustr);
+    if (!aProperty.hasValue())
+    {
+        for (const auto& rName : { sWorkbookState, sWorkbookPayload })
+            if (xStorage->hasByName(rName))
+                xStorage->removeElement(rName);
+        return;
+    }
+    comphelper::SequenceAsHashMap aRecord(aProperty);
+    const bool bUnavailable = aRecord.find(u"Unavailable"_ustr) != aRecord.end();
+    SvMemoryStream aStream;
+    aStream.SetEndian(SvStreamEndian::LITTLE);
+    aStream.WriteUInt32(nWorkbookVersion).WriteUInt8(bUnavailable);
+    if (!bUnavailable)
+    {
+        Sequence<Any> aOriginal;
+        Sequence<sal_Int8> aBytes;
+        ENSURE_OR_THROW((aRecord[u"Data"_ustr] >>= aOriginal) && (aRecord[u"Bytes"_ustr] >>= aBytes)
+                            && aBytes.hasElements(),
+                        "Incomplete original chart workbook record");
+        Sequence<Any> aCurrent;
+        Sequence<Any> aFormulas;
+        workbookCurrentIdentity(xChart, aCurrent, aFormulas);
+        writeWorkbookValues(aStream, aOriginal);
+        writeWorkbookValues(aStream, aCurrent);
+        writeWorkbookValues(aStream, aFormulas);
+        writeWorkbookStream(
+            xStorage, sWorkbookPayload, aBytes,
+            u"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"_ustr);
+    }
+    else if (xStorage->hasByName(sWorkbookPayload))
+        xStorage->removeElement(sWorkbookPayload);
+    writeWorkbookStream(xStorage, sWorkbookState,
+                        Sequence<sal_Int8>(static_cast<const sal_Int8*>(aStream.GetData()),
+                                           static_cast<sal_Int32>(aStream.TellEnd())),
+                        u"application/octet-stream"_ustr);
+}
+
+void loadWorkbook(const Reference<lang::XComponent>& xDocument,
+                  const Reference<embed::XStorage>& xStorage)
+{
+    if (!xStorage->hasByName(sWorkbookState) && !xStorage->hasByName(sWorkbookPayload))
+        return;
+    Reference<XChartDocument> xChart(xDocument, UNO_QUERY_THROW);
+    Reference<beans::XPropertySet> xDiagram(xChart->getFirstDiagram(), UNO_QUERY_THROW);
+    try
+    {
+        auto aMetadata = readWorkbookStream(xStorage, sWorkbookState);
+        SvMemoryStream aStream(aMetadata.getArray(), aMetadata.getLength(), StreamMode::READ);
+        aStream.SetEndian(SvStreamEndian::LITTLE);
+        sal_uInt32 nVersion = 0;
+        sal_uInt8 nUnavailable = 0;
+        aStream.ReadUInt32(nVersion).ReadUChar(nUnavailable);
+        ENSURE_OR_THROW(nVersion == nWorkbookVersion && nUnavailable == 0,
+                        "Unsupported or unavailable chart workbook record");
+        const auto aOriginal = readWorkbookValues(aStream);
+        const auto aStoredCurrent = readWorkbookValues(aStream);
+        const auto aFormulas = readWorkbookValues(aStream);
+        ENSURE_OR_THROW(aStream.good() && aStream.remainingSize() == 0,
+                        "Trailing chart workbook metadata");
+        Sequence<Any> aCurrent;
+        Sequence<Any> aUnusedFormulas;
+        workbookCurrentIdentity(xChart, aCurrent, aUnusedFormulas);
+        const auto aSequences = workbookSequences(xChart);
+        // Use the same typed byte encoding as the uniqueness check. UNO Any equality
+        // can equate different numeric types and signed zero, which would hide a permutation.
+        SvMemoryStream aCurrentBytes;
+        SvMemoryStream aStoredBytes;
+        aCurrentBytes.SetEndian(SvStreamEndian::LITTLE);
+        aStoredBytes.SetEndian(SvStreamEndian::LITTLE);
+        writeWorkbookValues(aCurrentBytes, aCurrent);
+        writeWorkbookValues(aStoredBytes, aStoredCurrent);
+        ENSURE_OR_THROW(aCurrentBytes.TellEnd() == aStoredBytes.TellEnd()
+                            && std::memcmp(aCurrentBytes.GetData(), aStoredBytes.GetData(),
+                                           static_cast<size_t>(aCurrentBytes.TellEnd()))
+                                   == 0
+                            && aSequences.size() == static_cast<size_t>(aFormulas.getLength()),
+                        "Chart workbook sequence identity changed during native reload");
+        for (size_t n = 0; n < aSequences.size(); ++n)
+        {
+            OUString sFormula;
+            ENSURE_OR_THROW(aFormulas[n] >>= sFormula, "Invalid saved chart formula");
+            Reference<beans::XPropertySet> xProperties(aSequences[n], UNO_QUERY_THROW);
+            if (xProperties->getPropertySetInfo()->hasPropertyByName(u"ChartExFormula"_ustr))
+                xProperties->setPropertyValue(u"ChartExFormula"_ustr, Any(sFormula));
+            else
+                ENSURE_OR_THROW(sFormula.isEmpty(),
+                                "Reloaded chart cannot retain formula metadata");
+        }
+        xDiagram->setPropertyValue(
+            u"OOXMLWorkbook"_ustr,
+            Any(comphelper::InitPropertySequence({
+                { u"Bytes"_ustr, Any(readWorkbookStream(xStorage, sWorkbookPayload)) },
+                { u"Data"_ustr, Any(aOriginal) },
+            })));
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("chart2", "Restoring the original chart workbook failed");
+        xDiagram->setPropertyValue(
+            u"OOXMLWorkbook"_ustr,
+            Any(comphelper::InitPropertySequence({ { u"Unavailable"_ustr, Any(true) } })));
+    }
+}
 
 uno::Reference< embed::XStorage > lcl_getWriteStorage(
     const Sequence< beans::PropertyValue >& rMediaDescriptor,
@@ -361,6 +747,8 @@ ErrCode XMLFilter::impl_Import(
             : u"com.sun.star.comp.Chart.XMLContentImporter"_ustr,
             xStorage, xFactory, xGraphicStorageHandler, xImportInfo );
         nWarning = nWarning != ERRCODE_NONE ? nWarning : nContentWarning;
+        if (nContentWarning == ERRCODE_NONE)
+            loadWorkbook(xDocumentComp, xStorage);
     }
     catch (const cpo::uno::Exception&)
     {
@@ -611,6 +999,9 @@ ErrCode XMLFilter::impl_Export(
         Reference< lang::XComponent > xComp(xGraphicStorageHandler, uno::UNO_QUERY);
         if (xComp.is())
             xComp->dispose();
+
+        if (nWarning == ERRCODE_NONE)
+            storeWorkbook(xDocumentComp, xStorage);
 
         uno::Reference<embed::XTransactedObject> xTransact( xStorage ,uno::UNO_QUERY);
         if ( xTransact.is() )

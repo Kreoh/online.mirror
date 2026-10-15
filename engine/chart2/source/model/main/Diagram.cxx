@@ -46,6 +46,7 @@
 
 #include <basegfx/numeric/ftools.hxx>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <com/sun/star/chart2/AxisType.hpp>
 #include <com/sun/star/chart2/DataPointGeometry3D.hpp>
 #include <com/sun/star/chart2/StackingDirection.hpp>
@@ -103,7 +104,8 @@ enum
     PROP_DIAGRAM_DATATABLEVBORDER,
     PROP_DIAGRAM_DATATABLEOUTLINE,
     PROP_DIAGRAM_EXTERNALDATA,
-    PROP_DIAGRAM_STYLE_INDEX
+    PROP_DIAGRAM_STYLE_INDEX,
+    PROP_DIAGRAM_OOXML_WORKBOOK
 };
 
 void lcl_AddPropertiesToVector(
@@ -199,6 +201,9 @@ void lcl_AddPropertiesToVector(
                   PROP_DIAGRAM_EXTERNALDATA,
                   cppu::UnoType<OUString>::get(),
                   beans::PropertyAttribute::MAYBEVOID );
+    rOutProperties.emplace_back(u"OOXMLWorkbook"_ustr, PROP_DIAGRAM_OOXML_WORKBOOK,
+                                cppu::UnoType<cpo::uno::Sequence<beans::PropertyValue>>::get(),
+                                beans::PropertyAttribute::MAYBEVOID);
     rOutProperties.emplace_back( u"StyleIndex"_ustr,
                   PROP_DIAGRAM_STYLE_INDEX,
                   cppu::UnoType<OUString>::get(),

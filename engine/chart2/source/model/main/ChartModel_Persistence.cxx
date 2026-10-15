@@ -320,6 +320,9 @@ void ChartModel::impl_store(
     const Sequence< beans::PropertyValue >& rMediaDescriptor,
     const Reference< embed::XStorage > & xStorage )
 {
+    Reference<beans::XPropertySet> xDiagram(getFirstDiagram(), uno::UNO_QUERY);
+    const bool bRetainedWorkbook
+        = xDiagram.is() && xDiagram->getPropertyValue(u"OOXMLWorkbook"_ustr).hasValue();
     Reference< document::XFilter > xFilter( impl_createFilter( rMediaDescriptor));
     if( xFilter.is() && xStorage.is())
     {
@@ -329,15 +332,23 @@ void ChartModel::impl_store(
         {
             Reference< document::XExporter > xExporter( xFilter, uno::UNO_QUERY_THROW );
             xExporter->setSourceDocument( Reference< lang::XComponent >( this ));
-            xFilter->filter( aMD );
+            const bool bStored = xFilter->filter(aMD);
+            if (!bStored && bRetainedWorkbook)
+                throw io::IOException(u"Could not preserve the original chart workbook"_ustr,
+                                      static_cast<::cppu::OWeakObject*>(this));
         }
         catch( const cpo::uno::Exception & )
         {
+            if (bRetainedWorkbook)
+                throw;
             DBG_UNHANDLED_EXCEPTION("chart2");
         }
     }
     else
     {
+        if (bRetainedWorkbook)
+            throw io::IOException(u"No storage filter for the original chart workbook"_ustr,
+                                  static_cast<::cppu::OWeakObject*>(this));
         OSL_FAIL( "No filter" );
     }
 

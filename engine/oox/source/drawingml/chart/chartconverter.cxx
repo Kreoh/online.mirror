@@ -18,6 +18,27 @@
  */
 
 #include <com/sun/star/chart2/XChartDocument.hpp>
+#include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
+#include <com/sun/star/chart2/XChartTypeContainer.hpp>
+#include <com/sun/star/chart2/XDataSeriesContainer.hpp>
+#include <com/sun/star/chart2/XAxis.hpp>
+#include <com/sun/star/chart2/XCoordinateSystem.hpp>
+#include <com/sun/star/chart2/XChartType.hpp>
+#include <com/sun/star/chart2/XDataSeries.hpp>
+#include <com/sun/star/chart2/XAnyDescriptionAccess.hpp>
+#include <com/sun/star/chart2/XDataPointCustomLabelField.hpp>
+#include <com/sun/star/chart2/DataPointCustomLabelFieldType.hpp>
+#include <com/sun/star/chart2/data/XDataSequence.hpp>
+#include <com/sun/star/chart2/data/XDataSource.hpp>
+#include <com/sun/star/chart2/data/XLabeledDataSequence.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
+#include <com/sun/star/util/DateTime.hpp>
+#include <com/sun/star/util/XNumberFormats.hpp>
+#include <com/sun/star/lang/Locale.hpp>
+#include <comphelper/diagnose_ex.hxx>
+#include <comphelper/sequence.hxx>
+#include <cmath>
 #include <com/sun/star/chart2/data/XDataReceiver.hpp>
 #include <com/sun/star/util/XNumberFormatsSupplier.hpp>
 #include <drawingml/chart/chartspaceconverter.hxx>
@@ -46,6 +67,185 @@ using namespace ::cpo;
 using namespace ::cpo::uno;
 
 using ::oox::core::XmlFilterBase;
+
+std::vector<Reference<XDataSequence>> getWorkbookSequences(const Reference<XChartDocument>& xChart)
+{
+    std::vector<Reference<XDataSequence>> aSequences;
+    auto append = [&aSequences](const Reference<XLabeledDataSequence>& xLabeled)
+    {
+        if (!xLabeled.is())
+            return;
+        for (const auto& xSequence : { xLabeled->getLabel(), xLabeled->getValues() })
+        {
+            if (!xSequence.is())
+                continue;
+            ENSURE_OR_THROW(aSequences.size() < 16384, "Chart workbook exceeds the sequence limit");
+            aSequences.push_back(xSequence);
+        }
+    };
+    Reference<XCoordinateSystemContainer> xSystems(xChart->getFirstDiagram(), UNO_QUERY_THROW);
+    for (const auto& xSystem : xSystems->getCoordinateSystems())
+    {
+        for (sal_Int32 nDimension = 0; nDimension < xSystem->getDimension(); ++nDimension)
+            for (sal_Int32 nAxis = 0; nAxis <= xSystem->getMaximumAxisIndexByDimension(nDimension);
+                 ++nAxis)
+                if (auto xAxis = xSystem->getAxisByDimension(nDimension, nAxis); xAxis.is())
+                    append(xAxis->getScaleData().Categories);
+        Reference<XChartTypeContainer> xTypes(xSystem, UNO_QUERY_THROW);
+        for (const auto& xType : xTypes->getChartTypes())
+        {
+            Reference<XDataSeriesContainer> xSeriesContainer(xType, UNO_QUERY_THROW);
+            for (const auto& xSeries : xSeriesContainer->getDataSeries())
+            {
+                Reference<XDataSource> xSource(xSeries, UNO_QUERY_THROW);
+                for (const auto& xSequence : xSource->getDataSequences())
+                    append(xSequence);
+                Reference<beans::XPropertySet> xProperties(xSeries, UNO_QUERY_THROW);
+                for (const OUString& rName : { u"ErrorBarX"_ustr, u"ErrorBarY"_ustr })
+                {
+                    Reference<XDataSource> xErrorBars;
+                    xProperties->getPropertyValue(rName) >>= xErrorBars;
+                    if (xErrorBars.is())
+                        for (const auto& xSequence : xErrorBars->getDataSequences())
+                            append(xSequence);
+                }
+            }
+        }
+    }
+    return aSequences;
+}
+
+OUString getWorkbookFormula(const Reference<XDataSequence>& xSequence)
+{
+    Reference<beans::XPropertySet> xProperties(xSequence, UNO_QUERY);
+    OUString sFormula;
+    if (xProperties.is()
+        && xProperties->getPropertySetInfo()->hasPropertyByName(u"ChartExFormula"_ustr))
+        xProperties->getPropertyValue(u"ChartExFormula"_ustr) >>= sFormula;
+    return sFormula;
+}
+
+util::Date getWorkbookDate(const Reference<XChartDocument>& xChart)
+{
+    Reference<beans::XPropertySet> xProperties(xChart, UNO_QUERY_THROW);
+    util::DateTime aDate;
+    if (xProperties->getPropertyValue(u"NullDate"_ustr) >>= aDate)
+        return util::Date(aDate.Day, aDate.Month, aDate.Year);
+    Reference<util::XNumberFormatsSupplier> xSupplier(xChart, UNO_QUERY_THROW);
+    util::Date aDefault;
+    ENSURE_OR_THROW(xSupplier->getNumberFormatSettings()->getPropertyValue(u"NullDate"_ustr)
+                    >>= aDefault,
+                    "Chart has no date epoch");
+    return aDefault;
+}
+
+Sequence<Any> getWorkbookFormat(const Reference<XChartDocument>& xChart,
+                                const Reference<XDataSequence>& xSequence)
+{
+    Reference<util::XNumberFormatsSupplier> xSupplier(xChart, UNO_QUERY_THROW);
+    const auto xFormat
+        = xSupplier->getNumberFormats()->getByKey(xSequence->getNumberFormatKeyByIndex(-1));
+    OUString sCode;
+    lang::Locale aLocale;
+    xFormat->getPropertyValue(u"FormatString"_ustr) >>= sCode;
+    xFormat->getPropertyValue(u"Locale"_ustr) >>= aLocale;
+    return { Any(sCode), Any(aLocale.Language), Any(aLocale.Country), Any(aLocale.Variant) };
+}
+
+Sequence<Any> getWorkbookSnapshot(const Reference<XChartDocument>& xChart, bool* pHasLabelRanges)
+{
+    std::vector<Any> aSnapshot;
+    sal_Int64 nText = 0;
+    sal_Int64 nCells = 0;
+    auto append = [&](const Any& rValue)
+    {
+        ENSURE_OR_THROW(aSnapshot.size() < 2000000, "Chart snapshot exceeds the value limit");
+        if (rValue.has<OUString>())
+        {
+            nText += rValue.get<OUString>().getLength();
+            ENSURE_OR_THROW(nText <= 16 * 1024 * 1024, "Chart snapshot exceeds the text limit");
+        }
+        ENSURE_OR_THROW(!rValue.hasValue() || rValue.has<OUString>() || rValue.has<double>()
+                            || rValue.has<sal_Int32>() || rValue.has<bool>(),
+                        "Unsupported chart snapshot value type");
+        aSnapshot.push_back(rValue.has<double>() && std::isnan(rValue.get<double>()) ? Any()
+                                                                                     : rValue);
+    };
+    auto appendValues = [&](const Sequence<Any>& rValues)
+    {
+        nCells += rValues.getLength();
+        ENSURE_OR_THROW(nCells <= 1000000, "Chart snapshot exceeds the cell limit");
+        append(Any(rValues.getLength()));
+        for (const auto& rValue : rValues)
+            append(rValue);
+    };
+    const auto aSequences = getWorkbookSequences(xChart);
+    append(Any(static_cast<sal_Int32>(aSequences.size())));
+    for (const auto& xSequence : aSequences)
+    {
+        appendValues(xSequence->getData());
+        Reference<beans::XPropertySet> xProperties(xSequence, UNO_QUERY_THROW);
+        append(xProperties->getPropertyValue(u"Role"_ustr));
+        append(Any(getWorkbookFormula(xSequence)));
+        for (const auto& rValue : getWorkbookFormat(xChart, xSequence))
+            append(rValue);
+    }
+    const auto aDate = getWorkbookDate(xChart);
+    append(Any(sal_Int32(aDate.Year)));
+    append(Any(sal_Int32(aDate.Month)));
+    append(Any(sal_Int32(aDate.Day)));
+    Reference<XAnyDescriptionAccess> xDescriptions(xChart->getDataProvider(), UNO_QUERY_THROW);
+    for (const auto& rRows :
+         { xDescriptions->getAnyRowDescriptions(), xDescriptions->getAnyColumnDescriptions() })
+    {
+        append(Any(rRows.getLength()));
+        for (const auto& rRow : rRows)
+            appendValues(rRow);
+    }
+    if (pHasLabelRanges)
+        *pHasLabelRanges = false;
+    sal_Int32 nSeries = 0;
+    auto appendLabels = [&](const Reference<beans::XPropertySet>& xProperties, sal_Int32 nPoint)
+    {
+        Sequence<Reference<XDataPointCustomLabelField>> aFields;
+        xProperties->getPropertyValue(u"CustomLabelFields"_ustr) >>= aFields;
+        for (sal_Int32 nField = 0; nField < aFields.getLength(); ++nField)
+        {
+            const auto& xField = aFields[nField];
+            if (xField->getFieldType() != DataPointCustomLabelFieldType_CELLRANGE)
+                continue;
+            append(Any(u"cell-linked-label"_ustr));
+            append(Any(nSeries));
+            append(Any(nPoint));
+            append(Any(nField));
+            append(Any(xField->getDataLabelsRange()));
+            append(Any(xField->getCellRange()));
+            append(Any(xField->getString()));
+            if (pHasLabelRanges)
+                *pHasLabelRanges = true;
+        }
+    };
+    Reference<XCoordinateSystemContainer> xSystems(xChart->getFirstDiagram(), UNO_QUERY_THROW);
+    for (const auto& xSystem : xSystems->getCoordinateSystems())
+    {
+        Reference<XChartTypeContainer> xTypes(xSystem, UNO_QUERY_THROW);
+        for (const auto& xType : xTypes->getChartTypes())
+        {
+            Reference<XDataSeriesContainer> xSeriesContainer(xType, UNO_QUERY_THROW);
+            for (const auto& xSeries : xSeriesContainer->getDataSeries())
+            {
+                Reference<beans::XPropertySet> xProperties(xSeries, UNO_QUERY_THROW);
+                appendLabels(xProperties, -1);
+                Sequence<sal_Int32> aPoints;
+                xProperties->getPropertyValue(u"AttributedDataPoints"_ustr) >>= aPoints;
+                for (sal_Int32 nPoint : aPoints)
+                    appendLabels(xSeries->getDataPointByIndex(nPoint), nPoint);
+                ++nSeries;
+            }
+        }
+    }
+    return comphelper::containerToSequence(aSnapshot);
+}
 
 const sal_Unicode API_TOKEN_ARRAY_OPEN      = '{';
 const sal_Unicode API_TOKEN_ARRAY_CLOSE     = '}';

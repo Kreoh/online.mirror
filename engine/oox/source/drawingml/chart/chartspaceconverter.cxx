@@ -40,6 +40,11 @@
 #include <ooxresid.hxx>
 #include <strings.hrc>
 #include <drawingml/textbody.hxx>
+#include <comphelper/propertysequence.hxx>
+#include <oox/ppt/pptimport.hxx>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <comphelper/diagnose_ex.hxx>
+#include <comphelper/scopeguard.hxx>
 
 using namespace ::com::sun::star;
 using namespace ::cpo;
@@ -324,13 +329,6 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
         aProps.setProperty( PROP_DisableComplexChartTypes , true );
     }
 
-    if(!mrModel.maSheetPath.isEmpty() )
-    {
-        Reference< css::chart::XChartDocument > xChartDoc( getChartDocument(), UNO_QUERY );
-        PropertySet aProps( xChartDoc->getDiagram() );
-        aProps.setProperty( PROP_ExternalData , cpo::uno::Any(mrModel.maSheetPath) );
-    }
-
     if (mrModel.mbDate1904) {
         util::DateTime aNullDate(0,0,0,0,1,1,1904, false);
         Any aAny;
@@ -338,6 +336,50 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
         Reference< css::chart::XChartDocument > xChartDoc( getChartDocument(), UNO_QUERY );
         Reference< beans::XPropertySet > xDocPropSet(xChartDoc, UNO_QUERY );
         xDocPropSet->setPropertyValue(u"NullDate"_ustr, aAny);
+    }
+
+    if (!mrModel.maSheetPath.isEmpty())
+    {
+        Reference<css::chart::XChartDocument> xChartDoc(getChartDocument(), UNO_QUERY);
+        PropertySet aProps(xChartDoc->getDiagram());
+        aProps.setProperty(PROP_ExternalData, cpo::uno::Any(mrModel.maSheetPath));
+        // Keep bytes, rather than an input stream whose position changes between saves.
+        if (dynamic_cast<oox::ppt::PowerPointImport*>(&getFilter())
+            && mrModel.maSheetPath.endsWith(".xlsx"))
+        {
+            Reference<beans::XPropertySet> xDiagram(getChartDocument()->getFirstDiagram(),
+                                                    UNO_QUERY_THROW);
+            try
+            {
+                StreamDataSequence aWorkbook;
+                auto xInput = getFilter().openInputStream(mrModel.maSheetPath);
+                comphelper::ScopeGuard aClose(
+                    [&xInput]
+                    {
+                        if (xInput.is())
+                            xInput->closeInput();
+                    });
+                ENSURE_OR_THROW(xInput.is(), "Missing embedded chart workbook");
+                const sal_Int32 nBytes = xInput->readBytes(aWorkbook, 64 * 1024 * 1024 + 1);
+                ENSURE_OR_THROW(
+                    nBytes > 0 && nBytes <= 64 * 1024 * 1024,
+                    "Embedded chart workbook exceeds the byte import limit or is empty");
+                xDiagram->setPropertyValue(
+                    u"OOXMLWorkbook"_ustr,
+                    Any(comphelper::InitPropertySequence({
+                        { u"Bytes"_ustr, Any(aWorkbook) },
+                        { u"Data"_ustr, Any(getWorkbookSnapshot(getChartDocument())) },
+                    })));
+            }
+            catch (const cpo::uno::Exception&)
+            {
+                TOOLS_WARN_EXCEPTION("oox.chart", "Retaining embedded chart workbook failed");
+                // Keep importing the chart, but never report a later lossy save as successful.
+                xDiagram->setPropertyValue(
+                    u"OOXMLWorkbook"_ustr,
+                    Any(comphelper::InitPropertySequence({ { u"Unavailable"_ustr, Any(true) } })));
+            }
+        }
     }
 }
 
