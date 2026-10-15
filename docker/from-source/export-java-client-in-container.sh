@@ -8,10 +8,24 @@ engine="$source_root/engine"
 # against pinned Git objects without changing the configured source cache.
 bash /pipeline/docker/from-source/verify-java-client-source.sh \
     "$source_root" "$CLIENT_SOURCE_REVISION" /output/generator-source.patch
-[[ -f $engine/config_host.mk && -f $engine/config_host.h ]] || fail 'configured engine cache is incomplete'
-for setting in "SRCDIR=$engine" "BUILDDIR=$engine" "WORKDIR=$engine/workdir" "INSTDIR=$engine/instdir"; do
-    grep -Fxq "export $setting" "$engine/config_host.mk" || fail "configured cache root mismatch: $setting"
+# configure.ac declares individual headers, not a top-level config_host.h.
+# Read only the verified source; do not run configure or regenerate missing files.
+mapfile -t config_headers < <(sed -n 's/^AC_CONFIG_HEADERS(\[\([^]]*\.h\)\])$/\1/p' "$engine/configure.ac")
+[[ ${#config_headers[@]} -gt 0 ]] || fail 'no generated configuration headers declared by the selected source'
+config_files=(config_host.mk config_host_lang.mk config_host.mk.stamp config_host_lang.mk.stamp "${config_headers[@]}")
+missing=0
+for path in "${config_files[@]}" instdir/program/types.rdb instdir/program/types/offapi.rdb; do
+    if [[ ! -f $engine/$path ]]; then
+        printf 'Missing configured cache file: %s\n' "$engine/$path" >&2
+        missing=1
+    fi
 done
+[[ $missing == 0 ]] || fail 'configured engine cache is incomplete; restore the listed matching cache inputs, no full engine fallback is permitted'
+for setting in "SRCDIR=$engine" "BUILDDIR=$engine" "WORKDIR=$engine/workdir" "INSTDIR=$engine/instdir"; do
+    grep -Fxq "export $setting" "$engine/config_host.mk" || fail "configured cache root mismatch: expected $setting in $engine/config_host.mk"
+done
+# Module_codemaker.mk exposes Executable_javamaker only for native builds.
+grep -Fxq 'export CROSS_COMPILING=' "$engine/config_host.mk" || fail 'configured cache is not a native build: expected empty CROSS_COMPILING in config_host.mk'
 cmp /output/registries/types.rdb "$engine/instdir/program/types.rdb" || fail 'cached types.rdb differs from image'
 cmp /output/registries/offapi.rdb "$engine/instdir/program/types/offapi.rdb" || fail 'cached offapi.rdb differs from image'
 cd "$engine"
@@ -29,7 +43,7 @@ git -C "$source_root" show "$CLIENT_SOURCE_REVISION:docker/from-source/debrand.p
 "$tool" -O/output/generated /output/registries/types.rdb /output/registries/offapi.rdb
 [[ -f /output/generated/cpo/uno/XInterface.class && -f /output/generated/com/sun/star/frame/XDesktop.class ]] || fail 'generation omitted required API roots'
 cp "$tool" /output/generator/javamaker
-cp config_host.mk config_host.h /output/generator/
+cp --parents "${config_files[@]}" /output/generator/
 git -C "$source_root" archive "$CLIENT_SOURCE_REVISION" engine/codemaker engine/unoidl engine/sal engine/salhelper engine/registry engine/store engine/include engine/solenv engine/external engine/RepositoryExternal.mk engine/Makefile.gbuild > /output/generator/sources.tar
 runtime=$(mktemp -d)
 trap 'rm -rf "$runtime"' EXIT

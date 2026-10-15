@@ -13,7 +13,7 @@ revision=$(docker image inspect --format '{{ index .Config.Labels "org.openconta
 [[ $revision == "$CLIENT_SOURCE_REVISION" ]] || fail 'image revision differs from target source'
 cache_root="${ONLINE_OFFICE_SOURCE_CACHE_ROOT:-$(dirname "$PWD")/.online-office-source-cache}"
 cache="$cache_root/main"
-[[ -f $cache/build/builddir/online/engine/config_host.mk ]] || fail 'matching configured cache is missing; restore it on Jenkins, no full engine fallback is permitted'
+[[ -f $cache/build/builddir/online/engine/config_host.mk ]] || fail "missing configured cache file: $cache/build/builddir/online/engine/config_host.mk; restore the matching cache on Jenkins, no full engine fallback is permitted"
 output="$PWD/uno-client-export-$BUILD_NUMBER"
 mkdir "$output"
 mkdir "$output/registries"
