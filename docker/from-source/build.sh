@@ -138,11 +138,291 @@ cp -a online/engine/instdir "$INSTDIR"/opt/online-office
 ##### coolwsd & cool #####
 
 # build
-( cd online && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-tests --with-lokit-path="$BUILDDIR"/online/engine/include --with-lo-builddir="$BUILDDIR"/online/engine --with-lo-path=/opt/online-office --without-app-branding --with-app-name='Online Office' --with-app-package-name=org.onlineoffice.app --without-vendor --with-info-url=about:blank $ONLINE_EXTRA_BUILD_OPTIONS) || exit 1
+configure_release()
+{
+( cd online && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-tests --with-lokit-path="$BUILDDIR"/online/engine/include --with-lo-builddir="$BUILDDIR"/online/engine --with-lo-path=/opt/online-office --without-app-branding --with-app-name='Online Office' --with-app-package-name=org.onlineoffice.app --without-vendor --with-info-url=about:blank $ONLINE_EXTRA_BUILD_OPTIONS)
+}
+configure_release || exit 1
 ( cd online && make -j $(nproc)) || exit 1
 
 # copy stuff
 ( cd online && DESTDIR="$INSTDIR" make install ) || exit 1
+
+# Exercise the existing native suite only in the existing Jenkins builder.
+if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
+  (
+    set -e -o pipefail
+    report_dir="${ONLINE_OFFICE_AGENT_CONTROL_REPORT_DIR:?Missing Jenkins report directory}"
+    mkdir -p "$report_dir" || exit 1
+    test -z "${SUPPRESS_TESTS:-}" || exit 1
+    hash_installation()
+    {
+      find "$INSTDIR" -type f -print0 | sort -z | xargs -0 sha256sum
+    }
+    hash_installation > "$report_dir/release-before.sha256" || exit 1
+    restore_release()
+    {
+      status=$?
+      trap - EXIT
+      configure_release > "$report_dir/release-restore.log" 2>&1 || status=1
+      hash_installation > "$report_dir/release-after.sha256" || status=1
+      cmp "$report_dir/release-before.sha256" "$report_dir/release-after.sha256" || status=1
+      printf '%s\n' "$status" > "$report_dir/validation-exit.txt"
+      exit "$status"
+    }
+    trap restore_release EXIT
+    (
+      cd online || exit 1
+      ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+        --enable-tests --enable-debug \
+        --with-lokit-path="$BUILDDIR/online/engine/include" \
+        --with-lo-builddir="$BUILDDIR/online/engine" \
+        --with-lo-path="$BUILDDIR/online/engine/instdir" \
+        --without-app-branding --with-app-name='Online Office' \
+        --with-app-package-name=org.onlineoffice.app --without-vendor \
+        --with-info-url=about:blank $ONLINE_EXTRA_BUILD_OPTIONS || exit 1
+      make -j "$(nproc)" coolwsd coolmount coolforkit-caps coolforkit-ns || exit 1
+      make systemplate "$BUILDDIR/online/jails" "$BUILDDIR/online/cache" presets-dir || exit 1
+      make -C test unit-agent-control.la || exit 1
+
+      if [ "$ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION" = true ]; then
+        test "$BUILDDIR" = /workspace-cache/build/builddir || exit 1
+        queue_stage="$(mktemp -d "$report_dir/.queue-root.XXXXXX")" || exit 1
+        QUEUE_STAGE="$queue_stage" QUEUE_REPORT="$report_dir" QUEUE_BUILD="$BUILDDIR" bash -euo pipefail <<'QUEUE_PACKAGE'
+          queue_stage="$QUEUE_STAGE"
+          report_dir="$QUEUE_REPORT"
+          BUILDDIR="$QUEUE_BUILD"
+          trap 'rm -rf -- "$queue_stage"' EXIT
+          # Preserve configured absolute paths, without copying a source checkout.
+          test -d "$PWD/test/data/presets"
+          for resource in coolwsd coolmount coolforkit-caps coolforkit-ns coolwsd.xml \
+              .libs test/run_unit.sh test/.libs/unit-agent-control.so test/data \
+              browser/dist etc systemplate engine/instdir; do
+            test -e "$PWD/$resource"
+            cp -a --parents "$PWD/$resource" "$queue_stage/"
+          done
+          # Include transitive binary/unit dependencies at their recorded absolute paths.
+          : > "$report_dir/debug-dependencies.txt"
+          : > "$report_dir/debug-dependencies.sha256"
+          while IFS= read -r -d '' executable; do
+            if file -b "$executable" | grep -q ELF; then
+              runtime_executable="${executable#"$queue_stage"}"
+              dependencies="$(ldd "$runtime_executable" 2>&1)" || {
+                case "$dependencies" in *"not a dynamic executable"*|*"statically linked"*) continue;; *) exit 1;; esac
+              }
+              ! printf '%s\n' "$dependencies" | grep -q 'not found'
+              printf '%s\n%s\n' "$runtime_executable" "$dependencies" >> "$report_dir/debug-dependencies.txt"
+              while IFS= read -r dependency; do
+                test -f "$dependency"
+                sha256sum "$dependency" >> "$report_dir/debug-dependencies.sha256"
+                cp -L --parents "$dependency" "$queue_stage/"
+              done < <(printf '%s\n' "$dependencies" | awk '$2 == "=>" && substr($3,1,1)=="/" {print $3} substr($1,1,1)=="/" {print $1}')
+            fi
+          done < <(find "$queue_stage" -type f -print0)
+          test "$(du -sm "$queue_stage" | cut -f1)" -le 20480
+          printf '%s\n' "$ONLINE_OFFICE_SOURCE_REVISION" > "$report_dir/debug-source.revision"
+          printf '%s\n' "$(id -u)" > "$report_dir/debug.uid"
+          printf '%s\n' "$(id -g)" > "$report_dir/debug.gid"
+          printf '%s\n' "$BUILDDIR/online" > "$report_dir/debug-root.path"
+          (cd "$queue_stage" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$report_dir/debug-files.sha256"
+          (ulimit -f 20971520; tar --xattrs -czf "$report_dir/debug-runtime.tar.gz" -C "$queue_stage" .)
+          (cd "$report_dir" && sha256sum debug-runtime.tar.gz > debug-runtime.sha256)
+QUEUE_PACKAGE
+        test "$?" = 0 || exit 1
+        cat > "$report_dir/run-queue-unit.sh" <<'QUEUE_UNIT'
+#!/usr/bin/env bash
+set -euo pipefail
+test "$(id -u)" != 0
+test "$(id -u)" = "$(cat /queue-validation/debug.uid)"
+test "$(id -g)" = "$(cat /queue-validation/debug.gid)"
+test "$(cat /queue-validation/debug-root.path)" = /workspace-cache/build/builddir/online
+test -d /queue-state/home
+test -w /workspace-cache/build/builddir/online/jails
+test -w /workspace-cache/build/builddir/online/cache
+sha256sum -c /queue-validation/debug-dependencies.sha256 > /queue-state/dependency-verification.log
+cd /workspace-cache/build/builddir/online/test
+set +e
+./run_unit.sh --test-name unit-agent-control.la --port 9980 \
+  --log-file /queue-state/unit-agent-control.log \
+  --trs-file /queue-state/unit-agent-control.trs --fail-fast
+result=$?
+set -e
+printf '%s\n' "$result" > /queue-state/unit.exit
+test "$result" = 0
+grep -q '^:test-result: PASS' /queue-state/unit-agent-control.trs
+! grep -Eq '^:test-result: (FAIL|SKIP|ERROR)' /queue-state/unit-agent-control.trs
+QUEUE_UNIT
+        cat > "$report_dir/run-queue-validation.sh" <<'QUEUE_LAUNCH'
+#!/usr/bin/env bash
+# Run from the existing config workspace with the same explicitly supplied Compose inputs.
+# Usage: run-queue-validation.sh /absolute/artifacts /absolute/fresh-state -- -f base.yaml -f ...
+set -euo pipefail
+artifacts="$(realpath "$1")"
+state="$2"
+shift 2
+test "$1" = --
+shift
+test "$#" -gt 0
+compose_files=0
+probe_input=0
+selenium_input=0
+previous=""
+for argument in "$@"; do
+  if [ "$previous" = -f ]; then
+    compose_files=$((compose_files + 1))
+    case "$argument" in
+      */compose.new-image-probe.yaml) probe_input=1;;
+      */compose.selenium-shm.yaml) selenium_input=1;;
+    esac
+  fi
+  previous="$argument"
+done
+test "$compose_files" = 3
+test "$probe_input" = 1
+test "$selenium_input" = 1
+command -v node >/dev/null
+command -v timeout >/dev/null
+test ! -e "$state"
+mkdir -m 700 "$state"
+state="$(realpath "$state")"
+test "$(id -u)" != 0
+test "$(id -u)" = "$(cat "$artifacts/debug.uid")"
+test "$(id -g)" = "$(cat "$artifacts/debug.gid")"
+(cd "$artifacts" && sha256sum -c builder-image.sha256 && sha256sum -c debug-runtime.sha256)
+builder="$(cat "$artifacts/builder-image.id")"
+[[ "$builder" =~ ^sha256:[0-9a-f]{64}$ ]]
+docker image load -i "$artifacts/builder-image.tar.gz" > "$state/image-load.log"
+test "$(docker image inspect --format '{{.Id}}' "$builder")" = "$builder"
+mkdir "$state/root" "$state/jails" "$state/cache" "$state/home"
+tar --no-same-owner --xattrs -xzf "$artifacts/debug-runtime.tar.gz" -C "$state/root"
+(cd "$state/root" && sha256sum -c "$artifacts/debug-files.sha256" > "$state/bundle-verification.log")
+export OFFICE_NATIVE_BUILDER_ID="$builder" OFFICE_NATIVE_UID="$(id -u)" OFFICE_NATIVE_GID="$(id -g)"
+export OFFICE_NATIVE_ROOT="$state/root" OFFICE_NATIVE_STATE="$state" OFFICE_NATIVE_ARTIFACTS="$artifacts"
+export OFFICE_NATIVE_RUN_ID="$(cat /proc/sys/kernel/random/uuid)"
+# Process the resolved model in memory; write only the bounded override, never other service secrets.
+docker compose "$@" --profile office-uno-experimental config --format json | node -e '
+let data=""; process.stdin.on("data", x=>data+=x); process.stdin.on("end",()=>{
+ const model=JSON.parse(data), override=model["x-native-retirement"];
+ if(!override || Object.keys(override.services).sort().join(",")!=="code-uno-experimental,office-uno-go-no-go") throw Error("Missing bounded native override");
+ override.services["code-uno-experimental"].labels={"io.kreoh.native-queue-run":process.env.OFFICE_NATIVE_RUN_ID};
+ const font=model.services["code-uno-experimental"].volumes?.find(v=>v.target==="/opt/online-office/share/registry/data/impress-font-control.xcu");
+ if(font) {
+   if(font.type!=="bind" || !font.read_only) throw Error("Unsafe font control mount");
+   override.services["code-uno-experimental"].volumes.push({...font,target:"/workspace-cache/build/builddir/online/engine/instdir/share/registry/data/impress-font-control.xcu"});
+ }
+ override["x-native-font-control"]=font?"retained":"absent-in-active-configuration";
+ process.stdout.write(JSON.stringify(override));
+});' > "$state/native-retirement.override.json"
+override="$state/native-retirement.override.json"
+docker compose "$@" -f "$override" --profile office-uno-experimental config --quiet
+docker compose "$@" -f "$override" --profile office-uno-experimental config --format json | node -e '
+let data=""; process.stdin.on("data",x=>data+=x); process.stdin.on("end",()=>{
+ const m=JSON.parse(data), s=m.services["code-uno-experimental"];
+ if(s.image!==process.env.OFFICE_NATIVE_BUILDER_ID || s.user!==process.env.OFFICE_NATIVE_UID+":"+process.env.OFFICE_NATIVE_GID) throw Error("Wrong native image/user");
+ if(JSON.stringify(s.entrypoint)!==JSON.stringify(["/bin/bash","/queue-validation/run-queue-unit.sh"])) throw Error("Wrong runner");
+ if(s.privileged || s.cap_add?.length || s.security_opt?.some(x=>x.includes("unconfined"))) throw Error("Sandbox bypass");
+ const aliases=Object.entries(m.services).filter(([name,v])=>name==="code-uno-experimental" || v.networks?.["office-uno-internal"]?.aliases?.includes("code"));
+ if(aliases.length!==1) throw Error("Multiple isolated code providers");
+});'
+# Refuse to replace any pre-existing engine or runner, including stopped containers.
+existing="$(docker compose "$@" --profile office-uno-experimental ps --all -q code-uno-experimental office-uno-go-no-go)"
+test -z "$existing"
+unit_id=""
+creation_attempted=0
+cleanup_queue_validation()
+{
+  local status="$1" cleanup_failed=0 owned_id="" discovery_status=0 attempt=0
+  trap - EXIT
+  trap '' INT TERM
+  set +e
+  printf '%s\n' "$status" > "$state/launcher.exit"
+  # Recover ownership if creation failed or was interrupted before returning its ID.
+  if [ -z "$unit_id" ] && [ "$creation_attempted" = 1 ]; then
+    # Docker may finish a submitted create after the client times out. Reconcile boundedly.
+    for attempt in 1 2 3 4 5 6; do
+      owned_id="$(timeout --kill-after=5s 10s docker ps --all --quiet --filter "label=io.kreoh.native-queue-run=$OFFICE_NATIVE_RUN_ID")"
+      discovery_status=$?
+      printf '%s %s\n' "$attempt" "$discovery_status" >> "$state/ownership-discovery.status"
+      if [ "$discovery_status" != 0 ]; then
+        cleanup_failed=1
+      elif [[ "$owned_id" =~ ^[0-9a-f]{12,64}$ ]]; then
+        unit_id="$owned_id"
+        break
+      elif [ -n "$owned_id" ]; then
+        cleanup_failed=1
+        break
+      fi
+      if [ "$attempt" != 6 ]; then sleep 2; fi
+    done
+    if [ -z "$unit_id" ]; then
+      cleanup_failed=1
+      printf '%s\n' "Creation ownership unresolved; no unowned container removed." > "$state/ownership-unresolved.txt"
+    fi
+  fi
+  if [ -n "$unit_id" ]; then
+    owned_id="$(timeout --kill-after=5s 10s docker inspect --format '{{ index .Config.Labels "io.kreoh.native-queue-run" }}' "$unit_id")"
+    if [ "$owned_id" = "$OFFICE_NATIVE_RUN_ID" ]; then
+      timeout --kill-after=5s 10s docker inspect --format '{{json .State}}' "$unit_id" > "$state/container-state-before-cleanup.json" || cleanup_failed=1
+      timeout --kill-after=5s 15s docker stop --time 5 "$unit_id" > "$state/container-stop.log" 2>&1 || cleanup_failed=1
+      timeout --kill-after=5s 10s docker logs "$unit_id" > "$state/container.log" 2>&1 || cleanup_failed=1
+      timeout --kill-after=5s 10s docker inspect --format '{{.State.ExitCode}}' "$unit_id" > "$state/container.exit" || cleanup_failed=1
+      timeout --kill-after=5s 10s docker rm "$unit_id" > "$state/container-remove.log" 2>&1 || cleanup_failed=1
+    else
+      cleanup_failed=1
+    fi
+  fi
+  printf '%s\n' "$cleanup_failed" > "$state/cleanup.exit"
+  # Preserve the original failure or signal; failed cleanup cannot turn success into PASS.
+  if [ "$status" = 0 ] && [ "$cleanup_failed" != 0 ]; then status=1; fi
+  exit "$status"
+}
+trap 'cleanup_queue_validation "$?"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# Create without replacement or starting dependencies. Docker's service container name
+# provides the atomic collision boundary if another invocation wins after the precheck.
+creation_attempted=1
+timeout --kill-after=5s 60s docker compose "$@" -f "$override" --profile office-uno-experimental up --no-start --no-recreate --no-deps --no-build code-uno-experimental
+unit_id="$(timeout --kill-after=5s 10s docker ps --all --quiet --filter "label=io.kreoh.native-queue-run=$OFFICE_NATIVE_RUN_ID")"
+[[ "$unit_id" =~ ^[0-9a-f]{12,64}$ ]]
+test "$(timeout --kill-after=5s 10s docker inspect --format '{{ index .Config.Labels "io.kreoh.native-queue-run" }}' "$unit_id")" = "$OFFICE_NATIVE_RUN_ID"
+# Start only the exact verified container, never a service-level target.
+timeout --kill-after=5s 30s docker start "$unit_id" > "$state/container-start.log"
+deadline=$((SECONDS + 180))
+until [ "$(timeout --kill-after=5s 10s docker inspect --format '{{.State.Health.Status}}' "$unit_id")" = healthy ]; do
+  test "$SECONDS" -lt "$deadline"
+  test "$(timeout --kill-after=5s 10s docker inspect --format '{{.State.Running}}' "$unit_id")" = true
+  sleep 1
+done
+set +e
+timeout --signal=TERM --kill-after=10s 420s docker compose "$@" -f "$override" --profile office-uno-experimental run --rm --no-deps --use-aliases office-uno-go-no-go > "$state/java.log" 2>&1
+java_result=$?
+set -e
+printf '%s\n' "$java_result" > "$state/java.exit"
+# Unit mode has its own bounded timeout. Capture both outcomes before teardown.
+timeout --kill-after=5s 330s docker wait "$unit_id" > "$state/container.exit"
+test "$java_result" = 0
+test "$(cat "$state/container.exit")" = 0
+test "$(cat "$state/unit.exit")" = 0
+grep -q '^:test-result: PASS' "$state/unit-agent-control.trs"
+# EXIT collects logs and removes only the container bearing this invocation's ownership label.
+QUEUE_LAUNCH
+        chmod 755 "$report_dir/run-queue-unit.sh" "$report_dir/run-queue-validation.sh"
+      fi
+      : > "$report_dir/unit-agent-control.trs" || exit 1
+      set +e
+      (cd test && ./run_unit.sh --test-name unit-agent-control.la \
+        --log-file "$report_dir/unit-agent-control.log" \
+        --trs-file "$report_dir/unit-agent-control.trs" --fail-fast)
+      runner_status=$?
+      set -e
+      printf '%s\n' "$runner_status" > "$report_dir/runner-exit.txt"
+      test "$runner_status" -eq 0 || exit 1
+      grep -q '^:test-result: PASS' "$report_dir/unit-agent-control.trs" || exit 1
+      ! grep -Eq '^:test-result: (FAIL|SKIP|ERROR)' "$report_dir/unit-agent-control.trs"
+    ) > "$report_dir/build-and-test.log" 2>&1
+  ) || exit 1
+fi
 
 python3 "$SRCDIR/debrand.py" rootfs "$INSTDIR" "$BUILDDIR/online" || exit 1
 

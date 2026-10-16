@@ -695,6 +695,10 @@ public:
     virtual bool handleInput(const std::shared_ptr<Message>& message);
 
     /// Forward a message from client session to its respective child session.
+    bool handleAgentControl(const std::shared_ptr<ClientSession>& session, const std::string& message);
+    bool handleAgentRetirementKit(const std::string& message);
+    void fenceAgentRetirement(const std::string& renderId);
+
     bool forwardToChild(const std::shared_ptr<ClientSession>& session, const std::string& message,
                         bool binary = false);
 
@@ -2143,8 +2147,35 @@ private:
     /// Updated right before uploading.
     StorageBase::Attributes _lastStorageAttrs;
     /// The sole operation-marked agent save currently awaiting a response or upload.
+    struct AgentRetirementRecord
+    {
+        enum class Phase { Registering, Active, Retiring, Retired };
+        explicit AgentRetirementRecord(const Authorization& auth) : authority(auth) {}
+        const Authorization authority;
+        std::string epoch;
+        std::string requestId;
+        std::string renderId;
+        std::string result;
+        int viewId = -1;
+        Phase phase = Phase::Registering;
+        std::weak_ptr<ClientSession> transport;
+        std::weak_ptr<ClientSession> reply;
+    };
+    std::vector<std::unique_ptr<AgentRetirementRecord>> _agentRetirements;
+    bool _retirementNegotiated = false;
+    bool _awaitingNextAgentGreeting = false;
+    bool _legacyUrpDispatched = false;
+
     std::optional<AgentSaveAttempt> _agentSaveAttempt;
     /// The session and request currently awaiting Core's unnumbered save response.
+    struct NativeSaveBarrier
+    {
+        std::shared_ptr<ClientSession> session;
+        std::size_t requestId;
+    };
+    // These barriers survive authority loss, timeout and response rejection.
+    std::vector<NativeSaveBarrier> _nativeSaveBarriers;
+
     std::weak_ptr<ClientSession> _saveResponseSession;
     std::size_t _saveResponseRequestId = 0;
     /// Exact local version from a failed agent upload, excluded from generic retry.

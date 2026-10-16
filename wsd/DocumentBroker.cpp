@@ -15,6 +15,7 @@
  */
 
 #include <config.h>
+#include <charconv>
 
 #include "DocumentBroker.hpp"
 
@@ -100,6 +101,251 @@ using namespace std::literals;
 using namespace COOLProtocol;
 
 using Poco::JSON::Object;
+
+
+namespace
+{
+bool retirementFields(const std::string& message, const std::string& command,
+                      const std::vector<std::string>& keys, std::vector<std::string>& values)
+{
+    const auto tokens = StringVector::tokenize(message);
+    if (tokens.size() != keys.size() + 1 || tokens[0] != command)
+        return false;
+    std::string canonical = command;
+    for (std::size_t i = 0; i < keys.size(); ++i)
+    {
+        const std::string token(tokens[i + 1]);
+        const std::string prefix = keys[i] + '=';
+        if (!token.starts_with(prefix))
+            return false;
+        const std::string value = token.substr(prefix.size());
+        if (value.empty() || value.size() > 128 ||
+            value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != std::string::npos)
+            return false;
+        values.push_back(value);
+        canonical += ' ' + token;
+    }
+    return canonical == message;
+}
+
+bool retirementViewId(const std::string& text, int& view)
+{
+    if (text.empty() || text.size() > 10 || text.find_first_not_of("0123456789") != std::string::npos)
+        return false;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), view);
+    return result.ec == std::errc() && result.ptr == text.data() + text.size() && view >= 0 &&
+           std::to_string(view) == text;
+}
+}
+
+bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& session,
+                                       const std::string& message)
+{
+    ASSERT_CORRECT_THREAD();
+    const auto reject = [&] {
+        session->sendTextFrame("error: cmd=agentcontrol kind=invalidretirement");
+        return false;
+    };
+    if (!session->isWebsocketUrpEnabled() || session->isAgentRenderView() ||
+        !session->isWritable() || session->getDocumentBroker().get() != this)
+        return reject();
+#if !defined(__linux__) || DOCS_SHARE_PROCESS
+    session->sendTextFrame("error: cmd=agentcontrol kind=unsupported");
+    return false;
+#else
+    if (Util::isKitInProcess() || !_childProcess)
+        return reject();
+    if (message == "agentcapabilities")
+    {
+        session->sendTextFrame("agentcapabilities:retirement=1");
+        return true;
+    }
+    std::vector<std::string> fields;
+    if (retirementFields(message, "agentregister", {"epoch", "viewid"}, fields))
+    {
+        int view = -1;
+        if (!retirementViewId(fields[1], view) || !_nativeSaveBarriers.empty() || _legacyUrpDispatched ||
+            _agentRetirements.size() >= 64 || _agentSaveAttempt ||
+            _saveManager.isSaving() || isAsyncUploading())
+            return reject();
+        for (const auto& old : _agentRetirements)
+        {
+            // No epoch reuse or token migration, including after a lost reply.
+            if (old->epoch == fields[0] || old->authority.matches(session->getAuthorization()))
+                return reject();
+        }
+        if (!_agentRetirements.empty() &&
+            _agentRetirements.back()->phase != AgentRetirementRecord::Phase::Retired)
+            return reject();
+        std::shared_ptr<ClientSession> render;
+        std::size_t matching = 0;
+        for (const auto& entry : _sessions)
+        {
+            const auto& candidate = entry.second;
+            if (candidate->isAgentRenderView() && candidate->isLive() && candidate->isWritable() &&
+                candidate->getAuthorization().matches(session->getAuthorization()))
+            {
+                render = candidate;
+                ++matching;
+            }
+        }
+        if (matching != 1 || render->getKitViewId() != view ||
+            (session->hasRequestedAgentViewId() && session->getRequestedAgentViewId() != view))
+            return reject();
+        const auto transport = _urpTransport.lock();
+        if (transport && transport != session)
+            return reject();
+
+        auto record = std::make_unique<AgentRetirementRecord>(session->getAuthorization());
+        record->epoch = fields[0];
+        record->viewId = view;
+        record->renderId = render->getId();
+        record->transport = session;
+        _agentRetirements.push_back(std::move(record));
+        _retirementNegotiated = true;
+        // The retained record exists before the trusted Kit reservation request.
+        _childProcess->sendTextFrame("child-" + render->getId() +
+                                    " agentregister epoch=" + fields[0]);
+        return true;
+    }
+    fields.clear();
+    if (!retirementFields(message, "agentretire",
+                          {"epoch", "requestid", "viewid", "renderid"}, fields))
+        return reject();
+    int view = -1;
+    if (!retirementViewId(fields[2], view))
+        return reject();
+    for (const auto& item : _agentRetirements)
+    {
+        auto& record = *item;
+        if (record.epoch != fields[0])
+            continue;
+        if (!record.authority.matches(session->getAuthorization()) || record.viewId != view ||
+            record.renderId != fields[3] ||
+            (!record.requestId.empty() && record.requestId != fields[1]))
+            return reject();
+        if (record.phase == AgentRetirementRecord::Phase::Registering ||
+            (record.phase != AgentRetirementRecord::Phase::Retired &&
+             (!_nativeSaveBarriers.empty() || _agentSaveAttempt || _saveManager.isSaving() || isAsyncUploading())))
+            return reject();
+        record.requestId = fields[1];
+        record.reply = session;
+        if (record.phase == AgentRetirementRecord::Phase::Retired)
+        {
+            if (record.result.empty())
+                record.result = "agentretired: epoch=" + record.epoch + " requestid=" +
+                                record.requestId + " viewid=" + std::to_string(record.viewId) +
+                                " renderid=" + record.renderId;
+            session->sendTextFrame(record.result);
+            return true;
+        }
+        fenceAgentRetirement(record.renderId);
+        return true;
+    }
+    return reject();
+#endif
+}
+
+void DocumentBroker::fenceAgentRetirement(const std::string& renderId)
+{
+    if (_agentRetirements.empty())
+        return;
+    auto& record = *_agentRetirements.back();
+    if (record.renderId != renderId || record.phase == AgentRetirementRecord::Phase::Retired)
+        return;
+    record.phase = AgentRetirementRecord::Phase::Retiring;
+    if (const auto transport = _urpTransport.lock())
+        transport->bindAgentViewId(-1);
+    _urpTransport.reset();
+    _pendingUrpResponse.clear();
+    _pendingUrpResponseTime.reset();
+    // This broker is the exclusive input producer. Its fence precedes Kit's drain.
+    if (_childProcess)
+    {
+        _childProcess->fenceUrpInput();
+#if ENABLE_DEBUG
+        if (UnitWSD::isUnitTesting())
+            _unitWsd->agentRetirementFence(this, record.epoch);
+#endif
+        if (_nativeSaveBarriers.empty() && !_agentSaveAttempt && !_saveManager.isSaving() && !isAsyncUploading())
+        {
+#if ENABLE_DEBUG
+            if (UnitWSD::isUnitTesting())
+                _unitWsd->agentRetirementEvent(this, "native-stop-dispatched");
+#endif
+            _childProcess->sendTextFrame("child-" + record.renderId +
+                                        " agentretire epoch=" + record.epoch);
+        }
+    }
+}
+
+bool DocumentBroker::handleAgentRetirementKit(const std::string& message)
+{
+    ASSERT_CORRECT_THREAD();
+    if (_agentRetirements.empty())
+        return false;
+    auto& record = *_agentRetirements.back();
+    std::vector<std::string> fields;
+    const auto matches = [&](const std::string& command) {
+        fields.clear();
+        return retirementFields(message, command, {"epoch", "renderid"}, fields) &&
+               fields[0] == record.epoch && fields[1] == record.renderId;
+    };
+    if (matches("agentregisteredkit:"))
+    {
+        if (record.phase != AgentRetirementRecord::Phase::Registering)
+            return false;
+        const auto session = record.transport.lock();
+        if (!session || !session->isWritable() ||
+            !record.authority.matches(session->getAuthorization()))
+        {
+            fenceAgentRetirement(record.renderId);
+            return false;
+        }
+        record.phase = AgentRetirementRecord::Phase::Active;
+        _awaitingNextAgentGreeting = false;
+        session->bindAgentViewId(record.viewId);
+        _urpTransport = session;
+        _urpTransportEverAttached = true;
+        _childProcess->resumeUrpInput();
+#if ENABLE_DEBUG
+        if (UnitWSD::isUnitTesting())
+            _unitWsd->agentRetirementRegistered(this, record.epoch, record.viewId, record.renderId);
+#endif
+        session->sendTextFrame("agentregistered: epoch=" + record.epoch +
+                              " viewid=" + std::to_string(record.viewId) +
+                              " renderid=" + record.renderId);
+        if (!_pendingUrpResponse.empty())
+        {
+            const auto greeting = std::move(_pendingUrpResponse);
+            _pendingUrpResponse.clear();
+            _pendingUrpResponseTime.reset();
+            onUrpMessage(greeting.data(), greeting.size());
+        }
+        UNITWSD_CALL_INSTANCE(_unitWsd, onDocBrokerAddSession(_docKey, session));
+        return true;
+    }
+    if (matches("agentretirefencekit:"))
+    {
+        fenceAgentRetirement(record.renderId);
+        return true;
+    }
+    if (!matches("agentretiredkit:") || record.phase != AgentRetirementRecord::Phase::Retiring ||
+        !_childProcess || !_childProcess->drainRetiredUrpOutput())
+        return false;
+    record.phase = AgentRetirementRecord::Phase::Retired;
+    if (const auto found = _sessions.find(record.renderId); found != _sessions.end())
+        disconnectSessionInternal(found->second);
+    if (!record.requestId.empty())
+    {
+        record.result = "agentretired: epoch=" + record.epoch + " requestid=" +
+                        record.requestId + " viewid=" + std::to_string(record.viewId) +
+                        " renderid=" + record.renderId;
+        if (const auto reply = record.reply.lock())
+            reply->sendTextFrame(record.result);
+    }
+    return true;
+}
 
 void UrpHandler::handleIncomingMessage(SocketDisposition&)
 {
@@ -503,6 +749,9 @@ void DocumentBroker::pollThread()
     // Main polling loop goodness.
     while (!_stop && _poll->continuePolling() && !SigUtil::getTerminationFlag())
     {
+        if (!_agentRetirements.empty() &&
+            _agentRetirements.back()->phase == AgentRetirementRecord::Phase::Retiring)
+            fenceAgentRetirement(_agentRetirements.back()->renderId);
         // Poll more frequently while unloading to cleanup sooner.
         auto pollTimeout =
             isUnloading() ? SocketPoll::DefaultPollTimeoutMicroS / 16 : defaultPollTimeout;
@@ -3423,7 +3672,56 @@ void DocumentBroker::handleSaveResponse(const std::shared_ptr<ClientSession>& se
 {
     ASSERT_CORRECT_THREAD();
 
+    // Validate before consuming the response slot. An incomplete native message cannot
+    // prove serialisation finished and must not release a retained retirement barrier.
+    SaveResult::Result saveResult;
+    try
+    {
+        if (!json || !json->has("commandName") ||
+            json->getValue<std::string>("commandName") != ".uno:Save" ||
+            !json->has("success"))
+            return;
+        const auto success = json->get("success");
+        if ((!success.isBoolean() && !success.isString()) ||
+            (success.toString() != "true" && success.toString() != "false"))
+            return;
+        if (json->has("result"))
+        {
+            const auto result = json->getObject("result");
+            if (!result || !result->has("type") || !result->get("type").isString() ||
+                result->getValue<std::string>("type").empty())
+                return;
+            // Core also emits a typed void result without a value.
+            if (result->getValue<std::string>("type") == "string" &&
+                (!result->has("value") || !result->get("value").isString()))
+                return;
+        }
+        saveResult = SaveResult::parse(json);
+    }
+    catch (const std::exception&)
+    {
+        return;
+    }
+
     const auto responseCorrelation = session->consumeSaveResponse();
+    if (responseCorrelation)
+    {
+        // A rejected application result still confirms that native serialisation ended.
+        // Clear only the exact retained native request, never a later request or timeout.
+        const auto barrier = std::find_if(_nativeSaveBarriers.begin(), _nativeSaveBarriers.end(),
+            [&](const NativeSaveBarrier& candidate) {
+                return candidate.session == session &&
+                       candidate.requestId == responseCorrelation->requestId;
+            });
+        if (barrier != _nativeSaveBarriers.end())
+        {
+            _nativeSaveBarriers.erase(barrier);
+#if ENABLE_DEBUG
+            if (UnitWSD::isUnitTesting())
+                _unitWsd->agentRetirementEvent(this, "save-barrier-cleared");
+#endif
+        }
+    }
     const auto expectedResponseSession = _saveResponseSession.lock();
     const bool matchingTrackedResponse =
         responseCorrelation && expectedResponseSession == session &&
@@ -3471,7 +3769,6 @@ void DocumentBroker::handleSaveResponse(const std::shared_ptr<ClientSession>& se
             authoritySession->isAgentSaveEligible();
     }
 
-    const SaveResult::Result saveResult = SaveResult::parse(json);
     const bool wroteNewVersion = saveResult.outcome == SaveResult::Outcome::Saved;
     const bool upToDate = saveResult.outcome != SaveResult::Outcome::Failed;
 
@@ -5026,7 +5323,8 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
     LOG_ASSERT_MSG(session, "Got null ClientSession");
     const std::string sessionId = session->getId();
 
-    if (_agentSaveAttempt || (_uploadRequest && !_uploadRequest->isComplete()) ||
+    if ((_retirementNegotiated && !_nativeSaveBarriers.empty()) || _agentSaveAttempt ||
+        (_uploadRequest && !_uploadRequest->isComplete()) ||
         isAsyncUploading())
     {
         LOG_WRN("Rejecting save while another save or upload owns docKey [" << _docKey << ']');
@@ -5088,12 +5386,23 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
 
     // re-written to .uno:Save in the Kit.
     const auto command = std::string("save background=") + (background ? "true " : " ") + saveArgs;
+    // Reserve before dispatch; allocation failure cannot leave an untracked native save.
+    _nativeSaveBarriers.reserve(_nativeSaveBarriers.size() + 1);
+#if ENABLE_DEBUG
+    if (UnitWSD::isUnitTesting() && _unitWsd->failAgentSaveDispatch())
+        return false;
+#endif
     if (forwardToChild(session, command))
     {
         LOG_DBG("Saving [" << _docKey << "] using [" << sessionId << "]: " << command);
 
         _saveManager.markLastSaveRequestTime();
         const std::size_t saveRequestId = session->registerSaveRequest();
+        _nativeSaveBarriers.push_back({session, saveRequestId});
+#if ENABLE_DEBUG
+        if (UnitWSD::isUnitTesting())
+            _unitWsd->agentRetirementEvent(this, "save-barrier-created");
+#endif
         _saveResponseSession = session;
         _saveResponseRequestId = saveRequestId;
         if (uploadSession)
@@ -5231,6 +5540,15 @@ std::size_t DocumentBroker::addSession(const std::shared_ptr<ClientSession>& ses
                         "An agent render view is already attached to this document");
                 }
             }
+        }
+        if (session->isAgentRenderView() && _retirementNegotiated)
+        {
+            if (_agentRetirements.back()->phase != AgentRetirementRecord::Phase::Retired)
+                throw std::runtime_error("The previous agent epoch has not retired");
+            _pendingUrpResponse.clear();
+            _pendingUrpResponseTime.reset();
+            _urpTransportEverAttached = false;
+            _awaitingNextAgentGreeting = true;
         }
         // Request a new session from the child kit.
         std::string message = "session " + id + ' ' + _docKey + ' ' + _docId +
@@ -5404,6 +5722,8 @@ void DocumentBroker::rememberViewPosition(const ClientSession& session)
 std::size_t DocumentBroker::removeSession(const std::shared_ptr<ClientSession>& session)
 {
     ASSERT_CORRECT_THREAD();
+    if (session)
+        fenceAgentRetirement(session->getId());
 
     LOG_ASSERT_MSG(session, "Got null ClientSession");
 
@@ -5648,6 +5968,8 @@ void DocumentBroker::pushSessionsToCollabBroker()
 void DocumentBroker::disconnectSessionInternal(const std::shared_ptr<ClientSession>& session)
 {
     ASSERT_CORRECT_THREAD();
+    if (session)
+        fenceAgentRetirement(session->getId());
 
     LOG_ASSERT_MSG(session, "Got null ClientSession");
     const std::string id = session->getId();
@@ -6425,6 +6747,10 @@ std::string DocumentBroker::stageExportedSlides(const std::string_view answer)
 bool DocumentBroker::handleInput(const std::shared_ptr<Message>& message)
 {
     LOG_TRC("DocumentBroker handling child message: [" << message->abbr() << ']');
+    if (message->firstTokenMatches("agentregisteredkit:") ||
+        message->firstTokenMatches("agentretirefencekit:") ||
+        message->firstTokenMatches("agentretiredkit:"))
+        return handleAgentRetirementKit(std::string(message->firstLine()));
 
     if (!Util::isMobileApp())
     {
@@ -7437,8 +7763,30 @@ bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& sessio
     ASSERT_CORRECT_THREAD();
     LOG_ASSERT_MSG(session, "Must have a valid ClientSession");
 
+    if (message.starts_with("agentregisteredkit:") ||
+        message.starts_with("agentretirefencekit:") ||
+        message.starts_with("agentretiredkit:") ||
+        message.starts_with("agentregister ") || message.starts_with("agentretire "))
+        return false;
+
+    if (!_agentRetirements.empty())
+    {
+        const auto& record = *_agentRetirements.back();
+        if (session->getId() == record.renderId &&
+            record.phase != AgentRetirementRecord::Phase::Active)
+            return false;
+    }
+
     if (message.starts_with("urp "))
     {
+        if (_retirementNegotiated)
+        {
+            const auto& record = *_agentRetirements.back();
+            if (record.phase != AgentRetirementRecord::Phase::Active ||
+                record.transport.lock() != session ||
+                !record.authority.matches(session->getAuthorization()))
+                return false;
+        }
         if (!session->isWebsocketUrpEnabled())
         {
             LOG_WRN("Rejecting URP frame from unauthorised session [" << session->getId() << ']');
@@ -7513,6 +7861,15 @@ bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& sessio
 
         const bool forwarded =
             _childProcess && _childProcess->sendUrpMessage(message, resolvedViewId);
+        if (forwarded)
+        {
+#if ENABLE_DEBUG
+            if (UnitWSD::isUnitTesting())
+                _unitWsd->agentRetirementEvent(this, "urp-forwarded");
+#endif
+        }
+        if (forwarded && !_retirementNegotiated)
+            _legacyUrpDispatched = true;
         if (newlyRegistered && forwarded)
             UNITWSD_CALL_INSTANCE(_unitWsd, onDocBrokerAddSession(_docKey, session));
         return forwarded;
@@ -7625,6 +7982,31 @@ bool DocumentBroker::forwardToClient(const std::shared_ptr<Message>& payload)
                 // if it's the save confirmation keeping a stopped session alive.
                 std::shared_ptr<ClientSession> session = it->second;
                 return session->handleKitToClientMessage(payload);
+            }
+
+            // A removed serialising view can still deliver its actual native completion.
+            // Do not restore general removed-session routing or upload authority.
+            const auto barrier = std::find_if(_nativeSaveBarriers.begin(), _nativeSaveBarriers.end(),
+                [&](const NativeSaveBarrier& candidate) { return candidate.session->getId() == sid; });
+            if (barrier != _nativeSaveBarriers.end() &&
+                payload->firstTokenMatches("unocommandresult:"))
+            {
+                try
+                {
+                    Poco::JSON::Parser parser;
+                    const auto json = parser.parse(payload->jsonString()).extract<Poco::JSON::Object::Ptr>();
+                    if (json && json->getValue<std::string>("commandName") == ".uno:Save")
+                    {
+                        const auto retainedSession = barrier->session;
+                        handleSaveResponse(retainedSession, json);
+                        return true;
+                    }
+                }
+                catch (const std::exception&)
+                {
+                    // Malformed or missing completion leaves the native barrier intact.
+                    return false;
+                }
             }
 
             LOG_WRN("Client session [" << sid << "] not found to forward message: "
@@ -8366,6 +8748,13 @@ std::string DocumentBroker::getAbsoluteMediaPath(std::string localPath)
 
 void DocumentBroker::onUrpMessage(const char* data, size_t len)
 {
+    if (_retirementNegotiated && !_agentRetirements.empty())
+    {
+        const auto phase = _agentRetirements.back()->phase;
+        if (phase == AgentRetirementRecord::Phase::Retiring ||
+            (phase == AgentRetirementRecord::Phase::Retired && !_awaitingNextAgentGreeting))
+            return; // UrpHandler still consumes output while the core writer stops.
+    }
     const auto transport = _urpTransport.lock();
     if (transport && transport->isAgentSaveEligible())
     {

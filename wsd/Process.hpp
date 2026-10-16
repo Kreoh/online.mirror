@@ -18,6 +18,7 @@
 
 #include <common/Common.hpp>
 #include <common/FileUtil.hpp>
+#include <common/Unit.hpp>
 #include <net/WebSocketHandler.hpp>
 
 #include <algorithm>
@@ -229,8 +230,46 @@ public:
 
     ChildProcess(ChildProcess&& other) = delete;
 
+    void fenceUrpInput() { _urpInputFenced = true; }
+    void resumeUrpInput()
+    {
+        if (!_urpChannelPoisoned)
+            _urpInputFenced = false;
+    }
+
+    bool drainRetiredUrpOutput()
+    {
+#if !MOBILEAPP
+        if (!_urpInputFenced || _urpChannelPoisoned)
+            return false;
+        const auto socket = _urpFromKit.lock();
+        if (!socket)
+            return false;
+        socket->getInBuffer().clear();
+        for (;;)
+        {
+            errno = 0;
+            const int count = socket->readIncomingData();
+            const int error = errno;
+            socket->getInBuffer().clear();
+            if (count > 0)
+                continue;
+            if (count < 0 && error == EINTR)
+                continue;
+            if (count < 0 && (error == EAGAIN || error == EWOULDBLOCK))
+                return true;
+            poisonUrpChannel();
+            return false;
+        }
+#else
+        return false;
+#endif
+    }
+
     bool sendUrpMessage(const std::string_view message, const int viewId)
     {
+        if (_urpInputFenced)
+            return false;
         if (_urpChannelPoisoned)
         {
             LOG_ERR("Refusing a bound URP frame on a poisoned channel");
@@ -275,6 +314,7 @@ public:
         if (flags < 0 || ::fcntl(_urpToKitFD, F_SETFL, flags | O_NONBLOCK) < 0)
         {
             LOG_SYS("Failed to make the bound URP pipe non-blocking");
+            poisonUrpChannel();
             return false;
         }
 
@@ -287,6 +327,10 @@ public:
                                            framed.size() - written);
             if (result > 0)
             {
+#if ENABLE_DEBUG
+                if (UnitWSD::isUnitTesting())
+                    UnitWSD::get().agentRetirementPipeWrite(getPid(), viewId, result);
+#endif
                 written += static_cast<std::size_t>(result);
                 continue;
             }
@@ -416,6 +460,7 @@ private:
     int _urpFromKitFD;
     int _urpToKitFD;
     bool _urpChannelPoisoned = false;
+    bool _urpInputFenced = false;
 };
 
 #if !MOBILEAPP

@@ -140,8 +140,14 @@ void forkCOKit(const std::string& childRoot, const std::string& sysTemplate,
 class Document;
 
 /// The main main-loop of the Kit process
+struct AgentRetirement;
+
 class KitSocketPoll final : public SocketPoll
 {
+    std::shared_ptr<AgentRetirement> _agentRetirement;
+    unsigned _agentRetirementPollDepth = 0;
+    void pollAgentRetirement();
+    void quarantineAgentRetirement();
     std::chrono::steady_clock::time_point _pollEnd;
     std::shared_ptr<Document> _document;
 
@@ -152,6 +158,10 @@ class KitSocketPoll final : public SocketPoll
 public:
     ~KitSocketPoll();
     void drainQueue();
+    bool reserveAgentRetirement(const std::shared_ptr<Document>& document,
+                                const std::shared_ptr<class ChildSession>& session,
+                                const std::string& epoch);
+    bool startAgentRetirement(const std::shared_ptr<class ChildSession>& session);
 
     static void dumpGlobalState(std::ostream& oss);
     static std::shared_ptr<KitSocketPoll> create();
@@ -244,6 +254,8 @@ public:
     /// the remaining number of clients.
     /// Returns -1 on failure.
     std::size_t purgeSessions();
+    void finishAgentRetirement(const std::shared_ptr<ChildSession>& session);
+    void requestAgentRetirement(const std::shared_ptr<ChildSession>& session);
 
     void setDocumentPassword(COKitCallbackType passwordType);
 

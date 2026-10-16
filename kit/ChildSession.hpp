@@ -151,6 +151,21 @@ public:
 
     bool getClipboard(const StringVector& tokens);
 
+    bool hasURPBridge() const { return _hasURP; }
+    const std::string& agentRetirementEpoch() const { return _agentRetirementEpoch; }
+    void setAgentRetirementEpoch(const std::string& epoch) { _agentRetirementEpoch = epoch; }
+    bool agentRetirementFenced() const { return _agentRetirementFenced; }
+    void fenceAgentRetirement() { _agentRetirementFenced = true; }
+    void* releaseURPForRetirement()
+    {
+        if (!_hasURP || !_agentRetirementFenced)
+            return nullptr;
+        void* context = _urpContext;
+        _urpContext = nullptr;
+        _hasURP = false;
+        return context;
+    }
+
     void resetDocManager()
     {
         stopURPBridge();
@@ -467,6 +482,8 @@ private:
 
     /// whether there is a URP session created for this ChildSession
     bool _hasURP;
+    std::string _agentRetirementEpoch;
+    bool _agentRetirementFenced = false;
 
     /// The existing writable collaborator view borrowed by this URP transport session.
     int _boundAgentViewId;

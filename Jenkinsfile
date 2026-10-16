@@ -9,6 +9,7 @@ pipeline {
         choice(name: 'BUILD_MODE', choices: ['client-only', 'image'], description: 'Export the matching Java client, or explicitly build and publish an image.')
         string(name: 'CLIENT_SOURCE_REVISION', defaultValue: '262f997a4b1fccadbe45664a8f21889af3632447', description: 'Full target source revision, independent of the pipeline revision.')
         string(name: 'CLIENT_IMAGE', defaultValue: 'ghcr.io/kreoh/online-office@sha256:bffd112aa342cfcfdeac6bab9884d787f77786cbf17b2bd230a0bb92a6c9aee6', description: 'Exact existing image for client-only export; must already be present on the Jenkins agent.')
+        booleanParam(name: 'EXPORT_QUEUE_VALIDATION', defaultValue: false, description: 'Archive the exact builder and debug unit runtime for isolated queue validation. Does not authorise publication.')
     }
     environment {
         IMAGE_BASE_NAME = 'ghcr.io/kreoh/online-office'
@@ -109,6 +110,17 @@ pipeline {
                         -t "$builder_tag" \
                         -f docker/from-source/Builder.Dockerfile \
                         docker/from-source
+                    builder_id="$(docker image inspect --format '{{.Id}}' "$builder_tag")"
+                    queue_report="$PWD/native-retirement-reports/$BUILD_NUMBER"
+                    if [ "$EXPORT_QUEUE_VALIDATION" = true ]; then
+                        mkdir -p "$queue_report"
+                        printf '%s\\n' "$builder_id" > "$queue_report/builder-image.id"
+                        docker image inspect "$builder_id" > "$queue_report/builder-image.json"
+                        (ulimit -f 20971520; docker image save -o "$queue_report/builder-image.tar" "$builder_id")
+                        gzip -1 "$queue_report/builder-image.tar"
+                        test -s "$queue_report/builder-image.tar.gz"
+                        (cd "$queue_report" && sha256sum builder-image.tar.gz > builder-image.sha256)
+                    fi
                     docker run --rm \
                         -v "$PWD:/workspace:ro" \
                         -w /workspace \
@@ -154,6 +166,9 @@ pipeline {
                         -e ONLINE_OFFICE_SOURCE_REVISION="$ONLINE_OFFICE_SOURCE_REVISION" \
                         -e ONLINE_OFFICE_SOURCE_BRANCH="$SOURCE_BRANCH" \
                         -e ONLINE_OFFICE_FINAL_DOCKERFILE=Distroless \
+                        -e ONLINE_OFFICE_RUN_AGENT_CONTROL=1 \
+                        -e ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION="$EXPORT_QUEUE_VALIDATION" \
+                        -e ONLINE_OFFICE_AGENT_CONTROL_REPORT_DIR="/workspace/native-retirement-reports/$BUILD_NUMBER" \
                         -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \
                         -e CCACHE_DIR=/workspace-cache/ccache \
                         -e HOME=/workspace-cache/home \
@@ -172,6 +187,12 @@ pipeline {
                     )
                     test "$runtime_route" = distroless-source
                 '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: "native-retirement-reports/${env.BUILD_NUMBER}/**",
+                                     allowEmptyArchive: true, fingerprint: true
+                }
             }
         }
         stage('Export Java Client') {

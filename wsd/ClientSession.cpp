@@ -870,6 +870,10 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         }
     }
 
+    if (tokens.equals(0, "agentcapabilities") || tokens.equals(0, "agentregister") ||
+        tokens.equals(0, "agentretire"))
+        return docBroker->handleAgentControl(client_from_this(), std::string(buffer, length));
+
     if (tokens.equals(0, "urp"))
     {
         // This can't be pushed down into the long list of tokens that are

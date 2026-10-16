@@ -35,6 +35,7 @@ class ChildProcess;
 class ForKitProcess;
 class WebSocketHandler;
 class ClientSession;
+class DocumentBroker;
 class Message;
 
 
@@ -522,6 +523,13 @@ public:
     {
         return false;
     }
+#if ENABLE_DEBUG
+    virtual void agentRetirementEvent(DocumentBroker*, const std::string&) {}
+    virtual void agentRetirementRegistered(DocumentBroker*, const std::string&, int, const std::string&) {}
+    virtual void agentRetirementPipeWrite(int, int, std::size_t) {}
+    virtual void agentRetirementFence(DocumentBroker*, const std::string&) {}
+    virtual bool failAgentSaveDispatch() { return false; }
+#endif
     /// Child sent a message
     virtual bool filterChildMessage(const std::vector<char>& /* payload */)
     {
@@ -661,6 +669,15 @@ private:
 };
 
 /// Derive your Kit unit test / hooks from me.
+#if ENABLE_DEBUG
+enum class AgentRetirementTestPoint
+{
+    ThreadCreate, CoreStop, ReaderBeforeRead, ReaderAfterRead,
+    WriterBeforeWrite, WriterAfterWrite, PollDestruction, ReaderCancelled,
+    StopConfirmed, InputDiscarded, InputDrained
+};
+#endif
+
 class UnitKit : public UnitBase
 {
 public:
@@ -677,6 +694,13 @@ public:
     virtual void launchedKit(int /* pid */) {}
 
     // ---------------- Kit hooks ----------------
+#if ENABLE_DEBUG
+    // Called only when a native unit library is active. Release builds have no seam.
+    virtual bool agentRetirementFault(AgentRetirementTestPoint) { return false; }
+    virtual void agentRetirementIO(AgentRetirementTestPoint, std::size_t) {}
+    virtual void agentRetirementState(const std::string&, bool) {}
+#endif
+
 
     /// Build message with test result to send from kit -> wsd
     std::string getResultMessage() const;

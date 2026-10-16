@@ -16,6 +16,7 @@ lo_path="@LO_PATH@"
 valgrind_cmd="valgrind --tool=memcheck --trace-children=no -v --read-var-info=yes"
 verbose=''
 fail_fast=''
+port_args=()
 
 # Note that these options are used by commands in the Makefile that
 # Automake generates. Don't be mislead by 'git grep' not showing any
@@ -51,11 +52,20 @@ while test $# -gt 0; do
       --valgrind)  trace=$valgrind_cmd;;
       --fail-fast) fail_fast='true';;
       --verbose)   verbose="--verbose";;
+      --port)
+          test "${ONLINE_OFFICE_QUEUE_EXTERNAL:-}" = 1 && test "$2" = 9980 || exit 1
+          port_args=(--port=9980)
+          shift;;
       --help)      print_help ;;
   -*) ;; # ignore
   esac
   shift
 done
+
+if test "${ONLINE_OFFICE_QUEUE_EXTERNAL:-}" = 1; then
+    test "${#port_args[@]}" = 1 && test "$tst" = unit-agent-control.la || exit 1
+    test -z "${SUPPRESS_TESTS:-}" || exit 1
+fi
 
 if test "z$enable_debug" != "ztrue"; then
     echo ""
@@ -102,7 +112,7 @@ fi
 printf "\nRunning $tst | $tst_log | $test_output $cmd_line\n";
 echo > $tst_log
 if ${trace} \
-       ${abs_top_builddir}/coolwsd --o:sys_template_path="$systemplate_path" \
+       ${abs_top_builddir}/coolwsd "${port_args[@]}" --o:sys_template_path="$systemplate_path" \
 				   --o:child_root_path="$jails_path" \
 				   --o:cache_files.path="$cache_path" \
 				   --o:storage.filesystem[@allow]=true \

@@ -15,6 +15,9 @@
  */
 
 #include <config.h>
+#if defined(__linux__) && !MOBILEAPP
+#include <pthread.h>
+#endif
 
 #include "Kit.hpp"
 
@@ -1008,6 +1011,12 @@ std::size_t Document::purgeSessions()
         {
             if (it->second->isCloseFrame())
             {
+                if (!it->second->agentRetirementEpoch().empty())
+                {
+                    requestAgentRetirement(it->second);
+                    ++it;
+                    continue;
+                }
                 LOG_DBG("Removing session [" << it->second->getId() << ']');
                 deadSessions.push_back(it->second);
                 it = _sessions.erase(it);
@@ -1040,6 +1049,28 @@ std::size_t Document::purgeSessions()
     deadSessions.clear();
 
     return num_sessions;
+}
+
+void Document::requestAgentRetirement(const std::shared_ptr<ChildSession>& session)
+{
+    session->fenceAgentRetirement();
+    // The broker must stop its sole pipe producer before Kit drains old input.
+    postMessage("agentretirefencekit: epoch=" + session->agentRetirementEpoch() +
+                " renderid=" + session->getId(), WSOpCode::Text);
+}
+
+void Document::finishAgentRetirement(const std::shared_ptr<ChildSession>& session)
+{
+    const auto found = _sessions.find(session->getId());
+    if (found == _sessions.end() || found->second != session)
+        throw std::logic_error("Retiring session ownership changed");
+    if (session->getViewId() == _editorId)
+        _editorId = -1;
+    _sessionUserInfo[session->getViewId()].setDisconnected();
+    // resetDocManager explicitly unloads the view before any completion is sent.
+    session->resetDocManager();
+    _sessions.erase(found);
+    _deltaGen->setSessionCount(_sessions.size());
 }
 
 /// Set Document password for given URL
@@ -2647,10 +2678,38 @@ bool Document::forwardToChild(const std::string_view prefix, const std::vector<c
         {
             std::shared_ptr<ChildSession> session = it->second;
 
+            const std::string command(data, size);
+            if (command.starts_with("agentregister epoch="))
+            {
+                const std::string epoch = command.substr(sizeof("agentregister epoch=") - 1);
+                if (epoch.empty() || epoch.size() > 128 ||
+                    epoch.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != std::string::npos ||
+                    !session->agentRetirementEpoch().empty())
+                    return false;
+                if (!KitSocketPoll::getMainPoll()->reserveAgentRetirement(shared_from_this(), session, epoch))
+                    return false;
+                postMessage("agentregisteredkit: epoch=" + epoch + " renderid=" + sessionId,
+                            WSOpCode::Text);
+                return true;
+            }
+            if (command.starts_with("agentretire epoch="))
+            {
+                if (command.substr(sizeof("agentretire epoch=") - 1) != session->agentRetirementEpoch() ||
+                    session->agentRetirementEpoch().empty())
+                    return false;
+                return KitSocketPoll::getMainPoll()->startAgentRetirement(session);
+            }
+            if (session->agentRetirementFenced())
+                return false;
             static constexpr std::string_view disconnect("disconnect");
             if (size == disconnect.size() &&
                 strncmp(data, disconnect.data(), disconnect.size()) == 0)
             {
+                if (!session->agentRetirementEpoch().empty())
+                {
+                    requestAgentRetirement(session);
+                    return true;
+                }
                 if(session->getViewId() == _editorId) {
                     _editorId = -1;
                 }
@@ -3404,9 +3463,18 @@ KitSocketPoll::KitSocketPoll() : SocketPoll("kit")
     mainPoll = this;
 }
 
+#if MOBILEAPP
+bool KitSocketPoll::reserveAgentRetirement(const std::shared_ptr<Document>&,
+                                         const std::shared_ptr<ChildSession>&,
+                                         const std::string&) { return false; }
+bool KitSocketPoll::startAgentRetirement(const std::shared_ptr<ChildSession>&) { return false; }
+void KitSocketPoll::pollAgentRetirement() {}
+void KitSocketPoll::quarantineAgentRetirement() {}
+#endif
+
 KitSocketPoll::~KitSocketPoll()
 {
-    // Just to make it easier to set a breakpoint
+    quarantineAgentRetirement();
     mainPoll = nullptr;
 }
 
@@ -3463,6 +3531,20 @@ void KitSocketPoll::wakeupHook() { _pollEnd = std::chrono::steady_clock::now(); 
 int KitSocketPoll::kitPoll(int timeoutMicroS)
 {
     ProfileZone profileZone("KitSocketPoll::kitPoll");
+    struct RetirementPollScope
+    {
+        unsigned& depth;
+        explicit RetirementPollScope(unsigned& value) : depth(value) { ++depth; }
+        ~RetirementPollScope() { --depth; }
+    } retirementScope(_agentRetirementPollDepth);
+    if (_agentRetirement)
+        timeoutMicroS = timeoutMicroS < 0 ? timeoutMicroS : std::min(timeoutMicroS, 10000);
+    pollAgentRetirement();
+#if ENABLE_DEBUG
+    if (UnitKit::isUnitTesting() && _agentRetirement &&
+        UnitKit::get().agentRetirementFault(AgentRetirementTestPoint::PollDestruction))
+        quarantineAgentRetirement();
+#endif
 
     if (SigUtil::getTerminationFlag())
     {
@@ -3554,6 +3636,7 @@ int KitSocketPoll::kitPoll(int timeoutMicroS)
             return -1;
         }
     }
+    pollAgentRetirement();
     // Report the number of events we processed.
     return eventsSignalled;
 }
@@ -4954,17 +5037,37 @@ std::string anonymizeUrl(const std::string& url)
 
 #if !MOBILEAPP
 
+struct BoundURPWriter
+{
+    int fd;
+    std::atomic<bool> failed{false};
+};
+
 static int receiveURPData(void* context, const signed char* buffer, size_t bytesToWrite)
 {
+    auto& writer = *static_cast<BoundURPWriter*>(context);
+#if ENABLE_DEBUG
+    if (UnitKit::isUnitTesting())
+        UnitKit::get().agentRetirementIO(AgentRetirementTestPoint::WriterBeforeWrite, bytesToWrite);
+#endif
     const signed char *ptr = buffer;
     while (bytesToWrite > 0)
     {
-        ssize_t bytes = ::write(reinterpret_cast<intptr_t>(context), ptr, bytesToWrite);
+        ssize_t bytes = ::write(writer.fd, ptr, bytesToWrite);
+        if (bytes < 0 && errno == EINTR)
+            continue;
         if (bytes <= 0)
+        {
+            writer.failed.store(true, std::memory_order_relaxed);
             break;
+        }
         bytesToWrite -= bytes;
         ptr += bytes;
     }
+#if ENABLE_DEBUG
+    if (UnitKit::isUnitTesting())
+        UnitKit::get().agentRetirementIO(AgentRetirementTestPoint::WriterAfterWrite, ptr - buffer);
+#endif
     return ptr - buffer;
 }
 
@@ -4980,15 +5083,19 @@ constexpr std::size_t MaxUrpFrameSize = 64 * 1024 * 1024;
 
 struct BoundURPReader
 {
+    BoundURPReader(std::shared_ptr<COKitDocument> doc, int input, int cancel)
+        : document(std::move(doc)), fd(input), cancelFD(cancel) {}
     std::shared_ptr<COKitDocument> document;
     int fd;
     int cancelFD;
     std::vector<signed char> payload;
     std::size_t offset = 0;
+    mutable std::atomic<bool> failed{false};
 };
 
 struct BoundURPContext
 {
+    BoundURPWriter writer{URPfromLoFDs[1]};
     std::unique_ptr<BoundURPReader> reader;
     void* coreContext = nullptr;
     int cancelReadFD = -1;
@@ -5009,6 +5116,10 @@ struct BoundURPContext
             ::close(cancelWriteFD);
             cancelWriteFD = -1;
         }
+#if ENABLE_DEBUG
+        if (UnitKit::isUnitTesting())
+            UnitKit::get().agentRetirementIO(AgentRetirementTestPoint::ReaderCancelled, 0);
+#endif
     }
 };
 
@@ -5017,6 +5128,10 @@ bool readURPExact(const BoundURPReader& reader, signed char* buffer, std::size_t
     std::size_t offset = 0;
     while (offset < length)
     {
+#if ENABLE_DEBUG
+        if (UnitKit::isUnitTesting())
+            UnitKit::get().agentRetirementIO(AgentRetirementTestPoint::ReaderBeforeRead, length - offset);
+#endif
         pollfd descriptors[] = { { reader.fd, POLLIN, 0 }, { reader.cancelFD, POLLIN, 0 } };
         int ready;
         do
@@ -5024,14 +5139,27 @@ bool readURPExact(const BoundURPReader& reader, signed char* buffer, std::size_t
             ready = ::poll(descriptors, 2, -1);
         } while (ready < 0 && errno == EINTR);
 
-        if (ready <= 0 || descriptors[1].revents != 0 ||
-            (descriptors[0].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
+        if (descriptors[1].revents != 0)
+            return false; // The retirement cancellation pipe is the intentional stop path.
+        if (ready <= 0 || (descriptors[0].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
+        {
+            reader.failed.store(true, std::memory_order_relaxed);
             return false;
+        }
 
         const ssize_t bytes = ::read(reader.fd, buffer + offset, length - offset);
+        if (bytes < 0 && errno == EINTR)
+            continue;
         if (bytes <= 0)
+        {
+            reader.failed.store(true, std::memory_order_relaxed);
             return false;
+        }
         offset += bytes;
+#if ENABLE_DEBUG
+        if (UnitKit::isUnitTesting())
+            UnitKit::get().agentRetirementIO(AgentRetirementTestPoint::ReaderAfterRead, bytes);
+#endif
     }
     return true;
 }
@@ -5043,6 +5171,237 @@ std::uint32_t readURPUint32(const signed char* bytes)
            (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[2])) << 8) |
            static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[3]));
 }
+}
+
+
+struct AgentRetirement
+{
+    // These references are created and released only by the poll thread.
+    std::shared_ptr<Document> document;
+    std::shared_ptr<ChildSession> session;
+    std::shared_ptr<COKit> kit;
+    std::shared_ptr<COKitDocument> coreDocument;
+    std::unique_ptr<BoundURPContext> context;
+    std::string epoch;
+    std::string renderId;
+#if defined(__linux__) && !DOCS_SHARE_PROCESS
+    pthread_t worker{};
+#endif
+    bool started = false;
+    bool joined = false;
+    bool coreStopped = false;
+    bool inputDrained = false;
+    bool complete = false;
+    bool failed = false;
+
+    static void* stop(void* argument) noexcept
+    {
+        auto& record = *static_cast<AgentRetirement*>(argument);
+        // No Document, ChildSession, poll operation or dependency release on this thread.
+        try
+        {
+            record.context->cancelReader();
+#if ENABLE_DEBUG
+            if (UnitKit::isUnitTesting() &&
+                UnitKit::get().agentRetirementFault(AgentRetirementTestPoint::CoreStop))
+                throw std::runtime_error("Injected native retirement stop failure");
+#endif
+            record.kit->stopURP(record.context->coreContext);
+            record.coreStopped = true;
+        }
+        catch (...)
+        {
+            record.coreStopped = false;
+        }
+        return nullptr;
+    }
+};
+
+static std::shared_ptr<AgentRetirement>& retainedAgentRetirement()
+{
+    static auto* retained = new std::shared_ptr<AgentRetirement>();
+    return *retained;
+}
+
+bool KitSocketPoll::reserveAgentRetirement(const std::shared_ptr<Document>& document,
+                                         const std::shared_ptr<ChildSession>& session,
+                                         const std::string& epoch)
+{
+#if defined(__linux__) && !DOCS_SHARE_PROCESS
+    if (Util::isKitInProcess() || _agentRetirement || !session->hasURPBridge())
+        return false;
+    try
+    {
+        if (retainedAgentRetirement())
+            return false;
+        auto record = std::make_shared<AgentRetirement>();
+        record->document = document;
+        record->session = session;
+        record->kit = document->getLOKit();
+        record->coreDocument = document->getLOKitDocument();
+        record->epoch = epoch;
+        record->renderId = session->getId();
+        if (!record->kit || !record->coreDocument)
+            return false;
+        // All allocation and platform checks precede any context ownership transfer.
+        session->setAgentRetirementEpoch(epoch);
+        _agentRetirement = std::move(record);
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
+#else
+    return false;
+#endif
+}
+
+bool KitSocketPoll::startAgentRetirement(const std::shared_ptr<ChildSession>& session)
+{
+#if defined(__linux__) && !DOCS_SHARE_PROCESS
+    const auto& record = _agentRetirement;
+    if (!record || record->session != session)
+        return false;
+    session->fenceAgentRetirement();
+    if (record->started || record->failed)
+        return true;
+    record->context.reset(static_cast<BoundURPContext*>(session->releaseURPForRetirement()));
+    if (!record->context)
+    {
+        record->failed = true;
+        return true;
+    }
+#if ENABLE_DEBUG
+    if (UnitKit::isUnitTesting() &&
+        UnitKit::get().agentRetirementFault(AgentRetirementTestPoint::ThreadCreate))
+    {
+        record->failed = true;
+        UnitKit::get().agentRetirementState("thread-create-failed",
+            record->context && record->document && record->session && record->kit && record->coreDocument);
+        return true;
+    }
+#endif
+    if (pthread_create(&record->worker, nullptr, AgentRetirement::stop, record.get()) != 0)
+    {
+        // Keep the fenced context and every dependency. Never resume or stop synchronously.
+        record->failed = true;
+        return true;
+    }
+    record->started = true;
+#if ENABLE_DEBUG
+    if (UnitKit::isUnitTesting())
+        UnitKit::get().agentRetirementState("worker-started", true);
+#endif
+    return true;
+#else
+    return false;
+#endif
+}
+
+void KitSocketPoll::pollAgentRetirement()
+{
+#if defined(__linux__) && !DOCS_SHARE_PROCESS
+    const auto record = _agentRetirement;
+    if (!record || _agentRetirementPollDepth != 1 || !record->started || record->failed)
+        return;
+    if (!record->joined)
+    {
+        const int result = pthread_tryjoin_np(record->worker, nullptr);
+        if (result == EBUSY)
+            return;
+        if (result != 0)
+        {
+            record->failed = true;
+            return;
+        }
+        record->joined = true;
+    }
+    if (!record->coreStopped || record->context->writer.failed.load(std::memory_order_relaxed) ||
+        record->context->reader->failed.load(std::memory_order_relaxed))
+    {
+        record->failed = true;
+#if ENABLE_DEBUG
+        if (UnitKit::isUnitTesting())
+            UnitKit::get().agentRetirementState("core-stop-failed",
+                record->context && record->document && record->session && record->kit && record->coreDocument);
+#endif
+        return;
+    }
+    if (!record->inputDrained)
+    {
+#if ENABLE_DEBUG
+        if (UnitKit::isUnitTesting())
+            UnitKit::get().agentRetirementIO(AgentRetirementTestPoint::StopConfirmed, 0);
+#endif
+        const int flags = ::fcntl(URPtoLoFDs[0], F_GETFL, 0);
+        if (flags < 0 || ::fcntl(URPtoLoFDs[0], F_SETFL, flags | O_NONBLOCK) < 0)
+        {
+            record->failed = true;
+            return;
+        }
+        char discarded[8192];
+        for (;;)
+        {
+            const ssize_t count = ::read(URPtoLoFDs[0], discarded, sizeof(discarded));
+            if (count > 0)
+            {
+#if ENABLE_DEBUG
+                if (UnitKit::isUnitTesting())
+                    UnitKit::get().agentRetirementIO(AgentRetirementTestPoint::InputDiscarded, count);
+#endif
+                continue;
+            }
+            if (count < 0 && errno == EINTR)
+                continue;
+            if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                break;
+            record->failed = true;
+            return;
+        }
+        record->inputDrained = true;
+#if ENABLE_DEBUG
+        if (UnitKit::isUnitTesting())
+            UnitKit::get().agentRetirementIO(AgentRetirementTestPoint::InputDrained, 0);
+#endif
+    }
+    try
+    {
+        // Explicitly unload on the poll thread even if another owner retains the session.
+        record->document->finishAgentRetirement(record->session);
+        record->complete = true;
+        LOG_ASSERT_MSG(URPStartCount > 0, "URP retirement count is unbalanced");
+        --URPStartCount;
+        record->context.reset();
+        record->document->postMessage("agentretiredkit: epoch=" + record->epoch +
+                                     " renderid=" + record->renderId, WSOpCode::Text);
+        _agentRetirement.reset();
+    }
+    catch (...)
+    {
+        // No acknowledgement or release after ambiguous unload.
+        record->failed = true;
+    }
+#endif
+}
+
+void KitSocketPoll::quarantineAgentRetirement()
+{
+    if (!_agentRetirement)
+        return;
+    // Destruction is not permission to unload a view still used by an RPC.
+    // This slot is deliberately never destroyed; it retains the entire dependency graph.
+    retainedAgentRetirement() = std::move(_agentRetirement);
+#if ENABLE_DEBUG
+    if (UnitKit::isUnitTesting())
+    {
+        const auto& retained = retainedAgentRetirement();
+        UnitKit::get().agentRetirementState("quarantined",
+            retained && retained->document && retained->session && retained->kit && retained->coreDocument);
+    }
+#endif
+    if (SigUtil::getTerminationFlag() && !Util::isKitInProcess())
+        Util::forcedExit(EX_OK);
 }
 
 static int sendURPToEngine(void* context, signed char* buffer, int bytesToRead)
@@ -5063,6 +5422,7 @@ static int sendURPToEngine(void* context, signed char* buffer, int bytesToRead)
             if (payloadSize == 0 || payloadSize > MaxUrpFrameSize ||
                 viewId > static_cast<std::uint32_t>(std::numeric_limits<int>::max()))
             {
+                reader.failed.store(true, std::memory_order_relaxed);
                 LOG_ERR("URP/WS: Invalid bound-view frame");
                 break;
             }
@@ -5120,9 +5480,9 @@ bool startURP(const std::shared_ptr<COKit>& LOKit,
     }
     context->cancelReadFD = cancelFDs[0];
     context->cancelWriteFD = cancelFDs[1];
-    context->reader = std::make_unique<BoundURPReader>(BoundURPReader{
-        LOKitDocument, URPtoLoFDs[0], context->cancelReadFD, {}, 0 });
-    context->coreContext = LOKit->startURP(reinterpret_cast<void*>(URPfromLoFDs[1]),
+    context->reader = std::make_unique<BoundURPReader>(
+        LOKitDocument, URPtoLoFDs[0], context->cancelReadFD);
+    context->coreContext = LOKit->startURP(&context->writer,
                                            context->reader.get(), receiveURPFromEngine,
                                            sendURPToEngine);
 
