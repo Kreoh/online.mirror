@@ -136,6 +136,8 @@ check_LTLIBRARIES = ${all_la_unit_tests}
 if !ENABLE_FUZZERS
 # The shared test helpers, compiled once and linked into each unit-test module.
 check_LTLIBRARIES += libtesthelpers.la
+# Companion hooks are loaded by Kit; they are not standalone WSD tests.
+check_LTLIBRARIES += unit-agent-control-kit.la
 libtesthelpers_la_SOURCES = helpers.cpp
 # A convenience library: no -rpath, so libtool links it into each module.
 libtesthelpers_la_LDFLAGS =
@@ -358,6 +360,9 @@ unit_any_input_la_SOURCES = UnitAnyInput.cpp
 unit_any_input_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_agent_control_la_SOURCES = UnitAgentControl.cpp
 unit_agent_control_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+EXTRA_unit_agent_control_la_DEPENDENCIES = unit-agent-control-kit.la
+unit_agent_control_kit_la_SOURCES = UnitAgentControlKit.cpp
+unit_agent_control_kit_la_LIBADD = $(CPPUNIT_LIBS)
 unit_agent_save_la_SOURCES = UnitAgentSave.cpp
 unit_agent_save_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_kit_child_session_la_SOURCES = UnitKitChildSession.cpp

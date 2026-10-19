@@ -139,7 +139,7 @@ export QUEUE_SECCOMP="$repo_root/docker/cool-seccomp-profile.json"
 export QUEUE_REPORT="$fixture/report" QUEUE_BUILD="$fixture/runtime"
 mkdir -p "$QUEUE_REPORT" "$QUEUE_BUILD/online"
 runtime="$QUEUE_BUILD/online"
-for resource in coolwsd coolmount coolforkit-caps coolforkit-ns coolwsd.xml test/run_unit.sh test/.libs/unit-agent-control.so; do
+for resource in coolwsd coolmount coolforkit-caps coolforkit-ns coolwsd.xml test/run_unit.sh test/.libs/unit-agent-control.so test/.libs/unit-agent-control-kit.so; do
   mkdir -p "$runtime/$(dirname "$resource")"
   printf 'fixture\n' > "$runtime/$resource"
 done
@@ -156,11 +156,14 @@ test -f "$QUEUE_REPORT/debug-dependencies.sha256"
 (cd "$QUEUE_REPORT" && sha256sum -c debug-runtime.sha256)
 test ! -d "$runtime/.libs"
 test ! -e "$QUEUE_STAGE"
-rm "$runtime/test/.libs/unit-agent-control.so"
-if package_fixture; then echo 'Missing unit module passed export' >&2; exit 1; fi
-grep -Fq "Missing queue export resource: $runtime/test/.libs/unit-agent-control.so" "$QUEUE_REPORT/result.log"
-test ! -e "$QUEUE_STAGE"
-printf 'fixture\n' > "$runtime/test/.libs/unit-agent-control.so"
+for module in unit-agent-control unit-agent-control-kit; do
+  tar -tzf "$QUEUE_REPORT/debug-runtime.tar.gz" | grep -Fx "./${runtime#/}/test/.libs/$module.so"
+  rm "$runtime/test/.libs/$module.so"
+  if package_fixture; then echo "Missing $module module passed export" >&2; exit 1; fi
+  grep -Fq "Missing queue export resource: $runtime/test/.libs/$module.so" "$QUEUE_REPORT/result.log"
+  test ! -e "$QUEUE_STAGE"
+  printf 'fixture\n' > "$runtime/test/.libs/$module.so"
+done
 # A copy failure must name the resource and clean the partial stage.
 cat > "$fixture/bin/cp" <<'CP'
 #!/usr/bin/env bash

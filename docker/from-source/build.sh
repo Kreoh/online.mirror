@@ -257,7 +257,8 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
             exit 1
           }
           for resource in coolwsd coolmount coolforkit-caps coolforkit-ns coolwsd.xml \
-              test/run_unit.sh test/.libs/unit-agent-control.so test/data \
+              test/run_unit.sh test/.libs/unit-agent-control.so \
+              test/.libs/unit-agent-control-kit.so test/data \
               browser/dist etc systemplate engine/instdir; do
             test -e "$PWD/$resource" || {
               echo "Missing queue export resource: $PWD/$resource" >&2

@@ -3231,7 +3231,7 @@ bool COOLWSD::createForKit()
     args.push_back("--rlimits=" + ossRLimits.str());
 
     if (UnitWSD::get().hasKitHooks())
-        args.push_back("--unitlib=" + UnitTestLibrary);
+        args.push_back("--unitlib=" + UnitWSD::get().getKitHookLibrary());
 
     args.push_back("--version");
 

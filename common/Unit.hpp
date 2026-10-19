@@ -410,6 +410,7 @@ class UnitWSD : public UnitBase
 {
     UnitWSDInterface *_wsd;
     bool _hasKitHooks;
+    std::string _kitHookLibrary;
     std::atomic_int _docBrokerCounter;
 
 public:
@@ -433,8 +434,23 @@ public:
 
     /// Do we have hooks for the Kit too
     bool hasKitHooks() { return _hasKitHooks; }
-    /// set in your unit if you want to be injected into the kit too.
-    void setHasKitHooks() { _hasKitHooks = true; }
+    /// Set a sibling library filename when Kit hooks must load independently of WSD.
+    void setHasKitHooks(const std::string& library = {})
+    {
+        assert(library.find('/') == std::string::npos);
+        _hasKitHooks = true;
+        _kitHookLibrary = library;
+    }
+
+    std::string getKitHookLibrary() const
+    {
+        const std::string library = getUnitLibPath();
+        if (_kitHookLibrary.empty())
+            return library;
+        const auto separator = library.find_last_of('/');
+        return (separator == std::string::npos ? std::string() : library.substr(0, separator + 1)) +
+               _kitHookLibrary;
+    }
 
     // ---------------- WSD hooks ----------------
 
