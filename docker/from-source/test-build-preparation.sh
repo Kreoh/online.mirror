@@ -135,6 +135,7 @@ assert_head "$old"
 
 # Exercise the exact export here-document with text placeholders, never native code.
 export ONLINE_OFFICE_SOURCE_REVISION="$tip"
+export QUEUE_SECCOMP="$repo_root/docker/cool-seccomp-profile.json"
 export QUEUE_REPORT="$fixture/report" QUEUE_BUILD="$fixture/runtime"
 mkdir -p "$QUEUE_REPORT" "$QUEUE_BUILD/online"
 runtime="$QUEUE_BUILD/online"
@@ -222,4 +223,107 @@ PATH="$fixture/bin:$PATH" BUILDDIR="$fixture/cache" bash -c 'source "$1"; prepar
 test ! -e "$fixture/cache/online/systemplate/system_stamp"
 test -e "$fixture/cache/online/systemplate/retained"
 grep -Eq '^[[:space:]]+cpio \\$' "$repo_root/docker/from-source/Builder.Dockerfile"
-echo 'Build preparation checks passed (Git recovery, export, systemplate; no compilation).'
+# Verify the exported policy and reject tampering before any container is started.
+(cd "$QUEUE_REPORT" && sha256sum -c seccomp.sha256)
+cmp "$QUEUE_SECCOMP" "$QUEUE_REPORT/cool-seccomp-profile.json"
+printf '\n' >> "$QUEUE_REPORT/cool-seccomp-profile.json"
+if (cd "$QUEUE_REPORT" && sha256sum -c seccomp.sha256) > "$fixture/policy.log" 2>&1; then
+  echo 'Modified seccomp policy passed verification' >&2; exit 1
+fi
+
+# Exercise the exact resolved-model validator, including absent and extra policies.
+awk '/docker compose .* -f .*config --format json.*node -e/ {copy=1; next} copy && /^});/ {print "});"; found=1; exit} copy {print} END {if (!found) exit 1}' "$build" > "$fixture/policy.js"
+export OFFICE_NATIVE_ARTIFACTS="$fixture/artifacts" OFFICE_NATIVE_BUILDER_ID=fixture
+export OFFICE_NATIVE_UID=1000 OFFICE_NATIVE_GID=1000
+for policy_case in exact absent wrong extra unconfined privileged capabilities; do
+  node - "$policy_case" <<'MODEL' > "$fixture/model.json"
+const which=process.argv[2], service={image:"fixture",user:"1000:1000",entrypoint:["/bin/bash","/queue-validation/run-queue-unit.sh"],security_opt:["seccomp="+process.env.OFFICE_NATIVE_ARTIFACTS+"/cool-seccomp-profile.json"]};
+if(which==="absent") delete service.security_opt;
+if(which==="wrong") service.security_opt=["seccomp=/other/profile.json"];
+if(which==="extra") service.security_opt.push("no-new-privileges:true");
+if(which==="unconfined") service.security_opt=["seccomp=unconfined"];
+if(which==="privileged") service.privileged=true;
+if(which==="capabilities") service.cap_add=["SYS_ADMIN"];
+process.stdout.write(JSON.stringify({services:{"code-uno-experimental":service}}));
+MODEL
+  if node "$fixture/policy.js" < "$fixture/model.json" > "$fixture/model.log" 2>&1; then
+    test "$policy_case" = exact
+  else
+    test "$policy_case" != exact
+  fi
+done
+
+# Execute the production ordinary runner and release restoration on a real timeout.
+# Only shorten the clock; retain GNU timeout's process-group and exit semantics.
+awk '/^      : > .*unit-agent-control.trs/ {copy=1} copy && /^    \) > / {found=1; exit} copy {print} END {if (!found) exit 1}' "$build" > "$fixture/unit.sh"
+awk '/^    restore_release\(\)/ {copy=1} copy {print} copy && /^    }/ {found=1; exit} END {if (!found) exit 1}' "$build" > "$fixture/restore.sh"
+mkdir -p "$fixture/deadline/test" "$fixture/deadline/report"
+cat > "$fixture/deadline/test/run_unit.sh" <<'RUNNER'
+#!/usr/bin/env bash
+trap '' TERM
+sleep 30
+RUNNER
+chmod +x "$fixture/deadline/test/run_unit.sh"
+export REAL_TIMEOUT="$(command -v timeout)"
+cat > "$fixture/bin/timeout" <<'TIMEOUT'
+#!/usr/bin/env bash
+test "$1" = --signal=TERM
+test "$2" = --kill-after=10s
+test "$3" = 600s
+shift 3
+exec "$REAL_TIMEOUT" --signal=TERM --kill-after=0.1s 0.1s "$@"
+TIMEOUT
+chmod +x "$fixture/bin/timeout"
+export report_dir="$fixture/deadline/report"
+printf ':test-result: PASS stale\n' > "$report_dir/unit-agent-control.trs"
+printf 'unchanged\n' > "$report_dir/release-before.sha256"
+if (cd "$fixture/deadline" && PATH="$fixture/bin:$PATH" bash -e -c '
+  source "$1"
+  configure_release() { printf "restored\n"; }
+  hash_installation() { printf "unchanged\n"; }
+  trap restore_release EXIT
+  bash "$2"
+' bash "$fixture/restore.sh" "$fixture/unit.sh"); then
+  echo 'Timed-out unit passed validation' >&2; exit 1
+fi
+test "$(cat "$report_dir/runner-exit.txt")" = 137
+test "$(cat "$report_dir/validation-exit.txt")" = 1
+grep -qx restored "$report_dir/release-restore.log"
+cmp "$report_dir/release-before.sha256" "$report_dir/release-after.sha256"
+test ! -s "$report_dir/unit-agent-control.trs"
+rm "$fixture/bin/timeout"
+
+# The exported runner must record its own timeout and discard stale results too.
+awk '/^cd \/workspace-cache\/build\/builddir\/online\/test$/ {copy=1; next} copy && /^QUEUE_UNIT$/ {found=1; exit} copy {print} END {if (!found) exit 1}' "$build" | sed "s|/queue-state|$report_dir|g" > "$fixture/queue-unit.sh"
+cat > "$fixture/bin/timeout" <<'TIMEOUT'
+#!/usr/bin/env bash
+test "$1" = --signal=TERM
+test "$2" = --kill-after=10s
+test "$3" = 360s
+shift 3
+exec "$REAL_TIMEOUT" --signal=TERM --kill-after=0.1s 0.1s "$@"
+TIMEOUT
+chmod +x "$fixture/bin/timeout"
+printf '0\n' > "$report_dir/unit.exit"
+printf ':test-result: PASS stale\n' > "$report_dir/unit-agent-control.trs"
+if (cd "$fixture/deadline/test" && PATH="$fixture/bin:$PATH" bash -e "$fixture/queue-unit.sh"); then
+  echo 'Timed-out exported unit passed validation' >&2; exit 1
+fi
+test "$(cat "$report_dir/unit.exit")" = 137
+test ! -s "$report_dir/unit-agent-control.trs"
+rm "$fixture/bin/timeout"
+
+# A denied namespace probe fails immediately, using the exact production block.
+awk '/^# Probe the user namespace/ {copy=1} copy {print} copy && /^}/ {found=1; exit} END {if (!found) exit 1}' "$build" > "$fixture/preflight.sh"
+cat > "$fixture/bin/unshare" <<'UNSHARE'
+#!/usr/bin/env bash
+test "$*" = '--user --map-root-user unshare --mount --propagation private true'
+exit 1
+UNSHARE
+chmod +x "$fixture/bin/unshare"
+if PATH="$fixture/bin:$PATH" bash "$fixture/preflight.sh" > "$fixture/preflight.log" 2>&1; then
+  echo 'Denied namespace probe passed validation' >&2; exit 1
+fi
+grep -Fq 'Native validation requires user and private mount namespaces' "$fixture/preflight.log"
+
+echo 'Build preparation checks passed (Git recovery, export, systemplate, policy, deadline; no compilation).'

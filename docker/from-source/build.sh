@@ -16,6 +16,16 @@
 # * ONLINE_EXTRA_BUILD_OPTIONS - extra build options for online
 # * NO_DOCKER_IMAGE - if set, don't build the docker image itself, just do all the preps
 
+if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == 1 ]]; then
+  # Probe the user namespace, then the private mount namespace used by JailUtil.
+  # Host namespace restrictions must fail before compilation or first-child startup.
+  timeout --signal=TERM --kill-after=5s 10s \
+    unshare --user --map-root-user unshare --mount --propagation private true || {
+    echo "Native validation requires user and private mount namespaces under the supplied seccomp policy." >&2
+    exit 1
+  }
+fi
+
 # Check env variables
 if [ -z "$DOCKER_HUB_REPO" ]; then
   DOCKER_HUB_REPO="mydomain/online-office"
@@ -235,7 +245,7 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
           exit 1
         }
         queue_stage="$(mktemp -d "$report_dir/.queue-root.XXXXXX")" || exit 1
-        QUEUE_STAGE="$queue_stage" QUEUE_REPORT="$report_dir" QUEUE_BUILD="$BUILDDIR" bash -Eeuo pipefail <<'QUEUE_PACKAGE'
+        QUEUE_STAGE="$queue_stage" QUEUE_REPORT="$report_dir" QUEUE_BUILD="$BUILDDIR" QUEUE_SECCOMP="$SRCDIR/../cool-seccomp-profile.json" bash -Eeuo pipefail <<'QUEUE_PACKAGE'
           queue_stage="$QUEUE_STAGE"
           report_dir="$QUEUE_REPORT"
           BUILDDIR="$QUEUE_BUILD"
@@ -293,11 +303,20 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
           (cd "$queue_stage" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$report_dir/debug-files.sha256"
           (ulimit -f 20971520; tar --xattrs -czf "$report_dir/debug-runtime.tar.gz" -C "$queue_stage" .)
           (cd "$report_dir" && sha256sum debug-runtime.tar.gz > debug-runtime.sha256)
+          cp -- "$QUEUE_SECCOMP" "$report_dir/cool-seccomp-profile.json"
+          (cd "$report_dir" && sha256sum cool-seccomp-profile.json > seccomp.sha256)
 QUEUE_PACKAGE
         test "$?" = 0 || exit 1
         cat > "$report_dir/run-queue-unit.sh" <<'QUEUE_UNIT'
 #!/usr/bin/env bash
 set -euo pipefail
+# Probe the user namespace, then the private mount namespace used by JailUtil.
+# Host namespace restrictions must fail before compilation or first-child startup.
+timeout --signal=TERM --kill-after=5s 10s \
+  unshare --user --map-root-user unshare --mount --propagation private true || {
+  echo "Native validation requires user and private mount namespaces under the supplied seccomp policy." >&2
+  exit 1
+}
 test "$(id -u)" != 0
 test "$(id -u)" = "$(cat /queue-validation/debug.uid)"
 test "$(id -g)" = "$(cat /queue-validation/debug.gid)"
@@ -307,8 +326,11 @@ test -w /workspace-cache/build/builddir/online/jails
 test -w /workspace-cache/build/builddir/online/cache
 sha256sum -c /queue-validation/debug-dependencies.sha256 > /queue-state/dependency-verification.log
 cd /workspace-cache/build/builddir/online/test
+rm -f /queue-state/unit.exit
+: > /queue-state/unit-agent-control.trs
+# Include first-child startup in the 300s external unit budget, with 60s headroom.
 set +e
-./run_unit.sh --test-name unit-agent-control.la --port 9980 \
+timeout --signal=TERM --kill-after=10s 360s ./run_unit.sh --test-name unit-agent-control.la --port 9980 \
   --log-file /queue-state/unit-agent-control.log \
   --trs-file /queue-state/unit-agent-control.trs --fail-fast
 result=$?
@@ -354,7 +376,7 @@ state="$(realpath "$state")"
 test "$(id -u)" != 0
 test "$(id -u)" = "$(cat "$artifacts/debug.uid")"
 test "$(id -g)" = "$(cat "$artifacts/debug.gid")"
-(cd "$artifacts" && sha256sum -c builder-image.sha256 && sha256sum -c debug-runtime.sha256)
+(cd "$artifacts" && sha256sum -c builder-image.sha256 && sha256sum -c debug-runtime.sha256 && sha256sum -c seccomp.sha256)
 builder="$(cat "$artifacts/builder-image.id")"
 [[ "$builder" =~ ^sha256:[0-9a-f]{64}$ ]]
 docker image load -i "$artifacts/builder-image.tar.gz" > "$state/image-load.log"
@@ -370,6 +392,7 @@ docker compose "$@" --profile office-uno-experimental config --format json | nod
 let data=""; process.stdin.on("data", x=>data+=x); process.stdin.on("end",()=>{
  const model=JSON.parse(data), override=model["x-native-retirement"];
  if(!override || Object.keys(override.services).sort().join(",")!=="code-uno-experimental,office-uno-go-no-go") throw Error("Missing bounded native override");
+ override.services["code-uno-experimental"].security_opt=["seccomp="+process.env.OFFICE_NATIVE_ARTIFACTS+"/cool-seccomp-profile.json"];
  override.services["code-uno-experimental"].labels={"io.kreoh.native-queue-run":process.env.OFFICE_NATIVE_RUN_ID};
  const font=model.services["code-uno-experimental"].volumes?.find(v=>v.target==="/opt/online-office/share/registry/data/impress-font-control.xcu");
  if(font) {
@@ -387,6 +410,7 @@ let data=""; process.stdin.on("data",x=>data+=x); process.stdin.on("end",()=>{
  if(s.image!==process.env.OFFICE_NATIVE_BUILDER_ID || s.user!==process.env.OFFICE_NATIVE_UID+":"+process.env.OFFICE_NATIVE_GID) throw Error("Wrong native image/user");
  if(JSON.stringify(s.entrypoint)!==JSON.stringify(["/bin/bash","/queue-validation/run-queue-unit.sh"])) throw Error("Wrong runner");
  if(s.privileged || s.cap_add?.length || s.security_opt?.some(x=>x.includes("unconfined"))) throw Error("Sandbox bypass");
+ if(JSON.stringify(s.security_opt)!==JSON.stringify(["seccomp="+process.env.OFFICE_NATIVE_ARTIFACTS+"/cool-seccomp-profile.json"])) throw Error("Wrong native seccomp policy");
  const aliases=Object.entries(m.services).filter(([name,v])=>name==="code-uno-experimental" || v.networks?.["office-uno-internal"]?.aliases?.includes("code"));
  if(aliases.length!==1) throw Error("Multiple isolated code providers");
 });'
@@ -477,7 +501,8 @@ QUEUE_LAUNCH
       fi
       : > "$report_dir/unit-agent-control.trs" || exit 1
       set +e
-      (cd test && ./run_unit.sh --test-name unit-agent-control.la \
+      # Seventeen units at 30s each, plus 90s for startup and teardown.
+      (cd test && timeout --signal=TERM --kill-after=10s 600s ./run_unit.sh --test-name unit-agent-control.la \
         --log-file "$report_dir/unit-agent-control.log" \
         --trs-file "$report_dir/unit-agent-control.trs" --fail-fast)
       runner_status=$?

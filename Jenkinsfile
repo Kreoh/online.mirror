@@ -155,6 +155,7 @@ pipeline {
                         "$builder_tag" \
                         bash docker/from-source/check-builder.sh
                     docker run --rm \
+                        --security-opt "seccomp=$PWD/docker/cool-seccomp-profile.json" \
                         --user "$uid:$gid" \
                         --group-add "$docker_gid" \
                         -v "$PWD:/workspace" \
