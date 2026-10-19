@@ -28,6 +28,7 @@
 #include <wsd/ClientSession.hpp>
 
 #include <Poco/JSON/Object.h>
+#include <Poco/JSON/Parser.h>
 #include <Poco/Util/LayeredConfiguration.h>
 
 #include <algorithm>
@@ -43,7 +44,7 @@ constexpr std::string_view BrowserToken = "browser-token";
 class UnitAgentControl final : public WopiTestServer
 {
     STATE_ENUM(Phase, LoadBrowser, WaitBrowserView, VerifyBrowserOrigin, WaitRenderView,
-               WaitInvalidUrp, WaitUrpAgent, WaitUrpGreeting, WaitUrpDetached, WaitReboundUrpAgent, VerifyRepaint, Done)
+               WaitInvalidUrp, WaitUrpAgent, WaitUrpGreeting, WaitUrpDetached, WaitReboundUrpAgent, VerifyRepaint, WaitOldRecovery, Done)
     _phase;
     std::weak_ptr<ClientSession> _browser;
     std::weak_ptr<ClientSession> _renderView;
@@ -57,6 +58,8 @@ class UnitAgentControl final : public WopiTestServer
     bool _nextEpoch = false;
     std::string _firstRetirementRequest;
     std::string _firstRetirementResult;
+    std::shared_ptr<http::Session> _oldRecovery;
+    std::atomic<bool> _oldRecoveryDone{false};
 
     void verifyBrowserRepaint()
     {
@@ -436,8 +439,28 @@ public:
                     LOK_ASSERT_MESSAGE("An old retry must leave the newer render view live",
                                        _renderView.lock()->isLive());
                     retry->asyncShutdown();
-                    verifyRetirement();
+                    _oldRecovery = http::Session::create(helpers::getTestServerURI());
+                    _oldRecovery->setFinishedHandler(
+                        [this](const std::shared_ptr<http::Session>& session) {
+                            LOK_ASSERT(session->response());
+                            LOK_ASSERT_EQUAL(http::StatusCode::OK, session->response()->statusCode());
+                            Poco::JSON::Parser parser;
+                            const auto result = parser.parse(session->response()->getBody())
+                                                    .extract<Poco::JSON::Object::Ptr>();
+                            LOK_ASSERT_EQUAL(std::string("epoch1"), result->getValue<std::string>("epoch"));
+                            LOK_ASSERT_EQUAL(std::string("retired"), result->getValue<std::string>("phase"));
+                            _oldRecoveryDone.store(true);
+                        });
+                    http::Request recovery("/cool/agent/recover-retire?WOPISrc=" + getWopiSrc(),
+                                           http::Request::VERB_POST);
+                    recovery.set("Authorization", "Bearer " + std::string(AgentToken));
+                    recovery.set("X-COOL-Agent-Epoch", "epoch1");
+                    recovery.set("X-COOL-Agent-Cleanup-Request-Id", "retire1");
+                    recovery.setContentLength(0);
+                    LOK_ASSERT(_oldRecovery->asyncRequest(recovery, socketPoll()));
+                    TRANSITION_STATE(_phase, Phase::WaitOldRecovery);
                 }
+
                 else
                     TRANSITION_STATE(_phase, Phase::VerifyRepaint);
                 return;
@@ -445,6 +468,15 @@ public:
             _urpSocket->asyncShutdown();
             _urpSocket.reset();
             TRANSITION_STATE(_phase, Phase::WaitUrpDetached);
+        }
+        else if (_phase == Phase::WaitOldRecovery)
+        {
+            if (!_oldRecoveryDone.load())
+                return;
+            LOK_ASSERT(_renderView.lock()->isLive());
+            LOK_ASSERT_EQUAL(_renderView.lock()->getKitViewId(),
+                             _urpAgent.lock()->getBoundAgentViewId());
+            verifyRetirement();
         }
         else if (_phase == Phase::WaitUrpDetached)
         {
@@ -784,6 +816,7 @@ class UnitAgentRetirementProbe final : public WopiTestServer
     // 1 create failure, 2 stop failure, 3 reader pause, 4 writer pause,
     // 5 exceptional teardown, 6 render loss with held save, 7 transport loss with held save,
     // 8 implicit render loss, 9 unread completion, 10 dispatch failure, 11 held upload.
+    // 13 cleanup before registration acknowledgement, 14 lost reply with expired authority.
     const int _mode;
     std::atomic<int> _phase{0};
     std::atomic<bool> _configured{false}, _paused{false}, _failed{false};
@@ -803,6 +836,49 @@ class UnitAgentRetirementProbe final : public WopiTestServer
     std::atomic<bool> _uploadHeld{false}, _uploadCompleted{false};
     bool _uploadIntercepted = false;
 
+    std::shared_ptr<http::Session> _recoveryControl;
+    std::atomic<bool> _recoveryReady{false};
+    std::atomic<int> _recoveryStatus{0};
+    std::atomic<unsigned> _registered{0};
+    std::string _heldRegistration;
+    bool _holdRegistration = true; // Accessed on the broker poll only.
+
+    void requestRecovery(const std::string& token, const std::string& epoch,
+                         const std::string& requestId, int expected = 0)
+    {
+        _recoveryReady.store(false);
+        _recoveryControl = http::Session::create(helpers::getTestServerURI());
+        _recoveryControl->setFinishedHandler(
+            [this, epoch, requestId, expected](const std::shared_ptr<http::Session>& session) {
+                LOK_ASSERT(session->response());
+                const int status = static_cast<int>(session->response()->statusCode());
+                if (expected)
+                    LOK_ASSERT_EQUAL(expected, status);
+                else
+                    LOK_ASSERT(status == 200 || status == 202);
+                if (status == 200 || status == 202)
+                {
+                    Poco::JSON::Parser parser;
+                    const auto result = parser.parse(session->response()->getBody())
+                                            .extract<Poco::JSON::Object::Ptr>();
+                    LOK_ASSERT_EQUAL(epoch, result->getValue<std::string>("epoch"));
+                    LOK_ASSERT_EQUAL(requestId, result->getValue<std::string>("requestid"));
+                    LOK_ASSERT_EQUAL(_render->getId(), result->getValue<std::string>("renderid"));
+                    LOK_ASSERT_EQUAL(_render->getKitViewId(), result->getValue<int>("viewid"));
+                    LOK_ASSERT_EQUAL(std::string(status == 200 ? "retired" : "retiring"),
+                                     result->getValue<std::string>("phase"));
+                }
+                _recoveryStatus.store(status);
+                _recoveryReady.store(true);
+            });
+        http::Request request("/cool/agent/recover-retire?WOPISrc=" + getWopiSrc(),
+                              http::Request::VERB_POST);
+        request.set("Authorization", "Bearer " + token);
+        request.set("X-COOL-Agent-Epoch", epoch);
+        request.set("X-COOL-Agent-Cleanup-Request-Id", requestId);
+        request.setContentLength(0);
+        LOK_ASSERT(_recoveryControl->asyncRequest(request, socketPoll()));
+    }
     void kitCommand(const std::string& command)
     {
         const auto broker = _browser->getDocumentBroker();
@@ -911,8 +987,25 @@ public:
         if (session->isWebsocketUrpEnabled())
         {
             _direct = session;
-            _phase.store(5);
+            if (_mode < 13)
+                _phase.store(5);
         }
+    }
+    void agentRetirementRegistered(DocumentBroker*, const std::string&, int,
+                                   const std::string&) override
+    {
+        ++_registered;
+    }
+    bool filterSessionInput(Session* session, const char* buffer, int length,
+                            std::unique_ptr<std::vector<char>>&) override
+    {
+        if (_mode >= 13 && std::string_view(buffer, length).starts_with("agentregister "))
+        {
+            const auto client = dynamic_cast<ClientSession*>(session);
+            LOK_ASSERT(client);
+            _direct = std::static_pointer_cast<ClientSession>(client->shared_from_this());
+        }
+        return false;
     }
     bool failAgentSaveDispatch() override { return _rejectDispatch.load(); }
     void agentRetirementEvent(DocumentBroker*, const std::string& event) override
@@ -933,6 +1026,12 @@ public:
     bool filterChildMessage(const std::vector<char>& payload) override
     {
         const std::string message(payload.begin(), payload.end());
+        if (_mode == 13 && _holdRegistration && message.starts_with("agentregisteredkit:"))
+        {
+            std::lock_guard<std::mutex> lock(_heldMutex);
+            _heldRegistration = message;
+            return true;
+        }
         if (message.starts_with("unitretirement "))
         {
             LOK_ASSERT_MESSAGE("Bounded I/O pause must be explicitly released",
@@ -974,7 +1073,7 @@ public:
             break;
         case 1:
             _phase.store(2);
-            kitCommand("mode=" + std::to_string(_mode));
+            kitCommand("mode=" + std::to_string(_mode >= 13 ? 0 : _mode));
             break;
         case 2:
             if (!_configured.load())
@@ -990,6 +1089,104 @@ public:
             _directSocket = getWs()->getWebSocket();
             helpers::sendTextFrame(_directSocket, "agentregister epoch=probe viewid=" +
                                   std::to_string(_render->getKitViewId()), getTestname());
+            if (_mode >= 13)
+                _phase.store(40);
+            break;
+        case 40:
+        {
+            if (_mode == 13)
+            {
+                std::lock_guard<std::mutex> lock(_heldMutex);
+                if (_heldRegistration.empty())
+                    break;
+            }
+            else if (_registered.load() == 0)
+                break;
+            // Neither recovery scenario reads the registration response.
+            if (_mode == 13)
+            {
+                _phase.store(41);
+                break;
+            }
+            const auto broker = _browser->getDocumentBroker();
+            _phase.store(-1);
+            broker->addCallback([this, broker] {
+                LOK_ASSERT_EQUAL(1U, _registered.load());
+                LOK_ASSERT(_direct->getAuthorization().isValid());
+                LOK_ASSERT(broker->expireAgentRegistrationForTesting("probe"));
+                _directSocket->asyncShutdown();
+                _direct->invalidateAuthorizationToken();
+                LOK_ASSERT(!_direct->getAuthorization().isValid());
+                _phase.store(41);
+            });
+            break;
+        }
+        case 41:
+            requestRecovery(std::string(BrowserToken), "probe", "cleanup", 403);
+            _phase.store(42);
+            break;
+        case 42:
+            if (!_recoveryReady.load()) break;
+            requestRecovery(std::string(AgentToken), "unknown", "cleanup", 404);
+            _phase.store(43);
+            break;
+        case 43:
+            if (!_recoveryReady.load()) break;
+            requestRecovery(std::string(AgentToken), "probe", "cleanup", _mode == 13 ? 202 : 0);
+            _phase.store(44);
+            break;
+        case 44:
+            if (!_recoveryReady.load()) break;
+            if (_mode == 13)
+                LOK_ASSERT_EQUAL_MESSAGE("No stop before Kit reservation acknowledgement", 0U, _stops.load());
+            requestRecovery(std::string(AgentToken), "probe", "conflict", 409);
+            _phase.store(45);
+            break;
+        case 45:
+        {
+            if (!_recoveryReady.load()) break;
+            const auto broker = _browser->getDocumentBroker();
+            _phase.store(-1);
+            broker->addCallback([this, broker] {
+                if (_mode == 13)
+                {
+                    std::string held;
+                    { std::lock_guard<std::mutex> lock(_heldMutex); held = _heldRegistration; }
+                    _holdRegistration = false;
+                    LOK_ASSERT(broker->handleAgentRetirementKit(held));
+                    LOK_ASSERT_MESSAGE("Late registration cannot rebind the transport",
+                                       _direct->getBoundAgentViewId() < 0);
+                    LOK_ASSERT(!broker->forwardToChild(_direct, "urp stale", true));
+                    LOK_ASSERT_EQUAL(0U, _registered.load());
+                }
+                if (_mode == 14)
+                    LOK_ASSERT_MESSAGE("Cleanup must not restore live authority",
+                                       !_direct->getAuthorization().isValid());
+                else
+                    LOK_ASSERT(_direct->getAuthorization().isValid());
+                _phase.store(46);
+            });
+            break;
+        }
+        case 46:
+            requestRecovery(std::string(AgentToken), "probe", "cleanup");
+            _phase.store(47);
+            break;
+        case 47:
+            if (!_recoveryReady.load()) break;
+            if (_recoveryStatus.load() != 200)
+                _phase.store(46);
+            else
+            {
+                LOK_ASSERT_EQUAL_MESSAGE("Exactly one native stop dispatch", 1U, _stops.load());
+                requestRecovery(std::string(AgentToken), "probe", "cleanup", 200);
+                _phase.store(48);
+            }
+            break;
+        case 48:
+            if (!_recoveryReady.load()) break;
+            LOK_ASSERT_EQUAL(1U, _stops.load());
+            proveBrowser();
             break;
         case 5:
             LOK_ASSERT_MESSAGE("Reservation must precede test actions",
@@ -1055,13 +1252,18 @@ public:
                 LOK_ASSERT(!helpers::getResponseString(_directSocket, "error:", getTestname()).empty());
                 if (_mode == 5)
                     kitCommand("release");
-                _phase.store(10);
+                requestRecovery(std::string(AgentToken), "probe", "probe-retire", 202);
+                _phase.store(71);
             }
             else
             {
                 kitCommand("release");
                 _phase.store(9);
             }
+            break;
+        case 71:
+            if (_recoveryReady.load())
+                _phase.store(10);
             break;
         case 9:
             LOK_ASSERT(!helpers::getResponseString(_directSocket, "agentretired:", getTestname()).empty());
@@ -1111,11 +1313,14 @@ public:
             helpers::sendTextFrame(_directSocket, _request, getTestname());
             LOK_ASSERT(!helpers::getResponseString(_directSocket, "error:", getTestname()).empty());
             LOK_ASSERT_EQUAL(0U, _stops.load());
+            requestRecovery(std::string(AgentToken), "probe", "probe-retire", 202);
             _phase.store(21);
             break;
         }
         case 21:
         {
+            if (!_recoveryReady.load()) break;
+            LOK_ASSERT_EQUAL(0U, _stops.load());
             const auto broker = _browser->getDocumentBroker();
             std::string held;
             { std::lock_guard<std::mutex> lock(_heldMutex); held = _heldSave; }
@@ -1161,6 +1366,12 @@ public:
             LOK_ASSERT_EQUAL(0U, _stops.load());
             LOK_ASSERT(helpers::getResponseString(_directSocket, "agentretired:", getTestname(),
                                                   std::chrono::milliseconds(20)).empty());
+            requestRecovery(std::string(AgentToken), "probe", "probe-retire", 202);
+            _phase.store(32);
+            break;
+        case 32:
+            if (!_recoveryReady.load()) break;
+            LOK_ASSERT_EQUAL(0U, _stops.load());
             _uploadRelease = http::Session::create(helpers::getTestServerURI());
             _phase.store(31);
             LOK_ASSERT(_uploadRelease->asyncRequest(http::Request("/retirement-release-upload"), socketPoll()));
@@ -1195,7 +1406,8 @@ UnitBase** unit_create_wsd_multi(void)
         new UnitAgentRetirementProbe(5), new UnitAgentRetirementProbe(6),
         new UnitAgentRetirementProbe(7), new UnitAgentRetirementProbe(8),
         new UnitAgentRetirementProbe(9), new UnitAgentRetirementProbe(10),
-        new UnitAgentRetirementProbe(11),
+        new UnitAgentRetirementProbe(11), new UnitAgentRetirementProbe(13),
+        new UnitAgentRetirementProbe(14),
 #endif
         nullptr };
 }

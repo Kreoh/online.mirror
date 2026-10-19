@@ -1418,6 +1418,11 @@ ClientRequestDispatcher::MessageResult ClientRequestDispatcher::handleMessage(Po
             servedSync = handleAgentSaveRequest(request, disposition, socket);
         }
         else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
+                 requestDetails.equals(1, "agent") && requestDetails.equals(2, "recover-retire"))
+        {
+            servedSync = handleAgentRecoveryRequest(request, disposition, socket);
+        }
+        else if (requestDetails.equals(RequestDetails::Field::Type, "cool") &&
                  requestDetails.equals(1, "links") &&
                  request.getMethod() == Poco::Net::HTTPRequest::HTTP_POST)
         {
@@ -2248,6 +2253,85 @@ bool ClientRequestDispatcher::handleClipboardRequest(const Poco::Net::HTTPReques
         HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket, errMsg);
         return true;
     }
+    return false;
+}
+
+bool ClientRequestDispatcher::handleAgentRecoveryRequest(const Poco::Net::HTTPRequest& request,
+                                                     SocketDisposition& disposition,
+                                                     const std::shared_ptr<StreamSocket>& socket)
+{
+    assert(socket && "Must have a valid socket");
+
+    if (request.getMethod() != Poco::Net::HTTPRequest::HTTP_POST)
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::MethodNotAllowed, socket);
+        return true;
+    }
+
+    Poco::URI requestUri(request.getURI());
+    std::string wopiSrc;
+    for (const auto& parameter : requestUri.getQueryParameters())
+    {
+        if (parameter.first == "WOPISrc")
+        {
+            wopiSrc = parameter.second;
+            break;
+        }
+    }
+
+    if (wopiSrc.empty() || !HttpHelper::verifyWOPISrc(request.getURI(), wopiSrc, socket))
+    {
+        if (wopiSrc.empty())
+            HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
+        return true;
+    }
+
+    static constexpr std::string_view bearerPrefix = "Bearer ";
+    const std::string authorization = request.get("Authorization", std::string());
+    if (!authorization.starts_with(bearerPrefix) || authorization.size() == bearerPrefix.size())
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::Unauthorized, socket);
+        return true;
+    }
+
+    const std::string epoch = request.get("X-COOL-Agent-Epoch", std::string());
+    const std::string requestId = request.get("X-COOL-Agent-Cleanup-Request-Id", std::string());
+    const auto validIdentifier = [](const std::string& value) {
+        return !value.empty() && value.size() <= 128 &&
+               value.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") ==
+                   std::string::npos;
+    };
+    if (!validIdentifier(epoch) || !validIdentifier(requestId))
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::BadRequest, socket);
+        return true;
+    }
+
+    const std::string docKey = RequestDetails::getDocKey(wopiSrc);
+    std::shared_ptr<DocumentBroker> docBroker;
+    {
+        std::unique_lock<std::mutex> docBrokersLock(DocBrokersMutex);
+        const auto broker = DocBrokers.find(docKey);
+        if (broker != DocBrokers.end())
+            docBroker = broker->second;
+    }
+
+    if (!docBroker || !docBroker->isAlive())
+    {
+        HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket);
+        return true;
+    }
+
+    const std::string bearerToken = authorization.substr(bearerPrefix.size());
+    docBroker->setupTransfer(
+        disposition,
+        [docBroker, bearerToken, epoch, requestId](const std::shared_ptr<Socket>& transferredSocket)
+        {
+            docBroker->handleAgentRecoveryRequest(
+                std::static_pointer_cast<StreamSocket>(transferredSocket), bearerToken,
+                epoch, requestId);
+        });
+
     return false;
 }
 

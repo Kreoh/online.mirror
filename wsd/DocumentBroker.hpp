@@ -694,11 +694,20 @@ public:
 
     virtual bool handleInput(const std::shared_ptr<Message>& message);
 
-    /// Forward a message from client session to its respective child session.
+    /// Retires an existing registration without granting live session authority.
+    void handleAgentRecoveryRequest(const std::shared_ptr<StreamSocket>& socket,
+                                    std::string_view bearerToken, const std::string& epoch,
+                                    const std::string& requestId);
     bool handleAgentControl(const std::shared_ptr<ClientSession>& session, const std::string& message);
     bool handleAgentRetirementKit(const std::string& message);
     void fenceAgentRetirement(const std::string& renderId);
+#if ENABLE_DEBUG
+    /// Expires retained authority after successful registration in native unit tests only.
+    bool expireAgentRegistrationForTesting(const std::string& epoch);
+#endif
 
+
+    /// Forward a message from client session to its respective child session.
     bool forwardToChild(const std::shared_ptr<ClientSession>& session, const std::string& message,
                         bool binary = false);
 
@@ -2151,13 +2160,20 @@ private:
     {
         enum class Phase { Registering, Active, Retiring, Retired };
         explicit AgentRetirementRecord(const Authorization& auth) : authority(auth) {}
+#if ENABLE_DEBUG
+        Authorization authority; // Mutable only for deterministic unit-test expiry.
+#else
         const Authorization authority;
+#endif
+
         std::string epoch;
         std::string requestId;
         std::string renderId;
         std::string result;
         int viewId = -1;
         Phase phase = Phase::Registering;
+        bool reservationConfirmed = false;
+        bool stopDispatched = false;
         std::weak_ptr<ClientSession> transport;
         std::weak_ptr<ClientSession> reply;
     };

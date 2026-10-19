@@ -138,6 +138,70 @@ bool retirementViewId(const std::string& text, int& view)
 }
 }
 
+#if ENABLE_DEBUG
+bool DocumentBroker::expireAgentRegistrationForTesting(const std::string& epoch)
+{
+    ASSERT_CORRECT_THREAD();
+    if (!UnitWSD::isUnitTesting())
+        return false;
+    for (const auto& item : _agentRetirements)
+    {
+        if (item->epoch == epoch && item->phase == AgentRetirementRecord::Phase::Active)
+        {
+            item->authority.expire();
+            return item->authority.isExpired() && !item->authority.isValid();
+        }
+    }
+    return false;
+}
+#endif
+
+void DocumentBroker::handleAgentRecoveryRequest(const std::shared_ptr<StreamSocket>& socket,
+                                                const std::string_view bearerToken,
+                                                const std::string& epoch,
+                                                const std::string& requestId)
+{
+    ASSERT_CORRECT_THREAD();
+    for (const auto& item : _agentRetirements)
+    {
+        auto& record = *item;
+        if (record.epoch != epoch)
+            continue;
+        // This local comparison grants cleanup only. Never install renewed authority.
+        if (!record.authority.withExpiredCredential().matchesToken(bearerToken))
+        {
+            HttpHelper::sendErrorAndShutdown(http::StatusCode::Forbidden, socket);
+            return;
+        }
+        if (!record.requestId.empty() && record.requestId != requestId)
+        {
+            HttpHelper::sendErrorAndShutdown(http::StatusCode::Conflict, socket);
+            return;
+        }
+        record.requestId = requestId;
+        const bool retired = record.phase == AgentRetirementRecord::Phase::Retired;
+        // Completed retries must never fence a newer epoch.
+        if (!retired)
+            fenceAgentRetirement(record.renderId);
+        Poco::JSON::Object result;
+        result.set("epoch", record.epoch);
+        result.set("requestid", record.requestId);
+        result.set("viewid", record.viewId);
+        result.set("renderid", record.renderId);
+        result.set("phase", retired ? "retired" : "retiring");
+        std::ostringstream body;
+        result.stringify(body);
+        http::Response response(retired ? http::StatusCode::OK : http::StatusCode::Accepted);
+        response.set("Content-Type", "application/json");
+        response.set("Cache-Control", "no-store");
+        response.setBody(body.str());
+        socket->sendAndShutdown(response);
+        return;
+    }
+    // Absence cannot prove that a delayed registration will never arrive.
+    HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket);
+}
+
 bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& session,
                                        const std::string& message)
 {
@@ -267,12 +331,14 @@ void DocumentBroker::fenceAgentRetirement(const std::string& renderId)
         if (UnitWSD::isUnitTesting())
             _unitWsd->agentRetirementFence(this, record.epoch);
 #endif
-        if (_nativeSaveBarriers.empty() && !_agentSaveAttempt && !_saveManager.isSaving() && !isAsyncUploading())
+        if (record.reservationConfirmed && !record.stopDispatched &&
+            _nativeSaveBarriers.empty() && !_agentSaveAttempt && !_saveManager.isSaving() && !isAsyncUploading())
         {
 #if ENABLE_DEBUG
             if (UnitWSD::isUnitTesting())
                 _unitWsd->agentRetirementEvent(this, "native-stop-dispatched");
 #endif
+            record.stopDispatched = true;
             _childProcess->sendTextFrame("child-" + record.renderId +
                                         " agentretire epoch=" + record.epoch);
         }
@@ -293,8 +359,16 @@ bool DocumentBroker::handleAgentRetirementKit(const std::string& message)
     };
     if (matches("agentregisteredkit:"))
     {
-        if (record.phase != AgentRetirementRecord::Phase::Registering)
+        if (record.reservationConfirmed ||
+            (record.phase != AgentRetirementRecord::Phase::Registering &&
+             record.phase != AgentRetirementRecord::Phase::Retiring))
             return false;
+        record.reservationConfirmed = true;
+        if (record.phase == AgentRetirementRecord::Phase::Retiring)
+        {
+            fenceAgentRetirement(record.renderId);
+            return true;
+        }
         const auto session = record.transport.lock();
         if (!session || !session->isWritable() ||
             !record.authority.matches(session->getAuthorization()))
@@ -331,7 +405,7 @@ bool DocumentBroker::handleAgentRetirementKit(const std::string& message)
         return true;
     }
     if (!matches("agentretiredkit:") || record.phase != AgentRetirementRecord::Phase::Retiring ||
-        !_childProcess || !_childProcess->drainRetiredUrpOutput())
+        !record.stopDispatched || !_childProcess || !_childProcess->drainRetiredUrpOutput())
         return false;
     record.phase = AgentRetirementRecord::Phase::Retired;
     if (const auto found = _sessions.find(record.renderId); found != _sessions.end())

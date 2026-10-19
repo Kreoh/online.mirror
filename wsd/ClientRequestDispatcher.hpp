@@ -119,6 +119,11 @@ private:
                                        SocketDisposition& disposition,
                                        const std::shared_ptr<StreamSocket>& socket);
 
+    /// Recovers a retained registration for cleanup using its original credential.
+    static bool handleAgentRecoveryRequest(const Poco::Net::HTTPRequest& request,
+                                           SocketDisposition& disposition,
+                                           const std::shared_ptr<StreamSocket>& socket);
+
     /// Requests persistence through the existing live, WOPI-authorised agent session.
     static bool handleAgentSaveRequest(const Poco::Net::HTTPRequest& request,
                                        SocketDisposition& disposition,
