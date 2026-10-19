@@ -243,6 +243,9 @@ public:
         , _phase(Phase::LoadBrowser)
         , _retirement(retirement)
     {
+#if ENABLE_DEBUG
+        setHasKitHooks();
+#endif
         setTimeout(std::chrono::seconds(90));
     }
 
@@ -641,7 +644,11 @@ class UnitAgentQueueExternal final : public UnitWSD
     std::string _activeEpoch, _probedEpoch;
     std::atomic<bool> _finished{false};
 public:
-    UnitAgentQueueExternal() : UnitWSD("UnitAgentQueueExternal") { setTimeout(std::chrono::seconds(300)); }
+    UnitAgentQueueExternal() : UnitWSD("UnitAgentQueueExternal")
+    {
+        setHasKitHooks();
+        setTimeout(std::chrono::seconds(300));
+    }
     void configure(Poco::Util::LayeredConfiguration& config) override
     {
         config.setBool("ssl.enable", false);
@@ -957,6 +964,7 @@ public:
     explicit UnitAgentRetirementProbe(int mode)
         : WopiTestServer("UnitAgentRetirementProbe" + std::to_string(mode), "empty.odt"), _mode(mode)
     {
+        setHasKitHooks();
         setTimeout(std::chrono::seconds(60));
     }
     void configure(Poco::Util::LayeredConfiguration& config) override

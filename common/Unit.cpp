@@ -216,10 +216,11 @@ bool UnitBase::init([[maybe_unused]] UnitType type, [[maybe_unused]] const std::
 
         initTestSuiteOptions();
 
-        // Filter tests. GlobalIndex stays at the first test that matches, or at the dummy
-        // when none does, which is not started.
+        // The selected library supplies one shared Kit hook for its WSD tests.
+        // Apply name filters to WSD and Tool tests only.
         GlobalIndex = 0;
-        filter();
+        if (type != UnitType::Kit)
+            filter();
         if (GlobalIndex == testCount && testCount > 0)
             LOG_WRN("No test matches the filter [" << GlobalTestOptions.getFilter() << ']');
 
