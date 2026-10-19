@@ -19,6 +19,7 @@ RUN apt-get update && \
         ca-certificates \
         ccache \
         cmake \
+        cpio \
         curl \
         default-jdk \
         docker-buildx \

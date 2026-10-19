@@ -3,6 +3,8 @@
 
 test $# -eq 2 || { echo "Usage: $0 <chroot template directory for system libs to create> <LO installation directory>"; exit 1; }
 
+command -v cpio >/dev/null || { echo "$0: Missing required utility: cpio" >&2; exit 1; }
+
 # No provision for spaces or other weird characters in pathnames. So sue me.
 
 # First parameter is the pathname where this script will create the "systemplate" tree
@@ -90,7 +92,7 @@ find etc/pki/tls/certs/ca-bundle.crt \
 
 # Can't use -l because then symlinks won't be handled well enough.
 # This will now copy the file a symlink points to, but whatever.
-cpio -p -d -L $CHROOT
+cpio -p -d -L $CHROOT || { echo "$0: Failed to copy systemplate files with cpio" >&2; exit 1; }
 
 # Link the dynamic files, replacing any existing.
 rm -f $CHROOT/etc/copied

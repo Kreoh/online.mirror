@@ -91,18 +91,50 @@ if test ! -d online ; then
   git clone --depth=1 --branch "$ONLINE_OFFICE_SOURCE_BRANCH" "$ONLINE_OFFICE_SOURCE_REPOSITORY" online || exit 1
 fi
 
+# BEGIN PINNED CHECKOUT (also exercised by test-build-preparation.sh)
 (
-  cd online &&
-  test "$(git config --get remote.origin.url)" = "$ONLINE_OFFICE_SOURCE_REPOSITORY" &&
-  git fetch --depth=1 --force origin \
-    "+refs/heads/$ONLINE_OFFICE_SOURCE_BRANCH:refs/remotes/origin/$ONLINE_OFFICE_SOURCE_BRANCH" &&
-  git cat-file -e "$ONLINE_OFFICE_SOURCE_REVISION^{commit}" &&
-  git merge-base --is-ancestor "$ONLINE_OFFICE_SOURCE_REVISION" \
-    "refs/remotes/origin/$ONLINE_OFFICE_SOURCE_BRANCH" &&
-  git checkout --detach -f "$ONLINE_OFFICE_SOURCE_REVISION" &&
-  git clean -f -d &&
+  cd online || exit 1
+  test "$(git config --get remote.origin.url)" = "$ONLINE_OFFICE_SOURCE_REPOSITORY" || {
+    echo "Source cache origin does not match the configured repository." >&2
+    exit 1
+  }
+  [[ "$ONLINE_OFFICE_SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "Source revision must be a full lower-case Git revision." >&2
+    exit 1
+  }
+  branch_ref="refs/remotes/origin/$ONLINE_OFFICE_SOURCE_BRANCH"
+  branch_refspec="+refs/heads/$ONLINE_OFFICE_SOURCE_BRANCH:$branch_ref"
+  fetch_options=(--force)
+  if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+    fetch_options+=(--depth=1)
+  fi
+  git fetch "${fetch_options[@]}" origin "$branch_refspec" || {
+    echo "Could not fetch the configured source branch." >&2
+    exit 1
+  }
+  if ! git cat-file -e "$ONLINE_OFFICE_SOURCE_REVISION^{commit}" 2>/dev/null ||
+      ! git merge-base --is-ancestor "$ONLINE_OFFICE_SOURCE_REVISION" "$branch_ref"; then
+    if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+      echo "Fetching full configured branch history to verify the pinned revision."
+      git fetch --unshallow --force origin "$branch_refspec" || {
+        echo "Could not fetch full source history for the pinned revision." >&2
+        exit 1
+      }
+    fi
+  fi
+  git cat-file -e "$ONLINE_OFFICE_SOURCE_REVISION^{commit}" 2>/dev/null || {
+    echo "Pinned source revision is missing after fetching the configured branch." >&2
+    exit 1
+  }
+  git merge-base --is-ancestor "$ONLINE_OFFICE_SOURCE_REVISION" "$branch_ref" || {
+    echo "Pinned source revision is not an ancestor of the configured branch." >&2
+    exit 1
+  }
+  git checkout --detach -f "$ONLINE_OFFICE_SOURCE_REVISION" || exit 1
+  git clean -f -d || exit 1
   test "$(git rev-parse HEAD)" = "$ONLINE_OFFICE_SOURCE_REVISION"
 ) || exit 1
+# END PINNED CHECKOUT
 
 source_version=$(awk -F'[][]' '$2 == "coolwsd" { print $4; exit }' online/configure.ac) || exit 1
 if [ -z "$source_version" ]; then
@@ -142,6 +174,17 @@ configure_release()
 {
 ( cd online && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-tests --with-lokit-path="$BUILDDIR"/online/engine/include --with-lo-builddir="$BUILDDIR"/online/engine --with-lo-path=/opt/online-office --without-app-branding --with-app-name='Online Office' --with-app-package-name=org.onlineoffice.app --without-vendor --with-info-url=about:blank $ONLINE_EXTRA_BUILD_OPTIONS)
 }
+# The existing recipe removes and recreates systemplate after its stamp is removed.
+# Cached stamps from builders without cpio may describe incomplete templates.
+prepare_systemplate()
+{
+  command -v cpio >/dev/null || {
+    echo "Missing required systemplate utility: cpio. Rebuild the Jenkins builder image." >&2
+    return 1
+  }
+  rm -f -- "$BUILDDIR/online/systemplate/system_stamp"
+}
+prepare_systemplate || exit 1
 configure_release || exit 1
 ( cd online && make -j $(nproc)) || exit 1
 
@@ -182,24 +225,38 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
         --with-app-package-name=org.onlineoffice.app --without-vendor \
         --with-info-url=about:blank $ONLINE_EXTRA_BUILD_OPTIONS || exit 1
       make -j "$(nproc)" coolwsd coolmount coolforkit-caps coolforkit-ns || exit 1
+      prepare_systemplate || exit 1
       make systemplate "$BUILDDIR/online/jails" "$BUILDDIR/online/cache" presets-dir || exit 1
       make -C test unit-agent-control.la || exit 1
 
       if [ "$ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION" = true ]; then
-        test "$BUILDDIR" = /workspace-cache/build/builddir || exit 1
+        test "$BUILDDIR" = /workspace-cache/build/builddir || {
+          echo "Queue export requires build root /workspace-cache/build/builddir; got $BUILDDIR" >&2
+          exit 1
+        }
         queue_stage="$(mktemp -d "$report_dir/.queue-root.XXXXXX")" || exit 1
-        QUEUE_STAGE="$queue_stage" QUEUE_REPORT="$report_dir" QUEUE_BUILD="$BUILDDIR" bash -euo pipefail <<'QUEUE_PACKAGE'
+        QUEUE_STAGE="$queue_stage" QUEUE_REPORT="$report_dir" QUEUE_BUILD="$BUILDDIR" bash -Eeuo pipefail <<'QUEUE_PACKAGE'
           queue_stage="$QUEUE_STAGE"
           report_dir="$QUEUE_REPORT"
           BUILDDIR="$QUEUE_BUILD"
           trap 'rm -rf -- "$queue_stage"' EXIT
+          trap 'status=$?; printf "Queue export failed at line %s (exit %s).\n" "$LINENO" "$status" >&2; exit "$status"' ERR
           # Preserve configured absolute paths, without copying a source checkout.
-          test -d "$PWD/test/data/presets"
+          test -d "$PWD/test/data/presets" || {
+            echo "Missing queue export presets: $PWD/test/data/presets" >&2
+            exit 1
+          }
           for resource in coolwsd coolmount coolforkit-caps coolforkit-ns coolwsd.xml \
-              .libs test/run_unit.sh test/.libs/unit-agent-control.so test/data \
+              test/run_unit.sh test/.libs/unit-agent-control.so test/data \
               browser/dist etc systemplate engine/instdir; do
-            test -e "$PWD/$resource"
-            cp -a --parents "$PWD/$resource" "$queue_stage/"
+            test -e "$PWD/$resource" || {
+              echo "Missing queue export resource: $PWD/$resource" >&2
+              exit 1
+            }
+            cp -a --parents "$PWD/$resource" "$queue_stage/" || {
+              echo "Could not copy queue export resource: $PWD/$resource" >&2
+              exit 1
+            }
           done
           # Include transitive binary/unit dependencies at their recorded absolute paths.
           : > "$report_dir/debug-dependencies.txt"
@@ -208,9 +265,18 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
             if file -b "$executable" | grep -q ELF; then
               runtime_executable="${executable#"$queue_stage"}"
               dependencies="$(ldd "$runtime_executable" 2>&1)" || {
-                case "$dependencies" in *"not a dynamic executable"*|*"statically linked"*) continue;; *) exit 1;; esac
+                case "$dependencies" in
+                  *"not a dynamic executable"*|*"statically linked"*) continue;;
+                  *)
+                    echo "Could not inspect queue export dependencies: $runtime_executable" >&2
+                    exit 1
+                    ;;
+                esac
               }
-              ! printf '%s\n' "$dependencies" | grep -q 'not found'
+              if printf '%s\n' "$dependencies" | grep -q 'not found'; then
+                printf 'Missing queue export dependencies for %s:\n%s\n' "$runtime_executable" "$dependencies" >&2
+                exit 1
+              fi
               printf '%s\n%s\n' "$runtime_executable" "$dependencies" >> "$report_dir/debug-dependencies.txt"
               while IFS= read -r dependency; do
                 test -f "$dependency"
