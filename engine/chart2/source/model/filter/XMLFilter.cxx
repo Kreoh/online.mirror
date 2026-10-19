@@ -125,8 +125,10 @@ std::vector<WorkbookSequence> workbookSequences(const Reference<XChartDocument>&
             ENSURE_OR_THROW(aSequences.size() < 16384, "Chart workbook exceeds the sequence limit");
             const OUString aRange = xSequence->getSourceRangeRepresentation();
             if (bCategories)
+            {
                 ENSURE_OR_THROW(!bLabel && aRange == "categories",
                                 "Unsupported chart workbook categories");
+            }
             else
             {
                 const OUString aIndex

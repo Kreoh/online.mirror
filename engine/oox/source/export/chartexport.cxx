@@ -2205,7 +2205,7 @@ void ChartExport::prepareWorkbook(const Reference<chart2::XChartDocument>& xChar
                 ->setPropertyValue(u"NumberFormat"_ustr, Any(nFormat));
             OUString sColumn;
             for (sal_Int32 n = nColumn + 1; n > 0; n = (n - 1) / 26)
-                sColumn = OUStringChar('A' + (n - 1) % 26) + sColumn;
+                sColumn = OUStringChar(static_cast<sal_Unicode>('A' + (n - 1) % 26)) + sColumn;
             const OUString sRange = "ChartData!$" + sColumn + "$1:$" + sColumn + "$"
                                     + OUString::number(std::max<sal_Int32>(1, aData.getLength()));
             maWorkbookRanges[xSequence.get()] = sRange;
@@ -2235,9 +2235,10 @@ void ChartExport::prepareWorkbook(const Reference<chart2::XChartDocument>& xChar
     xOutput->writeBytes(aWorkbook);
     xOutput->closeOutput();
     aClose.dismiss();
+    const OUString sTarget = u"../embeddings/"_ustr + sName;
     msWorkbookRelation = GetFB()->addRelation(GetFS()->getOutputStream(),
                                               oox::getRelationship(Relationship::PACKAGE),
-                                              "../embeddings/" + sName);
+                                              sTarget);
 }
 
 OUString ChartExport::GetExternalDataPath() const
