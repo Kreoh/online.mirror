@@ -742,7 +742,7 @@ public:
                 LOK_ASSERT(broker.get() == value.broker);
                 value.armed = true;
                 _probedEpoch = epoch;
-                broker->addCallback([broker, render, epoch] {
+                broker->addCallback([this, broker, render, epoch] {
                     LOK_ASSERT(broker->forwardToChild(render, "unitretirement queue=" + epoch, false));
                 });
             }
@@ -807,7 +807,7 @@ class UnitAgentRetirementProbe final : public WopiTestServer
     {
         const auto broker = _browser->getDocumentBroker();
         const auto browser = _browser;
-        broker->addCallback([broker, browser, command] {
+        broker->addCallback([this, broker, browser, command] {
             LOK_ASSERT(broker->forwardToChild(browser, "unitretirement " + command, false));
         });
     }
