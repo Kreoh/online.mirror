@@ -178,7 +178,7 @@ public:
     void            FreeUno( const cpo::uno::Reference< css::chart::XChartDataChangeEventListener >& rListener,
                              const cpo::uno::Reference< css::chart::XChartData >& rSource );
     void            StartTimer();
-    void            UpdateDirtyCharts();
+    SC_DLLPUBLIC void UpdateDirtyCharts();
     void            SetDirty();
     void            SetDiffDirty( const ScChartListenerCollection&,
                         bool bSetChartRangeLists );
