@@ -2839,40 +2839,88 @@ CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testGetRowColumnHeadersInvalidation)
 
     int nView1 = KitHelper::getCurrentView();
     ScTestViewCallback aView1;
+    // Observe the typed origin while retaining the existing geometry assertions.
+    class OriginCallback final : public CoKitCallbackInterface
+    {
+        CoKitCallbackInterface& mrDelegate;
+        SfxViewShell* mpView;
+    public:
+        std::vector<bool> origins;
+        OriginCallback(CoKitCallbackInterface& rDelegate, SfxViewShell* pView)
+            : mrDelegate(rDelegate), mpView(pView) { mpView->setCOKitViewCallback(this); }
+        ~OriginCallback() override { mpView->setCOKitViewCallback(&mrDelegate); }
+        void viewCallback(COKitCallbackType t, const OString& p) override { mrDelegate.viewCallback(t, p); }
+        void viewCallbackWithViewId(COKitCallbackType t, const OString& p, int v) override
+        { mrDelegate.viewCallbackWithViewId(t, p, v); }
+        void viewInvalidateTilesCallback(const tools::Rectangle* r, int p, int m) override
+        { viewInvalidateTilesCallback(r, p, m, false); }
+        void viewInvalidateTilesCallback(const tools::Rectangle* r, int p, int m, bool origin) override
+        { origins.push_back(origin); mrDelegate.viewInvalidateTilesCallback(r, p, m); }
+        void viewUpdatedCallback(COKitCallbackType t) override { mrDelegate.viewUpdatedCallback(t); }
+        void viewUpdatedCallbackPerViewId(COKitCallbackType t, int v, int s) override
+        { mrDelegate.viewUpdatedCallbackPerViewId(t, v, s); }
+        void viewVectorPartChanged(const OString& p, int m) override { mrDelegate.viewVectorPartChanged(p, m); }
+        void viewAddPendingInvalidateTiles() override { mrDelegate.viewAddPendingInvalidateTiles(); }
+        void dumpState(OStringBuffer& s) override { mrDelegate.dumpState(s); }
+    } aOrigins(aView1.m_callbackWrapper, aView1.getViewShell());
     CPPUNIT_ASSERT(!hasEditView(*pViewData));
 
     KitHelper::setView(nView1);
     aView1.m_bInvalidateTiles = false;
     aView1.m_aInvalidations.clear();
+    aOrigins.origins.clear();
     tools::JsonWriter aJsonWriter1;
     pModelObj->getRowColumnHeaders(tools::Rectangle(0, 15, 19650, 5400), aJsonWriter1);
     aJsonWriter1.finishAndGetAsOString();
     Scheduler::ProcessEventsToIdle();
     CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
     CPPUNIT_ASSERT_EQUAL(size_t(1), aView1.m_aInvalidations.size());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aOrigins.origins.size());
+    CPPUNIT_ASSERT(aOrigins.origins[0]);
     CPPUNIT_ASSERT_EQUAL(tools::Rectangle(Point(26775, 0), Size(22950, 13005)), aView1.m_aInvalidations[0]);
 
     // Extend area top-to-bottom
     aView1.m_bInvalidateTiles = false;
     aView1.m_aInvalidations.clear();
+    aOrigins.origins.clear();
     tools::JsonWriter aJsonWriter2;
     pModelObj->getRowColumnHeaders(tools::Rectangle(0, 5400, 19650, 9800), aJsonWriter2);
     aJsonWriter2.finishAndGetAsOString();
     Scheduler::ProcessEventsToIdle();
     CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
     CPPUNIT_ASSERT_EQUAL(size_t(1), aView1.m_aInvalidations.size());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aOrigins.origins.size());
+    CPPUNIT_ASSERT(aOrigins.origins[0]);
     CPPUNIT_ASSERT_EQUAL(tools::Rectangle(Point(0, 13005), Size(49725, 6375)), aView1.m_aInvalidations[0]);
 
     // Extend area left-to-right
     aView1.m_bInvalidateTiles = false;
     aView1.m_aInvalidations.clear();
+    aOrigins.origins.clear();
     tools::JsonWriter aJsonWriter3;
     pModelObj->getRowColumnHeaders(tools::Rectangle(5400, 5400, 25050, 9800), aJsonWriter3);
     aJsonWriter3.finishAndGetAsOString();
     Scheduler::ProcessEventsToIdle();
     CPPUNIT_ASSERT(aView1.m_bInvalidateTiles);
     CPPUNIT_ASSERT_EQUAL(size_t(1), aView1.m_aInvalidations.size());
+    CPPUNIT_ASSERT_EQUAL(size_t(1), aOrigins.origins.size());
+    CPPUNIT_ASSERT(aOrigins.origins[0]);
     CPPUNIT_ASSERT_EQUAL(tools::Rectangle(Point(49725, 0), Size(25500, 19380)), aView1.m_aInvalidations[0]);
+
+    // Entering and calculating a formula must still produce genuine invalidations.
+    aOrigins.origins.clear();
+    for (char c : std::string("=1+1"))
+    {
+        pModelObj->postKeyEvent(COKitKeyEventType::DOWN, c, 0);
+        pModelObj->postKeyEvent(COKitKeyEventType::UP, c, 0);
+    }
+    pModelObj->postKeyEvent(COKitKeyEventType::DOWN, 0, awt::Key::RETURN);
+    pModelObj->postKeyEvent(COKitKeyEventType::UP, 0, awt::Key::RETURN);
+    Scheduler::ProcessEventsToIdle();
+    CPPUNIT_ASSERT_EQUAL(2.0, pViewData->GetDocument().GetValue(ScAddress(0, 0, 0)));
+    CPPUNIT_ASSERT(!aOrigins.origins.empty());
+    for (bool origin : aOrigins.origins)
+        CPPUNIT_ASSERT(!origin);
 }
 
 CPPUNIT_TEST_FIXTURE(ScTiledRenderingTest, testJumpHorizontallyInvalidation)

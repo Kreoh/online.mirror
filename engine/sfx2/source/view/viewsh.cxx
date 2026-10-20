@@ -3990,10 +3990,16 @@ static bool ignoreCOKitViewCallback(COKitCallbackType eType, const SfxViewShell_
 
 void SfxViewShell::viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode) const
 {
+    viewInvalidateTilesCallback(pRect, nPart, nMode, false);
+}
+
+void SfxViewShell::viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode,
+                                              bool bTiledAreaExtensionOnly) const
+{
     if (ignoreCOKitViewCallback(COKitCallbackType::INVALIDATE_TILES, pImpl.get()))
         return;
     if (pImpl->m_pCOKitViewCallback)
-        pImpl->m_pCOKitViewCallback->viewInvalidateTilesCallback(pRect, nPart, nMode);
+        pImpl->m_pCOKitViewCallback->viewInvalidateTilesCallback(pRect, nPart, nMode, bTiledAreaExtensionOnly);
     else
         SAL_INFO(
             "sfx.view",

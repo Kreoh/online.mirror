@@ -1110,7 +1110,11 @@ getchildid: id=<id>
 
     Returns the child id
 
-invalidatetiles: part=<partId> x=<x> y=<y> width=<width> height=<height> wid=<wid> [sourceviewid=<sourceViewId>]
+invalidatetiles: part=<partId> x=<x> y=<y> width=<width> height=<height> wid=<wid> [sourceviewid=<sourceViewId>] [origin=tiled-area-extension]
+
+    The optional origin marks a repaint caused solely by extending Calc's tiled area.
+    It does not suppress repainting. Coalescing with any other invalidation removes
+    the origin. Missing, unknown, malformed or duplicate origins carry no exemption.
 
     Tells the client to invalidate any cached tiles for the document
     area specified (in twips), at any zoom level. For a presentation
@@ -1118,7 +1122,7 @@ invalidatetiles: part=<partId> x=<x> y=<y> width=<width> height=<height> wid=<wi
     the tiles carry; every other parameter is a number. The optional signed source view ID
     identifies the view that caused the invalidation.
 
-invalidatetiles: EMPTY, <partId>, <mode>, wid=<wid> [sourceviewid=<sourceViewId>]
+invalidatetiles: EMPTY, <partId>, <mode>, wid=<wid> [sourceviewid=<sourceViewId>] [origin=tiled-area-extension]
 
     Tells the client to invalidate all cached tiles.
 

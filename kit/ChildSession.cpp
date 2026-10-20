@@ -5439,11 +5439,20 @@ void ChildSession::loKitCallback(const COKitCallbackType type, const std::string
                 sourceViewMarkerPosition == std::string::npos
                     ? " sourceviewid=-1"
                     : payload.substr(sourceViewMarkerPosition);
-            const std::string invalidationPayload =
+            std::string invalidationPayload =
                 sourceViewMarkerPosition == std::string::npos
                     ? payload
                     : payload.substr(0, sourceViewMarkerPosition);
+            constexpr std::string_view OriginMarker = " origin=tiled-area-extension";
+            std::string origin;
+            if (invalidationPayload.ends_with(OriginMarker)
+                && invalidationPayload.find("origin") == invalidationPayload.size() - OriginMarker.size() + 1)
+            {
+                origin = OriginMarker;
+                invalidationPayload.resize(invalidationPayload.size() - OriginMarker.size());
+            }
             StringVector tokens(StringVector::tokenize(invalidationPayload, ','));
+
             if (tokens.size() == 5 || tokens.size() == 6)
             {
                 int x, y, width, height, mode = 0;
@@ -5479,7 +5488,7 @@ void ChildSession::loKitCallback(const COKitCallbackType type, const std::string
                               " width=" + std::to_string(width) +
                               " height=" + std::to_string(height) +
                               " wid=" + std::to_string(getCurrentWireId()) +
-                              sourceViewAttribution);
+                              sourceViewAttribution + origin);
             }
             else if ((tokens.size() == 2 || tokens.size() == 3) && tokens.equals(0, "EMPTY"))
             {
@@ -5490,12 +5499,12 @@ void ChildSession::loKitCallback(const COKitCallbackType type, const std::string
                 const int mode = (tokens.size() == 3 ? std::atoi(tokens[2].c_str()) : 0);
                 sendTextFrame("invalidatetiles: EMPTY, " + part + ", " +
                               std::to_string(mode) + " wid=" + std::to_string(getCurrentWireId()) +
-                              sourceViewAttribution);
+                              sourceViewAttribution + origin);
             }
             else
             {
                 sendTextFrame("invalidatetiles: " + invalidationPayload +
-                              " wid=" + std::to_string(getCurrentWireId()) + sourceViewAttribution);
+                              " wid=" + std::to_string(getCurrentWireId()) + sourceViewAttribution + origin);
             }
         }
         break;

@@ -2886,7 +2886,7 @@ void lcl_ExtendTiledDimension(bool bColumn, const SCCOLROW nEnd, const SCCOLROW 
         // The newly tiled area is in print twips, from column widths and row
         // heights rather than any one view's pixel grid, so every view - not
         // just this one - can use the same rectangle regardless of its own zoom.
-        KitHelper::notifyInvalidationAllViews(pModelObj, rViewData.GetViewShell()->getPart(), &aNewArea, false);
+        KitHelper::notifyInvalidationAllViews(pModelObj, rViewData.GetViewShell()->getPart(), &aNewArea, false, true);
     }
 
     // Provide size in the payload, so clients don't have to query for that.

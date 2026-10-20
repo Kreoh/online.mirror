@@ -594,9 +594,17 @@ static int lcl_getViewId(std::string_view payload);
 
 namespace desktop {
 
-RectangleAndPart RectangleAndPart::Create(const OString& rPayload)
+RectangleAndPart RectangleAndPart::Create(const OString& rInput)
 {
     RectangleAndPart aRet;
+    OString rPayload = rInput;
+    constexpr std::string_view aOrigin = " origin=tiled-area-extension";
+    const sal_Int32 nOrigin = rInput.indexOf("origin");
+    if (rInput.endsWith(aOrigin) && nOrigin == rInput.getLength() - sal_Int32(aOrigin.size()) + 1)
+    {
+        aRet.m_bTiledAreaExtensionOnly = true;
+        rPayload = rInput.copy(0, rInput.getLength() - aOrigin.size());
+    }
     if (rPayload.startsWith("EMPTY")) // payload starts with "EMPTY"
     {
         aRet.m_aRectangle = tools::Rectangle(0, 0, KitHelper::MaxTwips, KitHelper::MaxTwips);
@@ -615,6 +623,11 @@ RectangleAndPart RectangleAndPart::Create(const OString& rPayload)
             aRet.m_nMode = 0;
         }
 
+        // Only canonical, complete payloads may carry the presentation-only origin.
+        const bool bMarked = aRet.m_bTiledAreaExtensionOnly;
+        aRet.m_bTiledAreaExtensionOnly = false;
+        aRet.m_bTiledAreaExtensionOnly = bMarked && !aRet.m_aPart.isEmpty()
+            && rPayload == aRet.toString();
         return aRet;
     }
 
@@ -662,6 +675,11 @@ RectangleAndPart RectangleAndPart::Create(const OString& rPayload)
     aRet.m_aRectangle = SanitizedRectangle(nLeft, nTop, nWidth, nHeight);
     aRet.m_aPart = std::move(aPart);
     aRet.m_nMode = nMode;
+    // Only canonical, complete payloads may carry the presentation-only origin.
+    const bool bMarked = aRet.m_bTiledAreaExtensionOnly;
+    aRet.m_bTiledAreaExtensionOnly = false;
+    aRet.m_bTiledAreaExtensionOnly = bMarked && !aRet.m_aPart.isEmpty()
+        && rPayload == aRet.toString();
     return aRet;
 }
 
@@ -1697,6 +1715,12 @@ void CallbackFlushHandler::flushVectorPrimitivesDeltas()
 
 void CallbackFlushHandler::viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode)
 {
+    viewInvalidateTilesCallback(pRect, nPart, nMode, false);
+}
+
+void CallbackFlushHandler::viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode,
+                                                       bool bTiledAreaExtensionOnly)
+{
     // The invalidation carries the page-list index of the invalidated page, while the boundary
     // names parts of a presentation or drawing document by their stable page identifiers.
     // Translate when queueing, while the page still holds that index, so the queued rectangles
@@ -1750,7 +1774,7 @@ void CallbackFlushHandler::viewInvalidateTilesCallback(const tools::Rectangle* p
     }
 
     // RectangleAndPart ctor doesn't store &aRect, so this is OK.
-    CallbackData callbackData(&aRect, aPart, nMode);
+    CallbackData callbackData(&aRect, aPart, nMode, bTiledAreaExtensionOnly);
     queue(COKitCallbackType::INVALIDATE_TILES, callbackData);
 }
 
@@ -2140,12 +2164,14 @@ bool CallbackFlushHandler::processInvalidateTilesEvent(COKitCallbackType type, C
     if (pos != m_queue1.rend())
     {
         auto pos2 = toQueue2(pos);
-        const RectangleAndPart& rcOld = pos2->getRectangleAndPart();
+        RectangleAndPart rcOld = pos2->getRectangleAndPart();
         if (rcOld.isInfinite() && (rcOld.isAllParts() || rcOld.m_aPart == rcNew.m_aPart) &&
             (rcOld.m_nMode == rcNew.m_nMode))
         {
             SAL_INFO("kit", "Skipping queue [" << type << "]: [" << aCallbackData.getPayload()
                                                << "] since all tiles need to be invalidated.");
+            rcOld.m_bTiledAreaExtensionOnly &= rcNew.m_bTiledAreaExtensionOnly;
+            pos2->updateRectangleAndPart(rcOld);
             return true;
         }
 
@@ -2156,6 +2182,8 @@ bool CallbackFlushHandler::processInvalidateTilesEvent(COKitCallbackType type, C
             {
                 SAL_INFO("kit", "Skipping queue [" << type << "]: [" << aCallbackData.getPayload()
                                                    << "] since overlaps existing all-parts.");
+                rcOld.m_bTiledAreaExtensionOnly &= rcNew.m_bTiledAreaExtensionOnly;
+                pos2->updateRectangleAndPart(rcOld);
                 return true;
             }
         }
@@ -2167,8 +2195,12 @@ bool CallbackFlushHandler::processInvalidateTilesEvent(COKitCallbackType type, C
                                        << "] so removing all with part " << rcNew.m_aPart << ".");
         removeAll(COKitCallbackType::INVALIDATE_TILES, [&rcNew](const CallbackData& elemData) {
             // Remove exiting if new is all-encompassing, or if of the same part.
-            return ((rcNew.isAllParts() || rcNew.m_aPart == elemData.getRectangleAndPart().m_aPart)
-                && (rcNew.m_nMode == elemData.getRectangleAndPart().m_nMode));
+            const auto& rcOld = elemData.getRectangleAndPart();
+            const bool bAbsorbed = (rcNew.isAllParts() || rcNew.m_aPart == rcOld.m_aPart)
+                && rcNew.m_nMode == rcOld.m_nMode;
+            if (bAbsorbed)
+                rcNew.m_bTiledAreaExtensionOnly &= rcOld.m_bTiledAreaExtensionOnly;
+            return bAbsorbed;
         });
     }
     else
@@ -2195,6 +2227,7 @@ bool CallbackFlushHandler::processInvalidateTilesEvent(COKitCallbackType type, C
                 {
                     SAL_INFO("kit", "New " << rcNew.toString() << " engulfs old "
                                            << rcOld.toString() << ".");
+                    rcNew.m_bTiledAreaExtensionOnly &= rcOld.m_bTiledAreaExtensionOnly;
                     return true;
                 }
             }
@@ -2207,6 +2240,7 @@ bool CallbackFlushHandler::processInvalidateTilesEvent(COKitCallbackType type, C
                 {
                     SAL_INFO("kit", "New " << rcNew.toString() << " engulfs old "
                                            << rcOld.toString() << ".");
+                    rcNew.m_bTiledAreaExtensionOnly &= rcOld.m_bTiledAreaExtensionOnly;
                     return true;
                 }
             }
@@ -2222,6 +2256,7 @@ bool CallbackFlushHandler::processInvalidateTilesEvent(COKitCallbackType type, C
                 {
                     rcNew.m_aRectangle.Union(rcOld.m_aRectangle);
                     SAL_INFO("kit", "Merged: " << rcNew.toString());
+                    rcNew.m_bTiledAreaExtensionOnly &= rcOld.m_bTiledAreaExtensionOnly;
                     return true;
                 }
             }

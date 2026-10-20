@@ -204,7 +204,8 @@ public:
     /// sheet), so the view showing the part still gets invalidated.
     static void notifyInvalidationAllViews(vcl::ITiledRenderable* pDoc, int nPart,
                                            tools::Rectangle const* pRect,
-                                           bool bSkipViewShowingPart = true);
+                                           bool bSkipViewShowingPart = true,
+                                           bool bTiledAreaExtensionOnly = false);
     /// Emits a COKitCallbackType::INVALIDATE_TILES for the given part and rectangle on the
     /// views of the document whose current edit mode is nMode. A null rectangle invalidates
     /// the whole part. When bSkipViewShowingPart is true the views currently showing that part
@@ -215,7 +216,8 @@ public:
     /// Emits a COKitCallbackType::INVALIDATE_VISIBLE_CURSOR
     static void notifyCursorInvalidation(SfxViewShell const* pThisView, tools::Rectangle const * pRect, bool bControlEvent, int windowID);
     /// Emits a COKitCallbackType::INVALIDATE_TILES, but tweaks it according to setOptionalFeatures() if needed.
-    static void notifyInvalidation(SfxViewShell const* pThisView, int nPart, tools::Rectangle const *);
+    static void notifyInvalidation(SfxViewShell const* pThisView, int nPart, tools::Rectangle const *,
+                                   bool bTiledAreaExtensionOnly = false);
     /// Emits a COKitCallbackType::INVALIDATE_TILES, but tweaks it according to setOptionalFeatures() if needed
     /// uses the Part reported by pThisView
     static void notifyInvalidation(SfxViewShell const* pThisView, tools::Rectangle const *);

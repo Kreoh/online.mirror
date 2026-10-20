@@ -104,6 +104,9 @@ class UnitAgentControl final : public WopiTestServer
             invalidation.find("sourceviewid=" + std::to_string(renderView->getKitViewId())) !=
                 std::string::npos);
 
+        LOK_ASSERT_MESSAGE("A real edit must not carry a presentation-only origin",
+                           invalidation.find("origin=") == std::string::npos);
+
         const auto replacement = _browserSocket->waitForMessageAny(
             { "tile:", "delta:" }, std::chrono::seconds(10), getTestname());
         LOK_ASSERT_MESSAGE("The invalidation must automatically repaint the browser tile",

@@ -2068,6 +2068,55 @@ void DesktopKitTest::testTileInvalidationCompression()
 {
     COKitDocumentImpl* pDocument = loadDoc("blank_text.odt");
 
+    // Every absorbed invalidation must agree on the presentation-only origin.
+    const OString origin = " origin=tiled-area-extension"_ostr;
+    const std::vector<std::pair<OString, OString>> pairs = {
+        { "0, 0, 200, 200, 0, 0"_ostr, "0, 0, 200, 200, 0, 0"_ostr },
+        { "0, 0, 200, 200, 0, 0"_ostr, "10, 10, 100, 100, 0, 0"_ostr },
+        { "0, 0, 200, 200, 0, 0"_ostr, "100, 100, 200, 200, 0, 0"_ostr },
+        { "EMPTY, 0, 0"_ostr, "0, 0, 200, 200, 0, 0"_ostr },
+        { "EMPTY, -1, 0"_ostr, "0, 0, 200, 200, 1, 0"_ostr },
+        { "0, 0, 200, 200, -1, 0"_ostr, "10, 10, 100, 100, 1, 0"_ostr },
+    };
+    for (const auto& pair : pairs)
+        for (bool reverse : { false, true })
+            for (bool interleave : { false, true })
+                for (int markers = 0; markers < 4; ++markers)
+                {
+                    std::vector<std::tuple<int, std::string>> notifs;
+                    CallbackFlushHandler handler(pDocument, callbackCompressionTest, &notifs);
+                    handler.setViewId(KitHelper::getCurrentView());
+                    OString first = pair.first + ((markers & 1) ? origin : OString());
+                    OString second = pair.second + ((markers & 2) ? origin : OString());
+                    handler.queue(COKitCallbackType::INVALIDATE_TILES, reverse ? second : first);
+                    if (interleave)
+                        handler.queue(COKitCallbackType::INVALIDATE_TILES,
+                                      "1000, 1000, 100, 100, 99, 1"_ostr);
+                    handler.queue(COKitCallbackType::INVALIDATE_TILES, reverse ? first : second);
+                    Scheduler::ProcessEventsToIdle();
+                    CPPUNIT_ASSERT_EQUAL(size_t(interleave ? 2 : 1), notifs.size());
+                    size_t marked = 0;
+                    for (const auto& notification : notifs)
+                        if (std::get<1>(notification).find("origin=") != std::string::npos)
+                            ++marked;
+                    CPPUNIT_ASSERT_EQUAL(size_t(markers == 3 ? 1 : 0), marked);
+                }
+    for (const OString& suffix : { " origin=unknown"_ostr,
+                                  " origin=tiled-area-extensionjunk"_ostr,
+                                  origin + origin })
+    {
+        std::vector<std::tuple<int, std::string>> notifs;
+        CallbackFlushHandler handler(pDocument, callbackCompressionTest, &notifs);
+        handler.setViewId(KitHelper::getCurrentView());
+        handler.queue(COKitCallbackType::INVALIDATE_TILES,
+                      "0, 0, 200, 200, 0, 0"_ostr + origin);
+        handler.queue(COKitCallbackType::INVALIDATE_TILES,
+                      "10, 10, 100, 100, 0, 0"_ostr + suffix);
+        Scheduler::ProcessEventsToIdle();
+        CPPUNIT_ASSERT_EQUAL(size_t(1), notifs.size());
+        CPPUNIT_ASSERT(std::get<1>(notifs[0]).find("origin=") == std::string::npos);
+    }
+
     // Single part merging
     {
         std::vector<std::tuple<int, std::string>> notifs;

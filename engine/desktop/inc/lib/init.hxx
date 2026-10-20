@@ -47,6 +47,7 @@ namespace desktop {
         /// for a part nobody has set yet.
         OString m_aPart;
         int m_nMode;
+        bool m_bTiledAreaExtensionOnly = false;
 
         // This is the "EMPTY" rectangle, which somewhat confusingly actually means
         // to drop all rectangles (see COKitCallbackType::INVALIDATE_TILES documentation),
@@ -58,10 +59,11 @@ namespace desktop {
         {
         }
 
-        RectangleAndPart(const tools::Rectangle* pRect, OString aPart, int nMode)
+        RectangleAndPart(const tools::Rectangle* pRect, OString aPart, int nMode, bool bTiledAreaExtensionOnly = false)
             : m_aRectangle( pRect ? SanitizedRectangle(*pRect) : emptyAllRectangle)
             , m_aPart(std::move(aPart))
             , m_nMode(nMode)
+            , m_bTiledAreaExtensionOnly(bTiledAreaExtensionOnly)
         {
         }
 
@@ -76,7 +78,8 @@ namespace desktop {
             // Every payload carries the part, so the part must have been set by now.
             assert(!m_aPart.isEmpty());
             return (isInfinite() ? "EMPTY"_ostr : m_aRectangle.toString())
-                + ", " + m_aPart + ", " + OString::number(m_nMode);
+                + ", " + m_aPart + ", " + OString::number(m_nMode)
+                + (m_bTiledAreaExtensionOnly ? " origin=tiled-area-extension"_ostr : OString());
         }
 
         /// Infinite Rectangle is both sides are
@@ -153,6 +156,7 @@ namespace desktop {
         virtual void viewCallback(COKitCallbackType eType, const OString& pPayload) override;
         virtual void viewCallbackWithViewId(COKitCallbackType eType, const OString& pPayload, int nViewId) override;
         DESKTOP_DLLPUBLIC virtual void viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode) override;
+        DESKTOP_DLLPUBLIC virtual void viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode, bool bTiledAreaExtensionOnly) override;
         virtual void viewUpdatedCallback(COKitCallbackType eType) override;
         virtual void viewUpdatedCallbackPerViewId(COKitCallbackType eType, int nViewId, int nSourceViewId) override;
         /// Records that a part changed, so the next flush pushes that part's vector-primitives
@@ -176,8 +180,8 @@ namespace desktop {
             {
             }
 
-            CallbackData(const tools::Rectangle* pRect, OString part, int mode)
-                : PayloadObject(RectangleAndPart(pRect, std::move(part), mode))
+            CallbackData(const tools::Rectangle* pRect, OString part, int mode, bool bTiledAreaExtensionOnly = false)
+                : PayloadObject(RectangleAndPart(pRect, std::move(part), mode, bTiledAreaExtensionOnly))
             { // PayloadString will be done on demand
             }
 

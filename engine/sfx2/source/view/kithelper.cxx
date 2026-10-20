@@ -761,7 +761,7 @@ void KitHelper::notifyInvalidation(SfxViewShell const* pThisView, tools::Rectang
     KitHelper::notifyInvalidation(pThisView, nPart, pRect);
 }
 
-void KitHelper::notifyInvalidation(SfxViewShell const* pThisView, const int nInPart, tools::Rectangle const* pRect)
+void KitHelper::notifyInvalidation(SfxViewShell const* pThisView, const int nInPart, tools::Rectangle const* pRect, bool bTiledAreaExtensionOnly)
 {
     if (DisableCallbacks::disabled())
         return;
@@ -769,7 +769,7 @@ void KitHelper::notifyInvalidation(SfxViewShell const* pThisView, const int nInP
     // -1 means all parts
     const int nPart = nInPart;
     const int nMode = pThisView->getEditMode();
-    pThisView->viewInvalidateTilesCallback(pRect, nPart, nMode);
+    pThisView->viewInvalidateTilesCallback(pRect, nPart, nMode, bTiledAreaExtensionOnly);
 }
 
 void KitHelper::notifyDocumentSizeChanged(SfxViewShell const* pThisView, const OString& rPayload, vcl::ITiledRenderable* pDoc, bool bInvalidateAllParts)
@@ -842,7 +842,7 @@ void KitHelper::notifyPartSizeChangedAllViews(vcl::ITiledRenderable* pDoc, int n
 
 void KitHelper::notifyInvalidationAllViews(vcl::ITiledRenderable* pDoc, int nPart,
                                            tools::Rectangle const* pRect,
-                                           bool bSkipViewShowingPart)
+                                           bool bSkipViewShowingPart, bool bTiledAreaExtensionOnly)
 {
     if (!pDoc || pDoc->isDisposed() || DisableCallbacks::disabled())
         return;
@@ -857,7 +857,7 @@ void KitHelper::notifyInvalidationAllViews(vcl::ITiledRenderable* pDoc, int nPar
     {
         if (lcl_getDocForView(pViewShell) == pDoc
             && (!bSkipViewShowingPart || pViewShell->getPart() != nPart))
-            KitHelper::notifyInvalidation(pViewShell, nPart, pRect);
+            KitHelper::notifyInvalidation(pViewShell, nPart, pRect, bTiledAreaExtensionOnly);
         pViewShell = SfxViewShell::GetNext(*pViewShell);
     }
 }

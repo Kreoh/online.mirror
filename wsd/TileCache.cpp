@@ -492,7 +492,12 @@ Util::Rectangle TileCache::parseInvalidateMsg(const std::string& tiles, std::str
 
     // Validate optional attribution separately; it does not affect invalidation geometry.
     std::size_t tokenCount = tokens.size();
+    // Origin follows attribution on the wire. Unknown or duplicate fields remain
+    // in the token count and therefore fail the strict geometry parser below.
+    if (tokenCount > 1 && tokens.equals(tokenCount - 1, "origin=tiled-area-extension"))
+        --tokenCount;
     constexpr std::string_view sourceViewIdPrefix = "sourceviewid=";
+
     if (tokenCount > 1)
     {
         const std::string trailingToken = tokens[tokenCount - 1];

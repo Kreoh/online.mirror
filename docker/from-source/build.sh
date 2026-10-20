@@ -227,7 +227,7 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
     # Keep Calc geometry and chart bindings in the existing Jenkins validation report.
     (
       cd online/engine || exit 1
-      make CppunitTest_sc_subsequent_export_test2
+      make CppunitTest_sc_subsequent_export_test2 CppunitTest_desktop_lib CppunitTest_sc_tiledrendering
     ) 2>&1 | tee "$report_dir/calc-subsequent-export-test2.log" || exit $?
     (
       cd online || exit 1
@@ -242,7 +242,7 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
       make -j "$(nproc)" coolwsd coolmount coolforkit-caps coolforkit-ns || exit 1
       prepare_systemplate || exit 1
       make systemplate "$BUILDDIR/online/jails" "$BUILDDIR/online/cache" presets-dir || exit 1
-      make -C test unit-agent-control.la || exit 1
+      make -C test unit-agent-control.la unit-tiletest.la unittest || exit 1
 
       if [ "$ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION" = true ]; then
         test "$BUILDDIR" = /workspace-cache/build/builddir || {
@@ -505,6 +505,28 @@ grep -q '^:test-result: PASS' "$state/unit-agent-control.trs"
 QUEUE_LAUNCH
         chmod 755 "$report_dir/run-queue-unit.sh" "$report_dir/run-queue-validation.sh"
       fi
+      # Exercise both KitQueue absorption branches and existing invalidation cases.
+      (cd test && CPPUNIT_TEST_NAME='^KitQueueTests::testCallbackInvalidation' \
+        timeout --signal=TERM --kill-after=10s 120s ./unittest --verbose --cert-path ../etc) \
+        > "$report_dir/kit-queue-invalidation.log" 2>&1 || exit $?
+      grep -q 'START KitQueueTests::testCallbackInvalidationOrigin' "$report_dir/kit-queue-invalidation.log" || exit 1
+      grep -q 'END KitQueueTests::testCallbackInvalidationOrigin' "$report_dir/kit-queue-invalidation.log" || exit 1
+      # Select the wire parser regression through the existing CppUnit runner.
+      : > "$report_dir/tile-invalidation-parser.trs" || exit 1
+      set +e
+      (cd test && CPPUNIT_TEST_NAME='^TileCacheTests::testInvalidateMessageParsing$' \
+        COOL_TEST_OPTIONS='' timeout --signal=TERM --kill-after=10s 120s ./run_unit.sh \
+        --test-name unit-tiletest.la --log-file "$report_dir/tile-invalidation-parser.log" \
+        --trs-file "$report_dir/tile-invalidation-parser.trs" --fail-fast)
+      parser_runner_status=$?
+      set -e
+      printf '%s\n' "$parser_runner_status" > "$report_dir/tile-invalidation-parser-exit.txt"
+      test "$parser_runner_status" -eq 0 || exit 1
+      grep -q '^:test-result: PASS' "$report_dir/tile-invalidation-parser.trs" || exit 1
+      ! grep -Eq '^:test-result: (FAIL|SKIP|ERROR)' "$report_dir/tile-invalidation-parser.trs" || exit 1
+      # An unmatched CppUnit filter can report success without running a test.
+      grep -q 'START TileCacheTests::testInvalidateMessageParsing' "$report_dir/tile-invalidation-parser.log" || exit 1
+      grep -q 'END TileCacheTests::testInvalidateMessageParsing' "$report_dir/tile-invalidation-parser.log" || exit 1
       : > "$report_dir/unit-agent-control.trs" || exit 1
       set +e
       # Seventeen units at 30s each, plus 90s for startup and teardown.

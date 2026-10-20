@@ -57,6 +57,7 @@ class KitQueueTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testInvalidateViewCursorDeduplication);
     CPPUNIT_TEST(testCallbackModifiedStatusIsSkipped);
     CPPUNIT_TEST(testCallbackInvalidation);
+    CPPUNIT_TEST(testCallbackInvalidationOrigin);
     CPPUNIT_TEST(testCallbackIndicatorValue);
     CPPUNIT_TEST(testCallbackPageSize);
     CPPUNIT_TEST(testPutAndPop);
@@ -110,6 +111,7 @@ class KitQueueTests : public CPPUNIT_NS::TestFixture
     void testInvalidateViewCursorDeduplication();
     void testCallbackModifiedStatusIsSkipped();
     void testCallbackInvalidation();
+    void testCallbackInvalidationOrigin();
     void testCallbackIndicatorValue();
     void testCallbackPageSize();
     void testPutAndPop();
@@ -1181,6 +1183,86 @@ void KitQueueTests::testCallbackInvalidation()
     LOK_ASSERT_EQUAL_STR("4299, 1418, 7090, 275, 1", item._payload);
     item = queue.getCallback();
     LOK_ASSERT_EQUAL_STR("EMPTY, 0", item._payload);
+}
+
+void KitQueueTests::testCallbackInvalidationOrigin()
+{
+    constexpr std::string_view testname = __func__;
+    const std::string origin = " origin=tiled-area-extension";
+    const std::vector<std::pair<std::string, std::string>> rectangles = {
+        { "0, 0, 200, 200, 4, 1", "0, 0, 200, 200, 4, 1" },
+        { "0, 0, 200, 200, 4, 1", "10, 10, 100, 100, 4, 1" },
+        { "0, 0, 200, 200, 4, 1", "100, 100, 200, 200, 4, 1" },
+        { "EMPTY, 4, 1", "0, 0, 200, 200, 4, 1" },
+        { "EMPTY, 4, 1", "EMPTY, 4, 1" },
+        { "EMPTY, -1, 1", "EMPTY, -1, 1" },
+    };
+    const std::vector<std::string> origins = {
+        "", origin, " origin=unknown", " origin=tiled-area-extensionjunk", origin + origin,
+        " origin origin=tiled-area-extension"
+    };
+    for (const auto& rectanglesPair : rectangles)
+        for (bool reverse : { false, true })
+            for (const auto& firstOrigin : origins)
+                for (const auto& secondOrigin : origins)
+                {
+                    TilePrioritizer dummy;
+                    KitQueue queue(dummy);
+                    const std::string first = reverse ? rectanglesPair.second : rectanglesPair.first;
+                    const std::string second = reverse ? rectanglesPair.first : rectanglesPair.second;
+                    queue.putCallback(7, COKitCallbackType::INVALIDATE_TILES,
+                                      first + firstOrigin + " sourceviewid=3 wid=41");
+                    // Keep an unrelated callback ahead of the surviving incoming event.
+                    queue.putCallback(8, COKitCallbackType::INVALIDATE_TILES,
+                                      "0, 0, 200, 200, 4, 1 sourceviewid=9 wid=99");
+                    queue.putCallback(7, COKitCallbackType::INVALIDATE_TILES,
+                                      second + secondOrigin + " sourceviewid=5 wid=42");
+                    const bool retainedInfinite = first.starts_with("EMPTY") && !second.starts_with("EMPTY");
+                    LOK_ASSERT_EQUAL(size_t(retainedInfinite ? 3 : 2), queue.callbackSize());
+                    if (retainedInfinite)
+                    {
+                        // The existing size limit keeps these separate; no provenance is absorbed.
+                        const auto old = queue.getCallback();
+                        LOK_ASSERT_EQUAL_STR(first + firstOrigin + " sourceviewid=3 wid=41", old._payload);
+                    }
+                    LOK_ASSERT_EQUAL(8, queue.getCallback()._view);
+                    const auto merged = queue.getCallback();
+                    LOK_ASSERT_EQUAL(7, merged._view);
+                    LOK_ASSERT(merged._payload.find("sourceviewid=5 wid=42") != std::string::npos);
+                    if (!retainedInfinite)
+                    {
+                        const std::string expectedRectangle = second.starts_with("EMPTY") ? second
+                            : (rectanglesPair.second.starts_with("100,")
+                                ? "0, 0, 300, 300, 4, 1" : rectanglesPair.first);
+                        LOK_ASSERT(merged._payload.starts_with(expectedRectangle));
+                    }
+                    if (!retainedInfinite)
+                        LOK_ASSERT_EQUAL(firstOrigin == origin && secondOrigin == origin,
+                                         merged._payload.find("origin=") != std::string::npos);
+                }
+
+    // A downgrade must survive another merge, even when later events are marked.
+    {
+        TilePrioritizer dummy;
+        KitQueue queue(dummy);
+        queue.putCallback(7, COKitCallbackType::INVALIDATE_TILES,
+                          "0, 0, 100, 100, 4, 1 sourceviewid=3");
+        queue.putCallback(7, COKitCallbackType::INVALIDATE_TILES,
+                          "0, 0, 200, 200, 4, 1" + origin + " sourceviewid=4");
+        queue.putCallback(7, COKitCallbackType::INVALIDATE_TILES,
+                          "0, 0, 300, 300, 4, 1" + origin + " sourceviewid=5");
+        LOK_ASSERT_EQUAL(size_t(1), queue.callbackSize());
+        LOK_ASSERT_EQUAL_STR("0, 0, 300, 300, 4, 1 sourceviewid=5", queue.getCallback()._payload);
+    }
+
+    // Metadata suffixes must not cause modes or parts to be combined.
+    TilePrioritizer dummy;
+    KitQueue queue(dummy);
+    for (const auto& rectangle : { "0, 0, 200, 200, 4, 1", "0, 0, 200, 200, 4, 2",
+                                   "0, 0, 200, 200, 5, 1" })
+        queue.putCallback(7, COKitCallbackType::INVALIDATE_TILES,
+                          std::string(rectangle) + origin + " sourceviewid=3");
+    LOK_ASSERT_EQUAL(size_t(3), queue.callbackSize());
 }
 
 void KitQueueTests::testCallbackIndicatorValue()

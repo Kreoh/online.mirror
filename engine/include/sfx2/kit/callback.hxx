@@ -42,6 +42,12 @@ public:
     // nPart is either part or -1 for all-parts
     virtual void viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode)
         = 0;
+    // Older callback implementations conservatively treat the repaint as a real invalidation.
+    virtual void viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode,
+                                             bool /*bTiledAreaExtensionOnly*/)
+    {
+        viewInvalidateTilesCallback(pRect, nPart, nMode);
+    }
     // A message of the given type should be sent, for performance purpose only a notification
     // is given here, details about the message should be queried from SfxViewShell when necessary.
     // This is used for messages that are generated often but only the last one is needed.

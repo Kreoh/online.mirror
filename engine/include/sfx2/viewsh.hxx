@@ -404,6 +404,8 @@ public:
     virtual void viewCallback(COKitCallbackType eType, const OString& pPayload) const override;
     virtual void viewCallbackWithViewId(COKitCallbackType eType, const OString& pPayload, int nViewId) const override;
     virtual void viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode) const override;
+    void viewInvalidateTilesCallback(const tools::Rectangle* pRect, int nPart, int nMode,
+                                     bool bTiledAreaExtensionOnly) const;
     virtual void viewUpdatedCallback(COKitCallbackType eType) const override;
     virtual void viewUpdatedCallbackPerViewId(COKitCallbackType eType, int nViewId, int nSourceViewId) const override;
     // Tells the view's callback handler that the vector content of the part with the given

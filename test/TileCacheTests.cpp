@@ -269,6 +269,8 @@ void TileCacheTests::testInvalidateMessageParsing()
     {
         checkValid(expected, "");
         checkValid(expected, " sourceviewid=-17");
+        checkValid(expected, " origin=tiled-area-extension");
+        checkValid(expected, " sourceviewid=7 origin=tiled-area-extension");
     }
 
     checkValid(legacyCases[4], " sourceviewid=" + std::to_string(INT_MAX));
@@ -294,6 +296,9 @@ void TileCacheTests::testInvalidateMessageParsing()
     checkInvalid("sourceviewid=" + std::to_string(static_cast<long long>(INT_MAX) + 1));
     checkInvalid("sourceviewid=" + std::to_string(static_cast<long long>(INT_MIN) - 1));
     checkInvalid("extra=12");
+    checkInvalid("origin=unknown");
+    checkInvalid("origin=tiled-area-extensionjunk");
+    checkInvalid("origin=tiled-area-extension origin=tiled-area-extension");
     checkInvalid("sourceviewid=12 sourceviewid=13");
 }
 

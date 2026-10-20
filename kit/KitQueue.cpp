@@ -119,6 +119,38 @@ std::string extractViewId(const std::string& payload)
     return json->get("viewId").toString();
 }
 
+// A single exact origin is required. Unknown, malformed and duplicate fields
+// must never turn a genuine invalidation into a presentation-only repaint.
+bool tiledAreaExtensionOnly(const StringVector& tokens)
+{
+    int origins = 0;
+    bool known = false;
+    for (std::size_t i = 0; i < tokens.size(); ++i)
+    {
+        if (tokens[i].starts_with("origin"))
+        {
+            ++origins;
+            known = tokens.equals(i, "origin=tiled-area-extension");
+        }
+    }
+    return origins == 1 && known;
+}
+
+std::string withoutInvalidationOrigin(const std::string& payload)
+{
+    const StringVector tokens = StringVector::tokenize(payload);
+    std::string result;
+    for (std::size_t i = 0; i < tokens.size(); ++i)
+    {
+        if (tokens[i].starts_with("origin"))
+            continue;
+        if (!result.empty())
+            result += ' ';
+        result += tokens[i];
+    }
+    return result;
+}
+
 /// Extract rectangle from the invalidation callback payload
 bool extractRectangle(const StringVector& tokens, int& x, int& y, int& w, int& h,
                       std::string& part, int& mode)
@@ -151,7 +183,7 @@ bool extractRectangle(const StringVector& tokens, int& x, int& y, int& w, int& h
     h = std::atoi(tokens[3].c_str());
     part = std::string(Util::rtrim(tokens[4], ','));
 
-    if (tokens.size() == 6)
+    if (tokens.size() >= 6)
         mode = std::atoi(tokens[5].c_str());
 
     return true;
@@ -185,6 +217,8 @@ bool KitQueue::elideDuplicateCallback(int view, COKitCallbackType type, const st
                 return false;
 
             bool performedMerge = false;
+            bool absorbed = false;
+            bool extensionOnly = tiledAreaExtensionOnly(tokens);
 
             // we always travel the entire queue
             std::size_t i = 0;
@@ -229,6 +263,9 @@ bool KitQueue::elideDuplicateCallback(int view, COKitCallbackType type, const st
                             << it._payload << " -> " << ' ' << msgX << ' ' << msgY << ' '
                             << msgW << ' ' << msgH << ' ' << msgPart << ' ' << msgMode);
 
+                    extensionOnly &= tiledAreaExtensionOnly(queuedTokens);
+                    absorbed = true;
+
                     // remove from the queue
                     _callbacks.erase(_callbacks.begin() + i);
                     continue;
@@ -267,6 +304,9 @@ bool KitQueue::elideDuplicateCallback(int view, COKitCallbackType type, const st
                     msgH = joinH;
                     performedMerge = true;
 
+                    extensionOnly &= tiledAreaExtensionOnly(queuedTokens);
+                    absorbed = true;
+
                     // remove from the queue
                     _callbacks.erase(_callbacks.begin() + i);
                     continue;
@@ -275,12 +315,14 @@ bool KitQueue::elideDuplicateCallback(int view, COKitCallbackType type, const st
                 ++i;
             }
 
-            if (performedMerge)
+            if (absorbed)
             {
-                std::string newPayload =
+                std::string newPayload = performedMerge ?
                     std::to_string(msgX) + ", " + std::to_string(msgY) + ", " +
                     std::to_string(msgW) + ", " + std::to_string(msgH) + ", " +
-                    tokens.cat(' ', 4); // part etc. ...
+                    tokens.cat(' ', 4) : payload; // part and remaining metadata
+                if (!extensionOnly)
+                    newPayload = withoutInvalidationOrigin(newPayload);
 
                 LOG_TRC("Merge result: " << newPayload);
 
