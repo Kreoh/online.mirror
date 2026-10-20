@@ -12,6 +12,15 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/drawing/XDrawPagesSupplier.hpp>
 #include <drwlayer.hxx>
+#include <chartlis.hxx>
+#include <com/sun/star/chart2/data/XDataSource.hpp>
+#include <com/sun/star/chart2/data/XDataSequence.hpp>
+#include <com/sun/star/chart2/data/XLabeledDataSequence.hpp>
+#include <com/sun/star/embed/Aspects.hpp>
+#include <com/sun/star/embed/XVisualObject.hpp>
+#include <svx/svdoole2.hxx>
+#include <array>
+#include <iostream>
 
 #include <docsh.hxx>
 #include <global.hxx>
@@ -1498,6 +1507,182 @@ CPPUNIT_TEST_FIXTURE(ScExportTest2, testTdf123645XLSX)
                 u"#Sheet2!A1");
     assertXPath(pXmlRels, "/rels:Relationships/rels:Relationship[@Id='rId5']", "Target",
                 u"https://bugs.documentfoundation.org/show_bug.cgi?id=123645");
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest2, testChartExactGeometryXLSX)
+{
+    createScDoc("xlsx/chart_hyperlink.xlsx");
+
+    struct ChartGeometry
+    {
+        awt::Point aPosition;
+        awt::Size aSize;
+        awt::Size aVisualSize;
+        ScAnchorType eAnchor;
+    };
+    auto readGeometry = [this](const char* pPhase)
+    {
+        std::array<ChartGeometry, 3> aResult;
+        const SdrPage* pPage = getScDoc()->GetDrawLayer()->GetPage(0);
+        CPPUNIT_ASSERT_EQUAL(size_t(3), pPage->GetObjCount());
+        for (size_t i = 0; i < aResult.size(); ++i)
+        {
+            auto* pChart = dynamic_cast<SdrOle2Obj*>(pPage->GetObj(i));
+            CPPUNIT_ASSERT(pChart && pChart->IsChart());
+            CPPUNIT_ASSERT_EQUAL(u"Diagram "_ustr + OUString::number(i + 1), pChart->GetName());
+            auto xShape = pChart->getUnoShape();
+            uno::Reference<embed::XVisualObject> xVisual(pChart->getXModel(), uno::UNO_QUERY_THROW);
+            aResult[i] = { xShape->getPosition(), xShape->getSize(),
+                           xVisual->getVisualAreaSize(embed::Aspects::MSOLE_CONTENT),
+                           ScDrawLayer::GetAnchorType(*pChart) };
+            const auto& r = aResult[i];
+            std::cerr << pPhase << " chart=" << i + 1 << " position=" << r.aPosition.X << ','
+                      << r.aPosition.Y << " outer=" << r.aSize.Width << 'x' << r.aSize.Height
+                      << " visual=" << r.aVisualSize.Width << 'x' << r.aVisualSize.Height
+                      << " anchor=" << int(r.eAnchor) << std::endl;
+            ScRangeList aRanges = getChartRanges(*getScDoc(), *pChart);
+            const SCCOL nColumn = static_cast<SCCOL>(i * 8);
+            CPPUNIT_ASSERT(aRanges.Contains(ScRange(nColumn, 0, 0, nColumn + 1, 0, 0)));
+            CPPUNIT_ASSERT(aRanges.Contains(ScRange(nColumn, 1, 0, nColumn + 1, 1, 0)));
+        }
+        return aResult;
+    };
+    const auto aInitial = readGeometry("initial import");
+    auto xTarget = getScDoc()->GetDrawLayer()->GetPage(0)->GetObj(0)->getUnoShape();
+    xTarget->setSize(awt::Size(17999, 10000));
+    xTarget.clear();
+    const auto aExpected = readGeometry("live edit");
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(17999), aExpected[0].aSize.Width);
+    CPPUNIT_ASSERT_EQUAL(sal_Int32(10000), aExpected[0].aSize.Height);
+    for (size_t i = 0; i < aExpected.size(); ++i)
+    {
+        CPPUNIT_ASSERT_EQUAL(aInitial[i].aPosition.X, aExpected[i].aPosition.X);
+        CPPUNIT_ASSERT_EQUAL(aInitial[i].aPosition.Y, aExpected[i].aPosition.Y);
+        if (i != 0)
+        {
+            CPPUNIT_ASSERT_EQUAL(aInitial[i].aSize.Width, aExpected[i].aSize.Width);
+            CPPUNIT_ASSERT_EQUAL(aInitial[i].aSize.Height, aExpected[i].aSize.Height);
+        }
+    }
+
+    for (int nCycle = 1; nCycle <= 2; ++nCycle)
+    {
+        save(TestFilter::XLSX);
+        xmlDocUniquePtr pDrawing = parseExport(u"xl/drawings/drawing1.xml"_ustr);
+        const OString aAnchor = "/xdr:wsDr/xdr:twoCellAnchor[1]"_ostr;
+        const OString aExtent = aAnchor + "/xdr:graphicFrame/xdr:xfrm/a:ext";
+        std::cerr << "cycle=" << nCycle << " saved extent=" << getXPath(pDrawing, aExtent, "cx")
+                  << 'x' << getXPath(pDrawing, aExtent, "cy") << std::endl;
+        for (const char* pEnd : { "from", "to" })
+            for (const char* pCoordinate : { "col", "colOff", "row", "rowOff" })
+                std::cerr << pEnd << '.' << pCoordinate << '='
+                          << getXPathContent(pDrawing,
+                                             aAnchor + "/xdr:" + pEnd + "/xdr:" + pCoordinate)
+                          << std::endl;
+        assertXPath(pDrawing, aExtent, "cx", u"6479640");
+        assertXPath(pDrawing, aExtent, "cy", u"3600000");
+        const std::array<OUString, 3> aLinks{
+            u"file:///C:/TEMP/test.xlsx"_ustr, u"#Sheet2!A1"_ustr,
+            u"https://bugs.documentfoundation.org/show_bug.cgi?id=123645"_ustr
+        };
+        xmlDocUniquePtr pRels = parseExport(u"xl/drawings/_rels/drawing1.xml.rels"_ustr);
+        for (size_t i = 0; i < aLinks.size(); ++i)
+        {
+            const OString aFrame = "/xdr:wsDr/xdr:twoCellAnchor[" + OString::number(i + 1)
+                                   + "]/xdr:graphicFrame/xdr:nvGraphicFramePr/xdr:cNvPr";
+            const OUString aId = getXPath(pDrawing, aFrame + "/a:hlinkClick", "id");
+            const OString aRel = "/rels:Relationships/rels:Relationship[@Id='"
+                                 + OUStringToOString(aId, RTL_TEXTENCODING_UTF8) + "']";
+            assertXPath(pRels, aRel, "Target", aLinks[i]);
+        }
+        loadFromURL(maTempFile.GetURL());
+        const auto aActual = readGeometry("reopened");
+        // Report every chart before the first exact assertion, including its visual area.
+        for (size_t i = 0; i < aExpected.size(); ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(aExpected[i].aSize.Width, aActual[i].aSize.Width);
+            CPPUNIT_ASSERT_EQUAL(aExpected[i].aSize.Height, aActual[i].aSize.Height);
+            CPPUNIT_ASSERT_EQUAL(aExpected[i].aVisualSize.Width, aActual[i].aVisualSize.Width);
+            CPPUNIT_ASSERT_EQUAL(aExpected[i].aVisualSize.Height, aActual[i].aVisualSize.Height);
+            CPPUNIT_ASSERT_EQUAL(aExpected[i].aPosition.X, aActual[i].aPosition.X);
+            CPPUNIT_ASSERT_EQUAL(aExpected[i].aPosition.Y, aActual[i].aPosition.Y);
+            CPPUNIT_ASSERT_EQUAL(aExpected[i].eAnchor, aActual[i].eAnchor);
+        }
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest2, testChartGeometryDataBindingsXLSX)
+{
+    createScDoc("ods/chart-import-basic.ods");
+    auto checkData = [this](double fFirstValue)
+    {
+        const SdrOle2Obj* pChart = getSingleChartObject(*getScDoc(), 1);
+        CPPUNIT_ASSERT(pChart);
+        const ScRangeList aRanges = getChartRanges(*getScDoc(), *pChart);
+        CPPUNIT_ASSERT(aRanges.Contains(ScRange(ScAddress(1, 0, 3))));
+        CPPUNIT_ASSERT(aRanges.Contains(ScRange(0, 1, 2, 0, 3, 2)));
+        CPPUNIT_ASSERT(aRanges.Contains(ScRange(1, 1, 2, 1, 3, 2)));
+        uno::Reference<chart2::data::XDataSource> xData(pChart->getXModel(), uno::UNO_QUERY_THROW);
+        bool bValues = false;
+        bool bCategories = false;
+        for (const auto& xSequence : xData->getDataSequences())
+        {
+            const auto xValues = xSequence->getValues();
+            CPPUNIT_ASSERT(xValues.is());
+            uno::Reference<beans::XPropertySet> xProperties(xValues, uno::UNO_QUERY_THROW);
+            OUString aRole;
+            xProperties->getPropertyValue(u"Role"_ustr) >>= aRole;
+            const auto aData = xValues->getData();
+            if (aRole == "values-y")
+            {
+                bValues = true;
+                CPPUNIT_ASSERT_EQUAL(sal_Int32(3), aData.getLength());
+                const std::array<double, 3> aExpected{ fFirstValue, 20.0, 30.0 };
+                for (sal_Int32 i = 0; i < aData.getLength(); ++i)
+                {
+                    double fValue = 0;
+                    CPPUNIT_ASSERT(aData[i] >>= fValue);
+                    CPPUNIT_ASSERT_EQUAL(aExpected[i], fValue);
+                }
+                CPPUNIT_ASSERT(xSequence->getLabel().is());
+                const auto aLabels = xSequence->getLabel()->getData();
+                CPPUNIT_ASSERT_EQUAL(sal_Int32(1), aLabels.getLength());
+                OUString aTitle;
+                CPPUNIT_ASSERT(aLabels[0] >>= aTitle);
+                CPPUNIT_ASSERT_EQUAL(u"Average Score"_ustr, aTitle);
+            }
+            else if (aRole == "categories")
+            {
+                bCategories = true;
+                CPPUNIT_ASSERT_EQUAL(sal_Int32(3), aData.getLength());
+                const std::array<OUString, 3> aExpected{ u"Andy"_ustr, u"Bruce"_ustr,
+                                                         u"Charlie"_ustr };
+                for (sal_Int32 i = 0; i < aData.getLength(); ++i)
+                {
+                    OUString aCategory;
+                    CPPUNIT_ASSERT(aData[i] >>= aCategory);
+                    CPPUNIT_ASSERT_EQUAL(aExpected[i], aCategory);
+                }
+            }
+        }
+        CPPUNIT_ASSERT(bValues);
+        CPPUNIT_ASSERT(bCategories);
+    };
+    checkData(10.0);
+    auto xShape = getScDoc()->GetDrawLayer()->GetPage(1)->GetObj(0)->getUnoShape();
+    xShape->setSize(awt::Size(17999, 10000));
+    xShape.clear();
+    for (int nCycle = 0; nCycle < 2; ++nCycle)
+    {
+        saveAndReload(TestFilter::XLSX);
+        checkData(10.0);
+        getScDoc()->SetValue(ScAddress(1, 1, 2), 17.0);
+        getScDoc()->GetChartListenerCollection()->UpdateDirtyCharts();
+        checkData(17.0);
+        getScDoc()->SetValue(ScAddress(1, 1, 2), 10.0);
+        getScDoc()->GetChartListenerCollection()->UpdateDirtyCharts();
+        checkData(10.0);
+    }
 }
 
 CPPUNIT_TEST_FIXTURE(ScExportTest2, testTdf125173XLSX)

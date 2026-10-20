@@ -224,6 +224,11 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
       exit "$status"
     }
     trap restore_release EXIT
+    # Keep Calc geometry and chart bindings in the existing Jenkins validation report.
+    (
+      cd online/engine || exit 1
+      make CppunitTest_sc_subsequent_export_test2
+    ) 2>&1 | tee "$report_dir/calc-subsequent-export-test2.log" || exit $?
     (
       cd online || exit 1
       ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
