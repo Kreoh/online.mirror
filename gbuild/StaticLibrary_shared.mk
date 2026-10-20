@@ -47,6 +47,7 @@ $(eval $(call gb_StaticLibrary_add_generated_exception_objects,shared, \
     common/AIHttpTransport \
     common/Authorization \
     common/CommandControl \
+    common/ScriptCancellation \
     common/ConfigUtil \
     common/CoolMount \
     common/Crypto \

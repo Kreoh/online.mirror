@@ -518,6 +518,16 @@ grep -q '^:test-result: PASS' "$state/unit-agent-control.trs"
 QUEUE_LAUNCH
         chmod 755 "$report_dir/run-queue-unit.sh" "$report_dir/run-queue-validation.sh"
       fi
+      # Exercise the dormant cancellation reader through real local descriptors.
+      (cd test && CPPUNIT_TEST_NAME='^ScriptCancellationTests::' \
+        timeout --signal=TERM --kill-after=10s 120s ./unittest --verbose --cert-path ../etc) \
+        > "$report_dir/script-cancellation.log" 2>&1 || exit $?
+      for cancellation_test in testIdentityAndLateStop testStopBeforeStart testUnknownAndBound \
+          testMalformedAndDisconnect testShutdownAndDeliveryFailure testBackpressure \
+          testSequentialReuseAndReplay; do
+        grep -q "START ScriptCancellationTests::$cancellation_test" "$report_dir/script-cancellation.log" || exit 1
+        grep -q "END ScriptCancellationTests::$cancellation_test" "$report_dir/script-cancellation.log" || exit 1
+      done
       # Exercise both KitQueue absorption branches and existing invalidation cases.
       (cd test && CPPUNIT_TEST_NAME='^KitQueueTests::testCallbackInvalidation' \
         timeout --signal=TERM --kill-after=10s 120s ./unittest --verbose --cert-path ../etc) \

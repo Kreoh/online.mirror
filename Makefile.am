@@ -207,6 +207,7 @@ shared_sources = \
                  common/AIHttpTransport.cpp \
                  common/Authorization.cpp \
                  common/CommandControl.cpp \
+                 common/ScriptCancellation.cpp \
                  common/ConfigUtil.cpp \
                  common/CoolMount.cpp \
                  common/FileUtil-unix.cpp \
@@ -410,6 +411,7 @@ shared_headers = \
                  common/Clipboard.hpp \
                  common/ClipboardData.hpp \
                  common/CommandControl.hpp \
+                 common/ScriptCancellation.hpp \
                  common/Common.hpp \
                  common/ConfigUtil.hpp \
                  common/ContainerUtil.hpp \

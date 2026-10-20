@@ -181,6 +181,7 @@ test_base_sources = \
 	NumUtilWhiteBoxTests.cpp \
 	RequestDetailsTests.cpp \
 	StringVectorTests.cpp \
+	ScriptCancellationTests.cpp \
 	TestGlobals.cpp \
 	UriTests.cpp \
 	UtilTests.cpp \
