@@ -54,7 +54,31 @@ public:
     /// The caller closes it. Call once, before publishing this channel.
     int takeSender();
 
-    /// Non-blocking, single bounded packet. Sent means queued, not cancellation confirmed.
+    enum class ReplyStatus
+    {
+        Reserved,
+        ReservationRejected,
+        StopApplied,
+        StopUnknown
+    };
+    struct Reply
+    {
+        Identity identity;
+        ReplyStatus status = ReplyStatus::ReservationRejected;
+    };
+    enum class Receive
+    {
+        Pending,
+        Received,
+        Failed
+    };
+
+    /// The reader reserves before replying. Only Reserved permits later kit dispatch.
+    static Delivery sendReserve(int descriptor, const Identity& identity);
+    /// Read one bounded reply without waiting. The broker must match its whole identity.
+    static Receive receiveReply(int descriptor, Reply& reply);
+
+    /// Non-blocking, single bounded packet. Sent means queued. StopApplied confirms only the atomic flag, not native unwind.
     static Delivery sendStop(int descriptor, const Identity& identity);
 
     /// Reserve before acknowledging executable work, in increasing admission order.
@@ -63,6 +87,9 @@ public:
     std::shared_ptr<const std::atomic<bool>> reserve(const Identity& identity);
     /// Mark completion without cancelling or releasing the caller's shared token.
     bool complete(const Identity& identity);
+    /// Take a reserved token once, matching every owner field. May already be cancelled.
+    /// Call only after the broker has matched required reservation and stop replies.
+    std::shared_ptr<const std::atomic<bool>> claim(const Identity& identity);
     bool failed() const { return _failed.load(std::memory_order_acquire); }
 
     /// Cancel reserved work and join the reader. Call on the owning thread, never
@@ -76,6 +103,7 @@ private:
     {
         Identity identity;
         std::shared_ptr<std::atomic<bool>> cancelled;
+        bool claimed = false;
     };
     void readStops() noexcept;
     void fail();

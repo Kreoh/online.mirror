@@ -32,6 +32,9 @@ class ScriptCancellationTests : public CPPUNIT_NS::TestFixture
     CPPUNIT_TEST(testMalformedAndDisconnect);
     CPPUNIT_TEST(testShutdownAndDeliveryFailure);
     CPPUNIT_TEST(testBackpressure);
+    CPPUNIT_TEST(testRemoteReservationAndStop);
+    CPPUNIT_TEST(testReplyValidation);
+    CPPUNIT_TEST(testLostAcknowledgement);
     CPPUNIT_TEST_SUITE_END();
 
     using Channel = ScriptCancellation;
@@ -50,9 +53,28 @@ class ScriptCancellationTests : public CPPUNIT_NS::TestFixture
         CPPUNIT_ASSERT(ready());
     }
 
-    static void send(int fd, const Identity& key)
+    static Channel::Reply reply(int fd)
+    {
+        Channel::Reply received;
+        auto result = Channel::Receive::Pending;
+        waitFor(
+            [&]
+            {
+                result = Channel::receiveReply(fd, received);
+                return result != Channel::Receive::Pending;
+            });
+        CPPUNIT_ASSERT(result == Channel::Receive::Received);
+        return received;
+    }
+
+    static Channel::ReplyStatus send(int fd, const Identity& key)
     {
         CPPUNIT_ASSERT(Channel::sendStop(fd, key) == Channel::Delivery::Sent);
+        const auto received = reply(fd);
+        CPPUNIT_ASSERT(received.identity == key);
+        CPPUNIT_ASSERT(received.status == Channel::ReplyStatus::StopApplied ||
+                       received.status == Channel::ReplyStatus::StopUnknown);
+        return received.status;
     }
 
     // A subsequent packet on this same descriptor proves prior packets were consumed.
@@ -193,10 +215,10 @@ public:
                              ::socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, descriptors));
         Sender sender{ descriptors[0] };
         Sender receiver{ descriptors[1] };
-        send(sender.fd, key);
+        CPPUNIT_ASSERT(Channel::sendStop(sender.fd, key) == Channel::Delivery::Sent);
         std::vector<unsigned char> bytes(1024);
         const auto size = ::recv(receiver.fd, bytes.data(), bytes.size(), MSG_DONTWAIT);
-        CPPUNIT_ASSERT_EQUAL(ssize_t(532), size);
+        CPPUNIT_ASSERT_EQUAL(ssize_t(536), size);
         bytes.resize(size);
         return bytes;
     }
@@ -204,7 +226,7 @@ public:
     void testMalformedAndDisconnect()
     {
         const auto valid = validPacket(identity());
-        for (int corruption = 0; corruption < 9; ++corruption)
+        for (int corruption = 0; corruption < 10; ++corruption)
         {
             Channel channel;
             Sender sender{ channel.takeSender() };
@@ -222,26 +244,29 @@ public:
                     bytes.push_back(0);
                     break;
                 case 2:
-                    bytes[3] = 2;
+                    bytes[3] = 3;
                     break; // Unsupported version.
                 case 3:
-                    bytes[16] = 0;
+                    bytes[20] = 0;
                     break; // Empty first identifier.
                 case 4:
-                    bytes[16] = 129;
+                    bytes[20] = 129;
                     break; // Identifier length exceeds field.
                 case 5:
-                    bytes[16 + 128] = 1;
+                    bytes[20 + 128] = 1;
                     break; // Non-zero trailing padding.
                 case 6:
-                    bytes[17] = ' ';
+                    bytes[21] = ' ';
                     break; // Disallowed identifier character.
                 case 7:
-                    bytes[4] = 0x80;
+                    bytes[8] = 0x80;
                     break; // View exceeds signed range.
                 case 8:
-                    std::fill(bytes.begin() + 8, bytes.begin() + 16, 0);
+                    std::fill(bytes.begin() + 12, bytes.begin() + 20, 0);
                     break;
+                case 9:
+                    bytes[7] = 3;
+                    break; // Reply opcode on the request side.
             }
             CPPUNIT_ASSERT_EQUAL(static_cast<ssize_t>(bytes.size()),
                                  ::send(sender.fd, bytes.data(), bytes.size(), MSG_NOSIGNAL));
@@ -275,6 +300,113 @@ public:
             result = Channel::sendStop(sender.fd, key);
         CPPUNIT_ASSERT(result == Channel::Delivery::WouldBlock);
         CPPUNIT_ASSERT(std::chrono::steady_clock::now() - start < std::chrono::seconds(5));
+    }
+
+    void testRemoteReservationAndStop()
+    {
+        Channel channel;
+        Sender sender{ channel.takeSender() };
+        const auto key = identity();
+        CPPUNIT_ASSERT(!channel.claim(key));
+        // Queue both before reading replies, as when stop precedes kit dispatch.
+        CPPUNIT_ASSERT(Channel::sendReserve(sender.fd, key) == Channel::Delivery::Sent);
+        CPPUNIT_ASSERT(Channel::sendStop(sender.fd, key) == Channel::Delivery::Sent);
+        const auto reserved = reply(sender.fd);
+        CPPUNIT_ASSERT(reserved.identity == key);
+        CPPUNIT_ASSERT(reserved.status == Channel::ReplyStatus::Reserved);
+        const auto stopped = reply(sender.fd);
+        CPPUNIT_ASSERT(stopped.identity == key);
+        CPPUNIT_ASSERT(stopped.status == Channel::ReplyStatus::StopApplied);
+        for (int field = 0; field < 6; ++field)
+        {
+            auto wrong = key;
+            switch (field)
+            {
+                case 0:
+                    wrong.generation = "other";
+                    break;
+                case 1:
+                    wrong.epoch = "other";
+                    break;
+                case 2:
+                    wrong.renderSession = "other";
+                    break;
+                case 3:
+                    wrong.execution = "other";
+                    break;
+                case 4:
+                    wrong.view = 8;
+                    break;
+                case 5:
+                    wrong.admission = 2;
+                    break;
+            }
+            CPPUNIT_ASSERT(!channel.claim(wrong));
+        }
+        const auto token = channel.claim(key);
+        CPPUNIT_ASSERT(token);
+        CPPUNIT_ASSERT(token->load());
+        CPPUNIT_ASSERT(!channel.claim(key));
+        CPPUNIT_ASSERT(channel.complete(key));
+        CPPUNIT_ASSERT(send(sender.fd, key) == Channel::ReplyStatus::StopUnknown);
+        const auto next = identity("execution-1", 2);
+        CPPUNIT_ASSERT(Channel::sendReserve(sender.fd, next) == Channel::Delivery::Sent);
+        CPPUNIT_ASSERT(reply(sender.fd).status == Channel::ReplyStatus::Reserved);
+        CPPUNIT_ASSERT(Channel::sendReserve(sender.fd, next) == Channel::Delivery::Sent);
+        CPPUNIT_ASSERT(reply(sender.fd).status == Channel::ReplyStatus::ReservationRejected);
+        const auto nextToken = channel.claim(next);
+        CPPUNIT_ASSERT(nextToken);
+        CPPUNIT_ASSERT(!nextToken->load());
+    }
+
+    void testReplyValidation()
+    {
+        int descriptors[2];
+        CPPUNIT_ASSERT_EQUAL(0,
+                             ::socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, descriptors));
+        Sender sender{ descriptors[0] };
+        Sender receiver{ descriptors[1] };
+        Channel::Reply received;
+        CPPUNIT_ASSERT(Channel::receiveReply(receiver.fd, received) == Channel::Receive::Pending);
+        // A valid request packet must never be mistaken for a reservation acknowledgement.
+        CPPUNIT_ASSERT(Channel::sendReserve(sender.fd, identity()) == Channel::Delivery::Sent);
+        CPPUNIT_ASSERT(Channel::receiveReply(receiver.fd, received) == Channel::Receive::Failed);
+        ::shutdown(sender.fd, SHUT_RDWR);
+        CPPUNIT_ASSERT(Channel::receiveReply(receiver.fd, received) == Channel::Receive::Failed);
+    }
+
+    void testLostAcknowledgement()
+    {
+        Channel channel;
+        Sender sender{ channel.takeSender() };
+        const auto key = identity();
+        const auto token = channel.reserve(key);
+        CPPUNIT_ASSERT(token);
+        const auto other = channel.reserve(identity("other", 2));
+        CPPUNIT_ASSERT(other);
+        CPPUNIT_ASSERT(!other->load());
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        // Deliberately never consume replies. The reader must fail closed instead
+        // of blocking forever when its acknowledgement buffer fills.
+        while (!channel.failed() && std::chrono::steady_clock::now() < deadline)
+        {
+            const auto sent = Channel::sendStop(sender.fd, key);
+            // The reader may shut down after the loop condition was checked.
+            if (sent == Channel::Delivery::Failed)
+                break;
+            CPPUNIT_ASSERT(sent == Channel::Delivery::Sent ||
+                           sent == Channel::Delivery::WouldBlock);
+            if (sent == Channel::Delivery::WouldBlock)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        while ((!channel.failed() || !token->load() || !other->load()) &&
+               std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        CPPUNIT_ASSERT(channel.failed());
+        CPPUNIT_ASSERT(token->load());
+        CPPUNIT_ASSERT(other->load());
+        CPPUNIT_ASSERT(!channel.claim(key));
+        CPPUNIT_ASSERT(!channel.reserve(identity("next", 2)));
     }
 
     void testShutdownAndDeliveryFailure()

@@ -8,7 +8,6 @@
 #include <array>
 #include <cerrno>
 #include <cstring>
-#include <stdexcept>
 #include <system_error>
 #include <arpa/inet.h>
 #include <poll.h>
@@ -17,11 +16,20 @@
 
 namespace
 {
-// Version, view and admission, then four length-prefixed, zero-padded identifiers. SOCK_SEQPACKET
-// preserves packet boundaries; no partial frame is ever applied to the registry.
+// Version, operation, view and admission, then four length-prefixed, zero-padded identifiers.
+// SOCK_SEQPACKET preserves packet boundaries; partial frames never reach the registry.
 constexpr std::size_t FieldSize = ScriptCancellation::MaxIdentityLength + 1;
-using Frame = std::array<unsigned char, 16 + 4 * FieldSize>;
-constexpr std::uint32_t Version = 1;
+using Frame = std::array<unsigned char, 20 + 4 * FieldSize>;
+constexpr std::uint32_t Version = 2;
+enum class Operation : std::uint32_t
+{
+    Reserve = 1,
+    Stop,
+    Reserved,
+    Rejected,
+    StopApplied,
+    StopUnknown
+};
 
 void put32(Frame& frame, std::size_t offset, std::uint32_t value)
 {
@@ -34,6 +42,61 @@ std::uint32_t get32(const Frame& frame, std::size_t offset)
     std::uint32_t value;
     std::memcpy(&value, frame.data() + offset, sizeof(value));
     return ntohl(value);
+}
+
+ScriptCancellation::Delivery sendFrame(int descriptor, const ScriptCancellation::Identity& identity,
+                                       Operation operation)
+{
+    Frame frame{};
+    put32(frame, 0, Version);
+    put32(frame, 4, static_cast<std::uint32_t>(operation));
+    put32(frame, 8, static_cast<std::uint32_t>(identity.view));
+    put32(frame, 12, static_cast<std::uint32_t>(identity.admission >> 32));
+    put32(frame, 16, static_cast<std::uint32_t>(identity.admission));
+    std::size_t offset = 20;
+    for (const auto* field :
+         { &identity.generation, &identity.epoch, &identity.renderSession, &identity.execution })
+    {
+        frame[offset] = static_cast<unsigned char>(field->size());
+        std::memcpy(frame.data() + offset + 1, field->data(), field->size());
+        offset += FieldSize;
+    }
+    // EINTR is reported as failure, rather than retrying without a time bound.
+    const auto sent = ::send(descriptor, frame.data(), frame.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
+    if (sent == static_cast<ssize_t>(frame.size()))
+        return ScriptCancellation::Delivery::Sent;
+    if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+        return ScriptCancellation::Delivery::WouldBlock;
+    return ScriptCancellation::Delivery::Failed;
+}
+
+ScriptCancellation::Receive receiveFrame(int descriptor, ScriptCancellation::Identity& identity,
+                                         Operation& operation)
+{
+    Frame frame{};
+    const auto size = ::recv(descriptor, frame.data(), frame.size(), MSG_DONTWAIT | MSG_TRUNC);
+    if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+        return ScriptCancellation::Receive::Pending;
+    if (size != static_cast<ssize_t>(frame.size()) || get32(frame, 0) != Version ||
+        get32(frame, 8) > static_cast<std::uint32_t>(INT32_MAX))
+        return ScriptCancellation::Receive::Failed;
+    operation = static_cast<Operation>(get32(frame, 4));
+    identity.view = static_cast<int>(get32(frame, 8));
+    identity.admission = (static_cast<std::uint64_t>(get32(frame, 12)) << 32) | get32(frame, 16);
+    std::size_t offset = 20;
+    for (auto* field :
+         { &identity.generation, &identity.epoch, &identity.renderSession, &identity.execution })
+    {
+        const std::size_t length = frame[offset];
+        if (!length || length > ScriptCancellation::MaxIdentityLength)
+            return ScriptCancellation::Receive::Failed;
+        field->assign(reinterpret_cast<const char*>(frame.data() + offset + 1), length);
+        for (std::size_t i = length; i < ScriptCancellation::MaxIdentityLength; ++i)
+            if (frame[offset + 1 + i] != 0)
+                return ScriptCancellation::Receive::Failed;
+        offset += FieldSize;
+    }
+    return ScriptCancellation::Receive::Received;
 }
 } // namespace
 
@@ -89,28 +152,46 @@ int ScriptCancellation::takeSender()
 
 ScriptCancellation::Delivery ScriptCancellation::sendStop(int descriptor, const Identity& identity)
 {
+    return valid(identity) ? sendFrame(descriptor, identity, Operation::Stop)
+                           : Delivery::InvalidIdentity;
+}
+
+ScriptCancellation::Delivery ScriptCancellation::sendReserve(int descriptor,
+                                                             const Identity& identity)
+{
+    return valid(identity) ? sendFrame(descriptor, identity, Operation::Reserve)
+                           : Delivery::InvalidIdentity;
+}
+
+ScriptCancellation::Receive ScriptCancellation::receiveReply(int descriptor, Reply& reply)
+{
+    Identity identity;
+    Operation operation;
+    const auto result = receiveFrame(descriptor, identity, operation);
+    if (result != Receive::Received)
+        return result;
     if (!valid(identity))
-        return Delivery::InvalidIdentity;
-    Frame frame{};
-    put32(frame, 0, Version);
-    put32(frame, 4, static_cast<std::uint32_t>(identity.view));
-    put32(frame, 8, static_cast<std::uint32_t>(identity.admission >> 32));
-    put32(frame, 12, static_cast<std::uint32_t>(identity.admission));
-    std::size_t offset = 16;
-    for (const auto* field :
-         { &identity.generation, &identity.epoch, &identity.renderSession, &identity.execution })
+        return Receive::Failed;
+    ReplyStatus status;
+    switch (operation)
     {
-        frame[offset] = static_cast<unsigned char>(field->size());
-        std::memcpy(frame.data() + offset + 1, field->data(), field->size());
-        offset += FieldSize;
+        case Operation::Reserved:
+            status = ReplyStatus::Reserved;
+            break;
+        case Operation::Rejected:
+            status = ReplyStatus::ReservationRejected;
+            break;
+        case Operation::StopApplied:
+            status = ReplyStatus::StopApplied;
+            break;
+        case Operation::StopUnknown:
+            status = ReplyStatus::StopUnknown;
+            break;
+        default:
+            return Receive::Failed;
     }
-    // EINTR is reported as failure, rather than retrying without a time bound.
-    const auto sent = ::send(descriptor, frame.data(), frame.size(), MSG_DONTWAIT | MSG_NOSIGNAL);
-    if (sent == static_cast<ssize_t>(frame.size()))
-        return Delivery::Sent;
-    if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-        return Delivery::WouldBlock;
-    return Delivery::Failed;
+    reply = { std::move(identity), status };
+    return Receive::Received;
 }
 
 std::shared_ptr<const std::atomic<bool>> ScriptCancellation::reserve(const Identity& identity)
@@ -127,11 +208,22 @@ std::shared_ptr<const std::atomic<bool>> ScriptCancellation::reserve(const Ident
     return token;
 }
 
+std::shared_ptr<const std::atomic<bool>> ScriptCancellation::claim(const Identity& identity)
+{
+    std::lock_guard lock(_mutex);
+    const auto it = _records.find(identity.admission);
+    if (_failed.load() || _stopping.load() || it == _records.end() ||
+        it->second.identity != identity || it->second.claimed)
+        return {};
+    it->second.claimed = true;
+    return it->second.cancelled;
+}
+
 bool ScriptCancellation::complete(const Identity& identity)
 {
     std::lock_guard lock(_mutex);
     const auto it = _records.find(identity.admission);
-    if (it == _records.end() || it->second.identity != identity || !it->second.cancelled)
+    if (it == _records.end() || it->second.identity != identity)
         return false;
     _records.erase(it);
     return true;
@@ -141,8 +233,7 @@ void ScriptCancellation::fail()
 {
     std::lock_guard lock(_mutex);
     for (const auto& [id, record] : _records)
-        if (record.cancelled)
-            record.cancelled->store(true, std::memory_order_relaxed);
+        record.cancelled->store(true, std::memory_order_relaxed);
     _failed.store(true, std::memory_order_release);
 }
 
@@ -170,40 +261,31 @@ void ScriptCancellation::readStops() noexcept
                 break;
             if (!ready)
                 continue;
-            Frame frame{};
-            const auto size =
-                ::recv(_receiver, frame.data(), frame.size(), MSG_DONTWAIT | MSG_TRUNC);
-            if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
-                continue;
-            if (size != static_cast<ssize_t>(frame.size()) || get32(frame, 0) != Version ||
-                get32(frame, 4) > static_cast<std::uint32_t>(INT32_MAX))
-                break;
             Identity identity;
-            identity.view = static_cast<int>(get32(frame, 4));
-            identity.admission =
-                (static_cast<std::uint64_t>(get32(frame, 8)) << 32) | get32(frame, 12);
-            std::size_t offset = 16;
-            bool canonical = true;
-            for (auto* field : { &identity.generation, &identity.epoch, &identity.renderSession,
-                                 &identity.execution })
-            {
-                const std::size_t length = frame[offset];
-                if (!length || length > MaxIdentityLength)
-                {
-                    canonical = false;
-                    break;
-                }
-                field->assign(reinterpret_cast<const char*>(frame.data() + offset + 1), length);
-                for (std::size_t i = length; i < MaxIdentityLength; ++i)
-                    canonical &= frame[offset + 1 + i] == 0;
-                offset += FieldSize;
-            }
-            if (!canonical || !valid(identity))
+            Operation operation;
+            const auto received = receiveFrame(_receiver, identity, operation);
+            if (received == Receive::Pending)
+                continue;
+            if (received != Receive::Received || !valid(identity))
                 break;
-            std::lock_guard lock(_mutex);
-            const auto it = _records.find(identity.admission);
-            if (it != _records.end() && it->second.identity == identity && it->second.cancelled)
-                it->second.cancelled->store(true, std::memory_order_relaxed);
+            Operation response;
+            if (operation == Operation::Reserve)
+                response = reserve(identity) ? Operation::Reserved : Operation::Rejected;
+            else if (operation == Operation::Stop)
+            {
+                std::lock_guard lock(_mutex);
+                const auto it = _records.find(identity.admission);
+                const bool matches = it != _records.end() && it->second.identity == identity;
+                if (matches)
+                    it->second.cancelled->store(true, std::memory_order_relaxed);
+                response = matches ? Operation::StopApplied : Operation::StopUnknown;
+            }
+            else
+                break;
+            // Never block the independent reader behind an unresponsive broker.
+            // A lost acknowledgement fails the channel and cancels all reservations.
+            if (sendFrame(_receiver, identity, response) != Delivery::Sent)
+                break;
         }
     }
     catch (...)
@@ -211,5 +293,6 @@ void ScriptCancellation::readStops() noexcept
         // Allocation or decoding failure must not leave reserved work live.
     }
     fail();
+    ::shutdown(_receiver, SHUT_RDWR);
 }
 #endif

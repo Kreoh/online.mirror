@@ -524,7 +524,8 @@ QUEUE_LAUNCH
         > "$report_dir/script-cancellation.log" 2>&1 || exit $?
       for cancellation_test in testIdentityAndLateStop testStopBeforeStart testUnknownAndBound \
           testMalformedAndDisconnect testShutdownAndDeliveryFailure testBackpressure \
-          testSequentialReuseAndReplay; do
+          testSequentialReuseAndReplay testRemoteReservationAndStop testReplyValidation \
+          testLostAcknowledgement; do
         grep -q "START ScriptCancellationTests::$cancellation_test" "$report_dir/script-cancellation.log" || exit 1
         grep -q "END ScriptCancellationTests::$cancellation_test" "$report_dir/script-cancellation.log" || exit 1
       done
