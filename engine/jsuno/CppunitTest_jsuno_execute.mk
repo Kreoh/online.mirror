@@ -13,12 +13,21 @@ $(eval $(call gb_CppunitTest_CppunitTest,jsuno_execute))
 
 $(eval $(call gb_CppunitTest_add_exception_objects,jsuno_execute, \
     jsuno/qa/unit/execute \
+    jsuno/qa/unit/proxy \
 ))
 
 $(eval $(call gb_CppunitTest_use_libraries,jsuno_execute, \
     jsuno \
     sal \
+    cppu \
+    tl \
+    vcl \
 ))
+
+$(eval $(call gb_CppunitTest_use_externals,jsuno_execute,boost_headers))
+
+$(eval $(call gb_CppunitTest_use_vcl,jsuno_execute))
+$(eval $(call gb_CppunitTest_use_configuration,jsuno_execute))
 
 $(eval $(call gb_CppunitTest_use_sdk_api,jsuno_execute))
 
@@ -30,6 +39,8 @@ $(eval $(call gb_CppunitTest_use_ure,jsuno_execute))
 
 $(eval $(call gb_CppunitTest_use_components,jsuno_execute,\
     scriptinterop/util/scriptinterop \
+    configmgr/source/configmgr \
+    i18npool/util/i18npool \
 ))
 
 # vim: set noet sw=4 ts=4:

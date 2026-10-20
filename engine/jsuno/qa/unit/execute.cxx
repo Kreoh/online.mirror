@@ -11,6 +11,9 @@
 
 #include <sal/config.h>
 
+#include <future>
+#include <thread>
+
 #include <cppunit/TestFixture.h>
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/plugin/TestPlugIn.h>
@@ -25,6 +28,67 @@ namespace
 class Execute : public CppUnit::TestFixture
 {
 public:
+    void testExecutionDeadline()
+    {
+        auto const start = std::chrono::steady_clock::now();
+        assertInterrupted({}, std::chrono::milliseconds(10), nullptr);
+        CPPUNIT_ASSERT(std::chrono::steady_clock::now() - start < std::chrono::seconds(5));
+        assertRecovery();
+    }
+
+    void testExecutionCancellation()
+    {
+        std::atomic<bool> cancelled{ false };
+        auto const start = std::chrono::steady_clock::now();
+        assertInterrupted([&cancelled](OUString const&, OUString const&) {
+            cancelled.store(true, std::memory_order_relaxed);
+        }, std::chrono::seconds(30), &cancelled);
+        CPPUNIT_ASSERT(cancelled.load());
+        CPPUNIT_ASSERT(std::chrono::steady_clock::now() - start < std::chrono::seconds(5));
+        assertRecovery();
+    }
+
+    void testCrossThreadCancellation()
+    {
+        std::atomic<bool> cancelled{ false };
+        std::promise<void> entered;
+        auto ready = entered.get_future();
+        // The console hook proves execution has started before another thread requests stop.
+        std::jthread canceller([&cancelled, ready = std::move(ready)] {
+            if (ready.wait_for(std::chrono::seconds(5)) == std::future_status::ready)
+                cancelled.store(true, std::memory_order_relaxed);
+        });
+        auto const start = std::chrono::steady_clock::now();
+        assertInterrupted([&entered](OUString const&, OUString const&) { entered.set_value(); },
+                          std::chrono::seconds(30), &cancelled);
+        CPPUNIT_ASSERT(cancelled.load());
+        CPPUNIT_ASSERT(std::chrono::steady_clock::now() - start < std::chrono::seconds(5));
+        assertRecovery();
+    }
+
+    static void assertInterrupted(
+        std::function<void(OUString const&, OUString const&)> hook,
+        std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled)
+    {
+        if (!hook)
+            hook = [](OUString const&, OUString const&) {};
+        try
+        {
+            jsuno::execute(u"console.log(1); for (;;) {}"_ustr, u"<budget>"_ustr, 1,
+                           std::move(hook), {}, nullptr, timeout, cancelled);
+            CPPUNIT_FAIL("expected cooperative interruption");
+        }
+        catch (jsuno::Exception const& e)
+        {
+            CPPUNIT_ASSERT_EQUAL(u"ExecutionInterrupted"_ustr, e.name);
+        }
+    }
+
+    static void assertRecovery()
+    {
+        CPPUNIT_ASSERT_EQUAL(u"42"_ustr, testexec(u"42"_ustr).result);
+    }
+
     void testReturnValue()
     {
         CPPUNIT_ASSERT_EQUAL(u"42"_ustr, testexec(u"42"_ustr).result);
@@ -123,6 +187,9 @@ public:
     }
 
     CPPUNIT_TEST_SUITE(Execute);
+    CPPUNIT_TEST(testExecutionDeadline);
+    CPPUNIT_TEST(testExecutionCancellation);
+    CPPUNIT_TEST(testCrossThreadCancellation);
     CPPUNIT_TEST(testReturnValue);
     CPPUNIT_TEST(testThrows);
     CPPUNIT_TEST(testLegacyUnoApiUse);

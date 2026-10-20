@@ -168,6 +168,7 @@ pipeline {
                         -e ONLINE_OFFICE_SOURCE_BRANCH="$SOURCE_BRANCH" \
                         -e ONLINE_OFFICE_FINAL_DOCKERFILE=Distroless \
                         -e ONLINE_OFFICE_RUN_AGENT_CONTROL=1 \
+                        -e ONLINE_OFFICE_RUN_JSUNO=1 \
                         -e ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION="$EXPORT_QUEUE_VALIDATION" \
                         -e ONLINE_OFFICE_AGENT_CONTROL_REPORT_DIR="/workspace/native-retirement-reports/$BUILD_NUMBER" \
                         -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \

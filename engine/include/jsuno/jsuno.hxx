@@ -11,6 +11,8 @@
 
 #include <sal/config.h>
 
+#include <atomic>
+#include <chrono>
 #include <functional>
 #include <vector>
 
@@ -62,16 +64,32 @@ struct LO_DLLPUBLIC_JSUNO Exception {
 // If `usedLegacyUnoApi` is non-null, set to true when the script touched the legacy UNO API; not
 // modified otherwise.
 //
+// The original entry point retains its exported signature and uses a 30-second budget.
+// @throws jsuno::Exception
+LO_DLLPUBLIC_JSUNO OUString execute(OUString const& script, OUString const& source, int line,
+                                    std::function<void(OUString const&, OUString const&)> consoleHook,
+                                    std::function<void(OUString const&)> proxyCallHook,
+                                    bool* usedLegacyUnoApi);
+
+// Execution is cooperatively interrupted after timeout or when cancelled becomes true.
+// The caller owns cancelled until execute returns. These controls cannot interrupt a
+// blocked native UNO call and do not roll back document mutations.
 // @throws jsuno::Exception
 LO_DLLPUBLIC_JSUNO OUString execute(OUString const& script, OUString const & source, int line,
                                     std::function<void(OUString const &, OUString const &)>
                                         consoleHook,
                                     std::function<void(OUString const&)> proxyCallHook,
-                                    bool* usedLegacyUnoApi);
+                                    bool* usedLegacyUnoApi,
+                                    std::chrono::milliseconds timeout,
+                                    std::atomic<bool> const* cancelled = nullptr);
 
 // Deliver an iframe-side `jsonValue` to a `ProxyInvocation::invoke` blocked in Application::
 // Yield on `callId`; spurious callIds are silently ignored:
 LO_DLLPUBLIC_JSUNO void deliverProxyResult(OUString const& callId, OUString const& jsonValue);
+
+// Report whether a response was accepted by a still-pending callback. This lets native
+// transport callers distinguish late responses without recreating a rendezvous.
+LO_DLLPUBLIC_JSUNO bool tryDeliverProxyResult(OUString const& callId, OUString const& jsonValue);
 
 // Unblock every spinning ProxyInvocation::invoke by marking each pending call as delivered
 // with an empty JSON value, so a torn-down iframe cannot leave the kit waiting forever:

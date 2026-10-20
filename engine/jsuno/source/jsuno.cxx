@@ -25,6 +25,7 @@
 #include <set>
 #include <sstream>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -82,6 +83,22 @@
 
 namespace
 {
+struct ExecutionBudget
+{
+    std::chrono::steady_clock::time_point deadline;
+    std::atomic<bool> const* cancelled;
+    bool interrupted = false;
+
+    static int interrupt(JSRuntime*, void* opaque)
+    {
+        auto& budget = *static_cast<ExecutionBudget*>(opaque);
+        budget.interrupted = budget.interrupted
+            || (budget.cancelled && budget.cancelled->load(std::memory_order_relaxed))
+            || std::chrono::steady_clock::now() >= budget.deadline;
+        return budget.interrupted;
+    }
+};
+
 struct JsException
 {
 };
@@ -2916,7 +2933,7 @@ JSValue sameUnoObject(JSContext* ctx, JSValueConst, [[maybe_unused]] int argc, J
 std::mutex g_proxyMapMutex;
 std::map<OUString, cpo::uno::Reference<cpo::uno::XInterface>> g_proxyMap;
 
-// Per-callId rendezvous between ProxyInvocation::invoke (spinning Application::Yield) and
+// Per-callId rendezvous between ProxyInvocation::invoke (pumping native events) and
 // jsuno::deliverProxyResult:
 struct PendingProxyResult
 {
@@ -3015,6 +3032,12 @@ public:
             g_pendingProxyResults[callId] = {};
         }
 
+        // Remove the rendezvous on every exit, including payload or hook exceptions.
+        comphelper::ScopeGuard removePending([&callId] {
+            std::lock_guard lock(g_pendingProxyResultsMutex);
+            g_pendingProxyResults.erase(callId);
+        });
+        auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         OString payload;
         {
             tools::JsonWriter w;
@@ -3055,10 +3078,10 @@ public:
             return {};
         }
 
-        // Spin Application::Yield until the iframe delivers a value for our callId, holding
-        // the SolarMutex Yield needs (the listener convention releases it around our
-        // invocation, and Yield drops it during waits so the wire-side dispatch can still
-        // grab it) and bracketing the spin with push/popExpectedReentry so the host poll
+        // Pump native events until the iframe delivers a value for our callId, holding
+        // the SolarMutex (the listener convention releases it around our invocation).
+        // Release it during idle waits so wire-side dispatch can acquire it.
+        // Bracket the spin with push/popExpectedReentry so the host poll
         // loop's non-async-dialog guard does not flag the intentional kitPoll re-entry:
         SolarMutexGuard guard;
         vcl::kit::pushExpectedReentry();
@@ -3083,7 +3106,16 @@ public:
                     break;
                 }
             }
-            Application::Yield();
+            if (std::chrono::steady_clock::now() >= deadline)
+            {
+                throw cpo::uno::RuntimeException(u"UNO proxy response deadline exceeded"_ustr);
+            }
+            // Do not wait indefinitely for an event after the deadline.
+            if (!Application::Reschedule())
+            {
+                SolarMutexReleaser release;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
         }
         return comphelper::parseJsonToAny(jsonResult, returnType);
     }
@@ -3397,13 +3429,25 @@ jsuno::Exception extractException(JSContext* ctx, ValueRef const& err)
 
 jsuno::Exception::~Exception() = default;
 
+OUString jsuno::execute(OUString const& script, OUString const& source, int line,
+                        std::function<void(OUString const&, OUString const&)> consoleHook,
+                        std::function<void(OUString const&)> proxyCallHook,
+                        bool* usedLegacyUnoApi)
+{
+    return execute(script, source, line, std::move(consoleHook), std::move(proxyCallHook),
+                   usedLegacyUnoApi, std::chrono::seconds(30));
+}
+
 OUString jsuno::execute(OUString const& script, OUString const & source, int line,
                         std::function<void(OUString const& level, OUString const& message)>
                             consoleHook,
                         std::function<void(OUString const&)> proxyCallHook,
-                        bool* usedLegacyUnoApi)
+                        bool* usedLegacyUnoApi, std::chrono::milliseconds timeout,
+                        std::atomic<bool> const* cancelled)
 {
+    ExecutionBudget budget{ std::chrono::steady_clock::now() + timeout, cancelled };
     auto const rt = JS_NewRuntime();
+    JS_SetInterruptHandler(rt, ExecutionBudget::interrupt, &budget);
     JS_SetMaxStackSize(rt, 4 * 1024 * 1024); // from default 256 KiB to 4 MiB
     JS_SetRuntimeOpaque(
         rt, new RuntimeData(rt, source, line, std::move(consoleHook), std::move(proxyCallHook)));
@@ -3611,6 +3655,13 @@ OUString jsuno::execute(OUString const& script, OUString const & source, int lin
     }
     data->clear();
     JS_FreeRuntime(rt);
+    if (budget.interrupted)
+    {
+        Exception interrupted;
+        interrupted.name = u"ExecutionInterrupted"_ustr;
+        interrupted.message = u"JavaScript execution cancelled or deadline exceeded; document changes may remain"_ustr;
+        throw interrupted;
+    }
     if (exc)
     {
         throw *exc;
@@ -3620,14 +3671,20 @@ OUString jsuno::execute(OUString const& script, OUString const & source, int lin
 
 void jsuno::deliverProxyResult(OUString const& callId, OUString const& jsonValue)
 {
+    (void)tryDeliverProxyResult(callId, jsonValue);
+}
+
+bool jsuno::tryDeliverProxyResult(OUString const& callId, OUString const& jsonValue)
+{
     std::lock_guard lock(g_pendingProxyResultsMutex);
     auto const it = g_pendingProxyResults.find(callId);
     if (it == g_pendingProxyResults.end())
     {
-        return;
+        return false;
     }
     it->second.delivered = true;
     it->second.json = jsonValue;
+    return true;
 }
 
 // Unblock every spinning ProxyInvocation::invoke by marking each pending entry as delivered

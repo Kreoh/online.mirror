@@ -173,6 +173,19 @@ bash "$SRCDIR/check-builder.sh" "$BUILDDIR/online/configure.ac" || exit 1
 ( cd online/engine && ./autogen.sh --with-distro=OnlineLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
 ( cd online/engine && make $ENGINE_BUILD_TARGET ) || exit 1
 
+# Run native JavaScript regression tests only on the Jenkins builder.
+if [[ "${ONLINE_OFFICE_RUN_JSUNO:-}" == "1" ]]; then
+  (
+    set -o pipefail
+    test -z "${SUPPRESS_TESTS:-}" || exit 1
+    report_dir="${ONLINE_OFFICE_AGENT_CONTROL_REPORT_DIR:?Missing Jenkins report directory}"
+    mkdir -p "$report_dir" || exit 1
+    printf '%s\n' "$ONLINE_OFFICE_SOURCE_REVISION" > "$report_dir/jsuno-source-revision.txt" || exit 1
+    cd online/engine || exit 1
+    make CppunitTest_jsuno_execute CppunitTest_jsuno_testuno 2>&1 | tee "$report_dir/jsuno.log" || exit 1
+  ) || exit 1
+fi
+
 # copy stuff
 mkdir -p "$INSTDIR"/opt/
 cp -a online/engine/instdir "$INSTDIR"/opt/online-office
