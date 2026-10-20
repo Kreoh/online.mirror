@@ -16,6 +16,9 @@
 #include <string_view>
 
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/text/XTextDocument.hpp>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
@@ -164,6 +167,7 @@ public:
                                                       const char* pArguments);
 
     void testRawDocumentCapability();
+    void testRawViewBinding();
     void testGetStyles();
     void testGetFonts();
     void testCreateView();
@@ -265,6 +269,7 @@ public:
 
     CPPUNIT_TEST_SUITE(DesktopKitTest);
     CPPUNIT_TEST(testRawDocumentCapability);
+    CPPUNIT_TEST(testRawViewBinding);
     CPPUNIT_TEST(testGetStyles);
     CPPUNIT_TEST(testGetFonts);
     CPPUNIT_TEST(testCreateView);
@@ -562,8 +567,71 @@ void DesktopKitTest::testRawDocumentCapability()
     boost::property_tree::read_json(stream, info);
 #if HAVE_FEATURE_QUICKJS
     CPPUNIT_ASSERT(info.get<bool>("RawDocumentBinding"));
+    CPPUNIT_ASSERT(info.get<bool>("RawViewBinding"));
 #else
     CPPUNIT_ASSERT(!info.get_optional<bool>("RawDocumentBinding"));
+    CPPUNIT_ASSERT(!info.get_optional<bool>("RawViewBinding"));
+#endif
+}
+
+void DesktopKitTest::testRawViewBinding()
+{
+#if HAVE_FEATURE_QUICKJS
+    COKitImpl office;
+    auto* document = loadDoc("blank_presentation.odp");
+    const int firstView = document->getView();
+    const int secondView = document->createView();
+    const auto first = KitHelper::getViewOfId(firstView)->GetController();
+    const auto second = KitHelper::getViewOfId(secondView)->GetController();
+    CPPUNIT_ASSERT(first.is() && second.is() && first != second);
+    first->getFrame()->setName(u"raw-view-first"_ustr);
+    second->getFrame()->setName(u"raw-view-second"_ustr);
+    const uno::Reference<frame::XModel> model(document->mxComponent, uno::UNO_QUERY_THROW);
+    const auto run = [&](int view, const char* script) {
+        return office.executeScriptWithView(document, view, script, "<view>", 1,
+                                            {}, nullptr, nullptr, nullptr,
+                                            std::chrono::seconds(30), nullptr);
+    };
+    const auto expect = [&](int view, const char* script, const char* expected) {
+        const auto result = run(view, script);
+        CPPUNIT_ASSERT(!result.oError);
+        CPPUNIT_ASSERT(result.oResult);
+        CPPUNIT_ASSERT_EQUAL(std::string(expected), *result.oResult);
+    };
+    document->setView(firstView);
+    // Simulate an earlier raw script changing the cached controller while the
+    // correct native shell is already active. setView alone must not be the oracle.
+    model->setCurrentController(second);
+    expect(firstView, "controller.getFrame().getName()", "\"raw-view-first\"");
+    CPPUNIT_ASSERT(model->getCurrentController() == second);
+    expect(secondView, "controller.getFrame().getName()", "\"raw-view-second\"");
+    document->setView(secondView);
+    model->setCurrentController(first);
+    expect(secondView, "controller.getFrame().getName()", "\"raw-view-second\"");
+    CPPUNIT_ASSERT(model->getCurrentController() == first);
+    expect(firstView,
+           "var d = Object.getOwnPropertyDescriptor(globalThis, 'controller');"
+           "controller = null; delete globalThis.controller;"
+           "[d.writable, d.configurable, controller.getFrame().getName()]",
+           "[false,false,\"raw-view-first\"]");
+    const auto documentOnly = office.executeScriptWithDocument(
+        document, "typeof controller", "<document>", 1, {}, nullptr, nullptr, nullptr,
+        std::chrono::seconds(30), nullptr);
+    CPPUNIT_ASSERT(!documentOnly.oError);
+    CPPUNIT_ASSERT(documentOnly.oResult);
+    CPPUNIT_ASSERT_EQUAL(std::string("\"undefined\""), *documentOnly.oResult);
+
+    const auto reject = [&](int view) {
+        const auto result = run(view, "42");
+        CPPUNIT_ASSERT(result.oError);
+        CPPUNIT_ASSERT(!result.oResult);
+    };
+    reject(-1);
+    auto foreign = loadDocImpl("blank_text.odt");
+    reject(foreign->getView());
+    document->destroyView(secondView);
+    reject(secondView);
+    expect(firstView, "controller.getFrame().getName()", "\"raw-view-first\"");
 #endif
 }
 

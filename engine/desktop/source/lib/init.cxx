@@ -69,6 +69,7 @@
 
 #include <cassert>
 #include <algorithm>
+#include <optional>
 #include <limits>
 #include <memory>
 #include <vector>
@@ -137,6 +138,10 @@
 #include <com/sun/star/frame/DispatchResultEvent.hpp>
 #include <com/sun/star/frame/DispatchResultState.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
+#include <com/sun/star/uno/RuntimeException.hpp>
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/frame/XDispatchProvider.hpp>
 #include <com/sun/star/frame/XDispatchResultListener.hpp>
 #include <com/sun/star/frame/XSynchronousDispatch.hpp>
@@ -10005,8 +10010,8 @@ COKitScriptResult COKitImpl::executeScriptWithControl(
                                      timeout, std::move(cancelled));
 }
 
-COKitScriptResult COKitImpl::executeScriptWithDocument(
-    COKitDocument* document, char const* script, std::string_view source, int line,
+static COKitScriptResult executeScriptWithBindings(
+    COKitDocument* document, std::optional<int> viewId, char const* script, std::string_view source, int line,
     std::function<void(void* data, std::string_view level, std::string_view message)> consoleCallback,
     void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
     void* proxyCallbackData, std::chrono::milliseconds timeout,
@@ -10025,13 +10030,35 @@ COKitScriptResult COKitImpl::executeScriptWithDocument(
         };
     }
     try {
+        uno::Reference<css::frame::XController> controller;
+        if (viewId)
+        {
+            auto* boundDocument = static_cast<COKitDocumentImpl*>(document);
+            auto* shell = *viewId >= 0 ? KitHelper::getViewOfId(*viewId) : nullptr;
+            if (!boundDocument || !shell ||
+                KitHelper::getDocumentIdOfView(*viewId) != boundDocument->mnDocumentId)
+                throw uno::RuntimeException(u"Raw script view binding is unavailable"_ustr);
+            KitHelper::setView(*viewId);
+            // Activation can invoke native callbacks. Resolve and validate again afterwards.
+            shell = KitHelper::getViewOfId(*viewId);
+            if (!shell || KitHelper::getDocumentIdOfView(*viewId) != boundDocument->mnDocumentId)
+                throw uno::RuntimeException(u"Raw script view binding is unavailable"_ustr);
+            controller = shell->GetController();
+            const uno::Reference<css::frame::XModel> model(boundDocument->mxComponent, uno::UNO_QUERY);
+            const auto frame = controller.is() ? controller->getFrame()
+                                               : uno::Reference<css::frame::XFrame>();
+            if (!model.is() || !controller.is() || controller->getModel() != model ||
+                !frame.is() || frame->getController() != controller ||
+                frame != shell->GetViewFrame().GetFrame().GetFrameInterface())
+                throw uno::RuntimeException(u"Raw script controller binding is unavailable"_ustr);
+        }
         OUString value = jsuno::execute(
             OUString::fromUtf8(script), OUString::fromUtf8(source), line,
             [consoleCallback, consoleCallbackData](OUString const & level, OUString const & message)
             { consoleCallback(consoleCallbackData, level.toUtf8(), message.toUtf8()); },
             std::move(hook), &aScriptResult.bUsedLegacyUnoApi, timeout, cancelled.get(),
             document ? static_cast<COKitDocumentImpl*>(document)->mxComponent
-                     : uno::Reference<css::lang::XComponent>());
+                     : uno::Reference<css::lang::XComponent>(), controller);
         if (!value.isEmpty()) {
             aScriptResult.oResult = convertOUStringToStdString(value);
         }
@@ -10068,11 +10095,36 @@ COKitScriptResult COKitImpl::executeScriptWithDocument(
     (void) timeout;
     (void) cancelled;
     (void) document;
+    (void) viewId;
     static constexpr auto msg = u"executeScript: QuickJS support is not enabled in this build"_ustr;
     SetLastExceptionMsg(msg);
     aScriptResult.oError = convertOUStringToStdString(msg);
 #endif
     return aScriptResult;
+}
+
+COKitScriptResult COKitImpl::executeScriptWithDocument(
+    COKitDocument* document, char const* script, std::string_view source, int line,
+    std::function<void(void* data, std::string_view level, std::string_view message)> consoleCallback,
+    void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
+    void* proxyCallbackData, std::chrono::milliseconds timeout,
+    std::shared_ptr<std::atomic<bool> const> cancelled)
+{
+    return executeScriptWithBindings(document, std::nullopt, script, source, line,
+                                     std::move(consoleCallback), consoleCallbackData, proxyCallback,
+                                     proxyCallbackData, timeout, std::move(cancelled));
+}
+
+COKitScriptResult COKitImpl::executeScriptWithView(
+    COKitDocument* document, int viewId, char const* script, std::string_view source, int line,
+    std::function<void(void* data, std::string_view level, std::string_view message)> consoleCallback,
+    void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
+    void* proxyCallbackData, std::chrono::milliseconds timeout,
+    std::shared_ptr<std::atomic<bool> const> cancelled)
+{
+    return executeScriptWithBindings(document, viewId, script, source, line,
+                                     std::move(consoleCallback), consoleCallbackData, proxyCallback,
+                                     proxyCallbackData, timeout, std::move(cancelled));
 }
 
 void COKitImpl::deliverProxyResult(char const * callId, char const * jsonValue)
@@ -10158,6 +10210,7 @@ std::string COKitImpl::getVersionInfo()
         "\"BuildId\": \"%BUILDID\""
 #if HAVE_FEATURE_QUICKJS
         ", \"RawDocumentBinding\": true"
+        ", \"RawViewBinding\": true"
 #endif
 #if BUILDCONFIG_RECORDED
         ", \"BuildConfig\": \"" BUILDCONFIG "\""

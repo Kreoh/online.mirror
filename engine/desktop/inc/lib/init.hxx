@@ -546,6 +546,16 @@ namespace desktop {
             void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
             void* proxyCallbackData, std::chrono::milliseconds timeout,
             std::shared_ptr<std::atomic<bool> const> cancelled) override;
+
+        // Appended ABI slot. Requires RawViewBinding from this loaded engine.
+        // Bind the exact live view controller; reject foreign or detached views.
+        COKitScriptResult executeScriptWithView(
+            COKitDocument* document, int viewId, char const* script, std::string_view source, int line,
+            std::function<void(void* data, std::string_view level, std::string_view message)>
+                consoleCallback,
+            void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
+            void* proxyCallbackData, std::chrono::milliseconds timeout,
+            std::shared_ptr<std::atomic<bool> const> cancelled) override;
     };
 
     /// Helper function to extract the value from parameters delimited by

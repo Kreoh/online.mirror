@@ -4718,6 +4718,9 @@ void lokit_main(
             const auto binding = engineInfo->get("RawDocumentBinding");
             if (binding.isBoolean() && binding.convert<bool>())
                 pathAndQuery.append("&rawdocument=1");
+            const auto viewBinding = engineInfo->get("RawViewBinding");
+            if (viewBinding.isBoolean() && viewBinding.convert<bool>())
+                pathAndQuery.append("&rawview=1");
         }
         if (queryVersion)
         {

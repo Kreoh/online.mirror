@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <com/sun/star/lang/XComponent.hpp>
+#include <com/sun/star/frame/XController.hpp>
 #include <cpo/uno/Reference.hxx>
 #include <jsuno/detail/dllapi.hxx>
 #include <rtl/string.hxx>
@@ -93,6 +94,16 @@ LO_DLLPUBLIC_JSUNO OUString execute(
     std::function<void(OUString const&)> proxyCallHook, bool* usedLegacyUnoApi,
     std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
     cpo::uno::Reference<com::sun::star::lang::XComponent> const& document);
+
+// Bind a caller-validated view controller alongside its document. Only the global
+// binding is immutable; native objects and retained proxy lifetimes are unchanged.
+LO_DLLPUBLIC_JSUNO OUString execute(
+    OUString const& script, OUString const& source, int line,
+    std::function<void(OUString const&, OUString const&)> consoleHook,
+    std::function<void(OUString const&)> proxyCallHook, bool* usedLegacyUnoApi,
+    std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
+    cpo::uno::Reference<com::sun::star::lang::XComponent> const& document,
+    cpo::uno::Reference<com::sun::star::frame::XController> const& controller);
 
 // Deliver an iframe-side `jsonValue` to a `ProxyInvocation::invoke` blocked in Application::
 // Yield on `callId`; spurious callIds are silently ignored:

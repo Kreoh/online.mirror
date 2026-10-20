@@ -63,6 +63,21 @@ CPPUNIT_TEST_FIXTURE(ScriptControlTest, testLegacyResultAndUndefined)
         = kit.executeScript("undefined", "<control>", 1, {}, nullptr, nullptr, nullptr);
     CPPUNIT_ASSERT(!result.oResult);
     CPPUNIT_ASSERT(!result.oError);
+    const auto legacy = kit.executeScript("typeof controller", "<control>", 1, {}, nullptr, nullptr, nullptr);
+    CPPUNIT_ASSERT(!legacy.oError);
+    CPPUNIT_ASSERT(legacy.oResult);
+    CPPUNIT_ASSERT_EQUAL(std::string("\"undefined\""), *legacy.oResult);
+    const auto documentOnly = kit.executeScriptWithDocument(
+        nullptr, "typeof controller", "<control>", 1, {}, nullptr, nullptr, nullptr,
+        std::chrono::seconds(30), nullptr);
+    CPPUNIT_ASSERT(!documentOnly.oError);
+    CPPUNIT_ASSERT(documentOnly.oResult);
+    CPPUNIT_ASSERT_EQUAL(std::string("\"undefined\""), *documentOnly.oResult);
+    const auto invalidView = kit.executeScriptWithView(
+        nullptr, -1, "42", "<control>", 1, {}, nullptr, nullptr, nullptr,
+        std::chrono::seconds(30), nullptr);
+    CPPUNIT_ASSERT(invalidView.oError);
+    CPPUNIT_ASSERT(!invalidView.oResult);
 }
 
 CPPUNIT_TEST_FIXTURE(ScriptControlTest, testExecutionDeadline)
@@ -112,6 +127,12 @@ CPPUNIT_TEST_FIXTURE(ScriptControlTest, testUnavailableEngine)
     CPPUNIT_ASSERT(legacy.oError);
     CPPUNIT_ASSERT(controlled.oError);
     CPPUNIT_ASSERT_EQUAL(*legacy.oError, *controlled.oError);
+    const auto view = kit.executeScriptWithView(
+        nullptr, -1, "42", "<control>", 1, {}, nullptr, nullptr, nullptr,
+        std::chrono::milliseconds(10), nullptr);
+    CPPUNIT_ASSERT(!view.oResult);
+    CPPUNIT_ASSERT(view.oError);
+    CPPUNIT_ASSERT_EQUAL(*legacy.oError, *view.oError);
 }
 #endif
 }

@@ -5127,18 +5127,29 @@ bool ChildSession::executeScript(char const * buffer, int length, StringVector c
     // Capturing `this` is safe even though the proxy callback can fire long after
     // executeScript has returned, since the callback runs only while the proxy stays
     // attached and ChildSession outlives that:
-    const COKitScriptResult aScriptResult = _docManager->getLOKit()->executeScriptWithDocument(
-        document.get(), script.c_str(), source, line,
-        [](void * data, std::string_view level, std::string_view message) {
-            static_cast<ChildSession *>(data)->sendTextFrame(
-                std::string("consolemsg ").append(level).append("\n").append(message));
-        },
-        this,
-        [](void * data, char const * payload) {
-            static_cast<ChildSession *>(data)->sendTextFrame(
-                "proxycall: " + std::string(payload));
-        },
-        this, std::chrono::seconds(30), nullptr);
+    const auto consoleCallback = [](void* data, std::string_view level, std::string_view message) {
+        static_cast<ChildSession*>(data)->sendTextFrame(
+            std::string("consolemsg ").append(level).append("\n").append(message));
+    };
+    const auto proxyCallback = [](void* data, char const* payload) {
+        static_cast<ChildSession*>(data)->sendTextFrame("proxycall: " + std::string(payload));
+    };
+    // Never call the appended ABI slot unless this loaded engine advertises it.
+    const auto kit = _docManager->getLOKit();
+    Poco::JSON::Object::Ptr engineInfo;
+    bool supportsRawView = false;
+    if (JsonUtil::parseJSON(kit->getVersionInfo(), engineInfo))
+    {
+        const auto binding = engineInfo->get("RawViewBinding");
+        supportsRawView = binding.isBoolean() && binding.convert<bool>();
+    }
+    const COKitScriptResult aScriptResult = supportsRawView
+        ? kit->executeScriptWithView(document.get(), _viewId, script.c_str(), source, line,
+                                     consoleCallback, this, proxyCallback, this,
+                                     std::chrono::seconds(30), nullptr)
+        : kit->executeScriptWithDocument(document.get(), script.c_str(), source, line,
+                                         consoleCallback, this, proxyCallback, this,
+                                         std::chrono::seconds(30), nullptr);
 
     // Build the response by string concatenation rather than via Poco JSON,
     // because oResult is already a JSON value (whatever JSON.stringify

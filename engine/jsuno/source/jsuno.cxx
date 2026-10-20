@@ -3456,6 +3456,18 @@ OUString jsuno::execute(
     std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
     cpo::uno::Reference<css::lang::XComponent> const& document)
 {
+    return execute(script, source, line, std::move(consoleHook), std::move(proxyCallHook),
+                   usedLegacyUnoApi, timeout, cancelled, document, {});
+}
+
+OUString jsuno::execute(
+    OUString const& script, OUString const& source, int line,
+    std::function<void(OUString const&, OUString const&)> consoleHook,
+    std::function<void(OUString const&)> proxyCallHook, bool* usedLegacyUnoApi,
+    std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
+    cpo::uno::Reference<css::lang::XComponent> const& document,
+    cpo::uno::Reference<css::frame::XController> const& controller)
+{
     ExecutionBudget budget{ std::chrono::steady_clock::now() + timeout, cancelled };
     auto const rt = JS_NewRuntime();
     JS_SetInterruptHandler(rt, ExecutionBudget::interrupt, &budget);
@@ -3625,6 +3637,9 @@ OUString jsuno::execute(
             wrapUnoObject(ctx, cool::get(comphelper::getProcessComponentContext())));
         if (document.is())
             JS_DefinePropertyValueStr(ctx, global, "document", wrapUnoObject(ctx, document),
+                                      JS_PROP_ENUMERABLE);
+        if (controller.is())
+            JS_DefinePropertyValueStr(ctx, global, "controller", wrapUnoObject(ctx, controller),
                                       JS_PROP_ENUMERABLE);
         auto const input = script.toUtf8();
         auto const sourceUtf8 = source.toUtf8();

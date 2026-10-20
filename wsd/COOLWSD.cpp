@@ -3508,6 +3508,7 @@ private:
             std::string jailId;
             std::string configId;
             bool supportsRawDocument = false;
+            bool supportsRawView = false;
             std::map<std::string, std::string> admsProps;
 #if !MOBILEAPP
             LOG_TRC("Child connection with URI [" << Anonymizer::anonymizeUrl(request.getUrl())
@@ -3583,6 +3584,8 @@ private:
                     configId = param.second;
                 else if (param.first == "rawdocument")
                     supportsRawDocument = param.second == "1";
+                else if (param.first == "rawview")
+                    supportsRawView = param.second == "1";
                 else if (param.first == "version")
                 {
                     COOLWSD::LOKitVersion = param.second;
@@ -3624,7 +3627,7 @@ private:
             LOG_TRC("Calling make_shared<ChildProcess>, for NewChildren?");
 
             auto child = std::make_shared<ChildProcess>(pid, jailId, configId, socket, request,
-                                                       admsProps, supportsRawDocument);
+                                                       admsProps, supportsRawDocument, supportsRawView);
 
             if (!Util::isMobileApp())
                 UNITWSD_CALL(newChild(child));

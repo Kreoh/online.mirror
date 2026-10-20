@@ -19,6 +19,9 @@
 #include <cppunit/plugin/TestPlugIn.h>
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/frame/XController.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 #include <cppuhelper/implbase.hxx>
 #include <jsuno/jsuno.hxx>
 #include <rtl/ustring.hxx>
@@ -39,6 +42,23 @@ public:
     OUString getImplementationName() override { return m_name; }
     bool supportsService(OUString const&) override { return false; }
     cpo::uno::Sequence<OUString> getSupportedServiceNames() override { return {}; }
+};
+
+class ControllerProbe final : public cppu::WeakImplHelper<css::frame::XController>
+{
+    OUString const m_name;
+public:
+    explicit ControllerProbe(OUString name) : m_name(std::move(name)) {}
+    void dispose() override {}
+    void addEventListener(cpo::uno::Reference<css::lang::XEventListener> const&) override {}
+    void removeEventListener(cpo::uno::Reference<css::lang::XEventListener> const&) override {}
+    void attachFrame(cpo::uno::Reference<css::frame::XFrame> const&) override {}
+    bool attachModel(cpo::uno::Reference<css::frame::XModel> const&) override { return false; }
+    bool suspend(bool) override { return false; }
+    cpo::uno::Any getViewData() override { return cpo::uno::Any(m_name); }
+    void restoreViewData(cpo::uno::Any const&) override {}
+    cpo::uno::Reference<css::frame::XModel> getModel() override { return {}; }
+    cpo::uno::Reference<css::frame::XFrame> getFrame() override { return {}; }
 };
 
 class Execute : public CppUnit::TestFixture
@@ -64,6 +84,32 @@ public:
                 "[d.writable, d.configurable, document.getImplementationName()]"_ustr, first));
         CPPUNIT_ASSERT_EQUAL(u"\"undefined\""_ustr, testexec(u"typeof document"_ustr).result);
         CPPUNIT_ASSERT_EQUAL(u"\"undefined\""_ustr, run(u"typeof document"_ustr, {}));
+    }
+
+    void testControllerBinding()
+    {
+        const cpo::uno::Reference<css::lang::XComponent> document(new DocumentProbe(u"document"_ustr));
+        const cpo::uno::Reference<css::frame::XController> first(new ControllerProbe(u"first"_ustr));
+        const cpo::uno::Reference<css::frame::XController> second(new ControllerProbe(u"second"_ustr));
+        const auto run = [&](OUString const& script,
+                             cpo::uno::Reference<css::frame::XController> const& controller) {
+            return jsuno::execute(script, u"<view>"_ustr, 1,
+                                  [](OUString const&, OUString const&) {}, {}, nullptr,
+                                  std::chrono::seconds(30), nullptr, document, controller);
+        };
+        CPPUNIT_ASSERT_EQUAL(u"\"first\""_ustr, run(u"controller.getViewData()"_ustr, first));
+        CPPUNIT_ASSERT_EQUAL(u"\"second\""_ustr, run(u"controller.getViewData()"_ustr, second));
+        CPPUNIT_ASSERT_EQUAL(u"[false,false,false,\"first\"]"_ustr,
+            run(u"var d = Object.getOwnPropertyDescriptor(globalThis, 'controller');"
+                "controller = null; delete globalThis.controller;"
+                "var replaced = Reflect.defineProperty(globalThis, 'controller', {value:null});"
+                "[d.writable, d.configurable, replaced, controller.getViewData()]"_ustr, first));
+        CPPUNIT_ASSERT_EQUAL(u"\"undefined\""_ustr, run(u"typeof controller"_ustr, {}));
+        CPPUNIT_ASSERT_EQUAL(u"\"undefined\""_ustr, testexec(u"typeof controller"_ustr).result);
+        CPPUNIT_ASSERT_EQUAL(u"\"undefined\""_ustr,
+            jsuno::execute(u"typeof controller"_ustr, u"<document>"_ustr, 1,
+                           [](OUString const&, OUString const&) {}, {}, nullptr,
+                           std::chrono::seconds(30), nullptr, document));
     }
 
     void testExecutionDeadline()
@@ -226,6 +272,7 @@ public:
 
     CPPUNIT_TEST_SUITE(Execute);
     CPPUNIT_TEST(testDocumentBinding);
+    CPPUNIT_TEST(testControllerBinding);
     CPPUNIT_TEST(testExecutionDeadline);
     CPPUNIT_TEST(testExecutionCancellation);
     CPPUNIT_TEST(testCrossThreadCancellation);
