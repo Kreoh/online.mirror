@@ -18,6 +18,7 @@
 #include <com/sun/star/chart2/data/XLabeledDataSequence.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/embed/XVisualObject.hpp>
+#include <com/sun/star/embed/XEmbeddedObject.hpp>
 #include <svx/svdoole2.hxx>
 #include <array>
 #include <iostream>
@@ -1556,6 +1557,8 @@ CPPUNIT_TEST_FIXTURE(ScExportTest2, testChartExactGeometryXLSX)
     const auto aExpected = readGeometry("live edit");
     CPPUNIT_ASSERT_EQUAL(sal_Int32(17999), aExpected[0].aSize.Width);
     CPPUNIT_ASSERT_EQUAL(sal_Int32(10000), aExpected[0].aSize.Height);
+    CPPUNIT_ASSERT_EQUAL(aExpected[0].aSize.Width, aExpected[0].aVisualSize.Width);
+    CPPUNIT_ASSERT_EQUAL(aExpected[0].aSize.Height, aExpected[0].aVisualSize.Height);
     for (size_t i = 0; i < aExpected.size(); ++i)
     {
         CPPUNIT_ASSERT_EQUAL(aInitial[i].aPosition.X, aExpected[i].aPosition.X);
@@ -1610,6 +1613,78 @@ CPPUNIT_TEST_FIXTURE(ScExportTest2, testChartExactGeometryXLSX)
             CPPUNIT_ASSERT_EQUAL(aExpected[i].aPosition.Y, aActual[i].aPosition.Y);
             CPPUNIT_ASSERT_EQUAL(aExpected[i].eAnchor, aActual[i].eAnchor);
         }
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest2, testChartScaledClientResize)
+{
+    createScDoc("xlsx/chart_hyperlink.xlsx");
+    ScDrawLayer* pModel = getScDoc()->GetDrawLayer();
+    auto* pChart = dynamic_cast<SdrOle2Obj*>(pModel->GetPage(0)->GetObj(0));
+    CPPUNIT_ASSERT(pChart && pChart->IsChart());
+    auto xShape = pChart->getUnoShape();
+    uno::Reference<embed::XVisualObject> xVisual(pChart->getXModel(), uno::UNO_QUERY_THROW);
+    const auto& xObject = pChart->GetObjRef();
+    xObject->setClientSite({});
+    xVisual->setVisualAreaSize(embed::Aspects::MSOLE_CONTENT, awt::Size(10000, 6000));
+    {
+        pModel->setLock(true);
+        comphelper::ScopeGuard aUnlock([pModel] { pModel->setLock(false); });
+        xShape->setSize(awt::Size(20000, 12000));
+    }
+
+    double fScaleWidth = 0;
+    double fScaleHeight = 0;
+    Size aVisualSize;
+    CPPUNIT_ASSERT(pChart->CalculateNewScaling(fScaleWidth, fScaleHeight, aVisualSize));
+    CPPUNIT_ASSERT_EQUAL(2.0, fScaleWidth);
+    CPPUNIT_ASSERT_EQUAL(2.0, fScaleHeight);
+    CPPUNIT_ASSERT(pChart->AddOwnLightClient());
+    CPPUNIT_ASSERT(xObject->getClientSite().is());
+
+    // Odd outer dimensions cannot be represented exactly in integral visual units at scale 2.
+    // Accepting the requested visual size must preserve the exact outer dimensions on every edit.
+    const std::array<awt::Size, 3> aSizes{
+        awt::Size(17999, 10001), awt::Size(18000, 10000), awt::Size(17999, 10001)
+    };
+    for (const auto& rSize : aSizes)
+    {
+        xShape->setSize(rSize);
+        const auto aOuter = xShape->getSize();
+        const auto aVisual = xVisual->getVisualAreaSize(embed::Aspects::MSOLE_CONTENT);
+        CPPUNIT_ASSERT_EQUAL(rSize.Width, aOuter.Width);
+        CPPUNIT_ASSERT_EQUAL(rSize.Height, aOuter.Height);
+        CPPUNIT_ASSERT_EQUAL(rSize.Width / 2, aVisual.Width);
+        CPPUNIT_ASSERT_EQUAL(rSize.Height / 2, aVisual.Height);
+        CPPUNIT_ASSERT(xObject->getClientSite().is());
+    }
+}
+
+CPPUNIT_TEST_FIXTURE(ScExportTest2, testChartAnchorModesXLSX)
+{
+    createScDoc("xlsx/chart_hyperlink.xlsx");
+    SdrPage* pPage = getScDoc()->GetDrawLayer()->GetPage(0);
+    CPPUNIT_ASSERT_EQUAL(size_t(3), pPage->GetObjCount());
+    ScDrawLayer::SetCellAnchoredFromPosition(*pPage->GetObj(0), *getScDoc(), 0, false);
+    ScDrawLayer::SetCellAnchoredFromPosition(*pPage->GetObj(1), *getScDoc(), 0, true);
+    ScDrawLayer::SetPageAnchored(*pPage->GetObj(2));
+
+    const std::array<ScAnchorType, 3> aExpected{ SCA_CELL, SCA_CELL_RESIZE, SCA_PAGE };
+    const std::array<OUString, 3> aEditAs{ u"oneCell"_ustr, u"twoCell"_ustr, u"absolute"_ustr };
+    for (int nCycle = 0; nCycle < 2; ++nCycle)
+    {
+        save(TestFilter::XLSX);
+        xmlDocUniquePtr pDrawing = parseExport(u"xl/drawings/drawing1.xml"_ustr);
+        for (size_t i = 0; i < aExpected.size(); ++i)
+        {
+            const OString aAnchor = "/xdr:wsDr/xdr:twoCellAnchor[" + OString::number(i + 1) + "]";
+            assertXPath(pDrawing, aAnchor, "editAs", aEditAs[i]);
+        }
+        loadFromURL(maTempFile.GetURL());
+        pPage = getScDoc()->GetDrawLayer()->GetPage(0);
+        CPPUNIT_ASSERT_EQUAL(size_t(3), pPage->GetObjCount());
+        for (size_t i = 0; i < aExpected.size(); ++i)
+            CPPUNIT_ASSERT_EQUAL(aExpected[i], ScDrawLayer::GetAnchorType(*pPage->GetObj(i)));
     }
 }
 

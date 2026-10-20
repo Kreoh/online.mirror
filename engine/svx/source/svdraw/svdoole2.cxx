@@ -1629,8 +1629,14 @@ void SdrOle2Obj::ImpSetVisAreaSize()
             MapUnit aMapUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit( mpImpl->mxObjRef->getMapUnit( GetAspect() ) );
             Size aVisSize;
             if (sal_Int32(fScaleWidth) != 0 && sal_Int32(fScaleHeight) != 0) // avoid div by zero
-                aVisSize = Size( static_cast<tools::Long>( getRectangle().GetWidth() / fScaleWidth ),
-                                 static_cast<tools::Long>( getRectangle().GetHeight() / fScaleHeight ) );
+            {
+                // Chart dimensions use the same edge distances as UNO XShape::getSize().
+                const auto& rRect = getRectangle();
+                const auto nWidth = IsChart() ? rRect.getOpenWidth() : rRect.GetWidth();
+                const auto nHeight = IsChart() ? rRect.getOpenHeight() : rRect.GetHeight();
+                aVisSize = Size(static_cast<tools::Long>(nWidth / fScaleWidth),
+                                static_cast<tools::Long>(nHeight / fScaleHeight));
+            }
 
             aVisSize = OutputDevice::LogicToLogic(
                 aVisSize,
@@ -1648,16 +1654,37 @@ void SdrOle2Obj::ImpSetVisAreaSize()
             catch( embed::NoVisualAreaSizeException& )
             {}
 
-            tools::Rectangle aAcceptedVisArea;
-            aAcceptedVisArea.SetSize( Size( static_cast<tools::Long>( aSz.Width * fScaleWidth ),
-                                            static_cast<tools::Long>( aSz.Height * fScaleHeight ) ) );
-            if (aVisSize != aAcceptedVisArea.GetSize())
+            if (IsChart())
             {
-                // server changed VisArea to its liking and the VisArea is different than the suggested one
-                // store the new value as given by the object
-                MapUnit aNewMapUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit( mpImpl->mxObjRef->getMapUnit( GetAspect() ) );
-                auto aSize = OutputDevice::LogicToLogic(aAcceptedVisArea.GetSize(), MapMode(aNewMapUnit), MapMode(getSdrModelFromSdrObject().GetScaleUnit()));
-                setRectangleSize(aSize.Width(), aSize.Height());
+                // Compare in visual units. An accepted integral visual size must not
+                // quantise the requested outer size again when the scale is non-unit.
+                if (aVisSize != Size(aSz.Width, aSz.Height))
+                {
+                    const Size aAcceptedSize(static_cast<tools::Long>(aSz.Width * fScaleWidth),
+                                             static_cast<tools::Long>(aSz.Height * fScaleHeight));
+                    const MapUnit aNewMapUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit(
+                        mpImpl->mxObjRef->getMapUnit(GetAspect()));
+                    const Size aSize = OutputDevice::LogicToLogic(
+                        aAcceptedSize, MapMode(aNewMapUnit),
+                        MapMode(getSdrModelFromSdrObject().GetScaleUnit()));
+                    tools::Rectangle aRect(getRectangle());
+                    aRect.setWidth(aSize.Width());
+                    aRect.setHeight(aSize.Height());
+                    setRectangle(aRect);
+                }
+            }
+            else
+            {
+                tools::Rectangle aAcceptedVisArea;
+                aAcceptedVisArea.SetSize( Size( static_cast<tools::Long>( aSz.Width * fScaleWidth ),
+                                                static_cast<tools::Long>( aSz.Height * fScaleHeight ) ) );
+                if (aVisSize != aAcceptedVisArea.GetSize())
+                {
+                    // Store the visual area accepted by the embedded object.
+                    MapUnit aNewMapUnit = VCLUnoHelper::UnoEmbed2VCLMapUnit( mpImpl->mxObjRef->getMapUnit( GetAspect() ) );
+                    auto aSize = OutputDevice::LogicToLogic(aAcceptedVisArea.GetSize(), MapMode(aNewMapUnit), MapMode(getSdrModelFromSdrObject().GetScaleUnit()));
+                    setRectangleSize(aSize.Width(), aSize.Height());
+                }
             }
 
             // make the new object area known to the client
@@ -1725,8 +1752,8 @@ void SdrOle2Obj::ImpSetVisAreaSize()
             xVisualObject->setVisualAreaSize(
                 GetAspect(),
                 awt::Size(
-                    aNewRect.GetWidth(),
-                    aNewRect.GetHeight()));
+                    IsChart() ? aNewRect.getOpenWidth() : aNewRect.GetWidth(),
+                    IsChart() ? aNewRect.getOpenHeight() : aNewRect.GetHeight()));
         }
     }
 }
@@ -2027,7 +2054,9 @@ bool SdrOle2Obj::CalculateNewScaling( double& aScaleWidth, double& aScaleHeight,
     MapMode aMapMode(getSdrModelFromSdrObject().GetScaleUnit());
     aObjAreaSize = mpImpl->mxObjRef.GetSize( &aMapMode );
 
-    Size aSize = getRectangle().GetSize();
+    const auto& rRect = getRectangle();
+    const Size aSize = IsChart() ? Size(rRect.getOpenWidth(), rRect.getOpenHeight())
+                                 : rRect.GetSize();
     if (!aObjAreaSize.Width() || !aObjAreaSize.Height())
     {
         // avoid invalid fractions

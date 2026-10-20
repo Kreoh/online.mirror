@@ -1882,9 +1882,17 @@ void XclExpChartObj::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr pDrawing = rStrm.GetCurrentStream();
 
-    // FIXME: two cell? it seems the two cell anchor is incorrect.
-    pDrawing->startElement( FSNS( XML_xdr, XML_twoCellAnchor ), // OOXTODO: oneCellAnchor, absoluteAnchor
-            XML_editAs, "oneCell" );
+    const char* pEditAs = "absolute";
+    if (const auto* pShape = SdrObject::getSdrObjectFromXShape(mxShape))
+    {
+        switch (ScDrawLayer::GetAnchorType(*pShape))
+        {
+            case SCA_CELL: pEditAs = "oneCell"; break;
+            case SCA_CELL_RESIZE: pEditAs = "twoCell"; break;
+            case SCA_PAGE: break;
+        }
+    }
+    pDrawing->startElement(FSNS(XML_xdr, XML_twoCellAnchor), XML_editAs, pEditAs);
     Reference< XPropertySet > xPropSet( mxShape, UNO_QUERY );
     if (xPropSet.is())
     {
