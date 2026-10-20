@@ -1529,7 +1529,8 @@ CPPUNIT_TEST_FIXTURE(ScExportTest2, testChartExactGeometryXLSX)
         {
             auto* pChart = dynamic_cast<SdrOle2Obj*>(pPage->GetObj(i));
             CPPUNIT_ASSERT(pChart && pChart->IsChart());
-            CPPUNIT_ASSERT_EQUAL(u"Diagram "_ustr + OUString::number(i + 1), pChart->GetName());
+            const OUString aExpectedName = u"Diagram "_ustr + OUString::number(i + 1);
+            CPPUNIT_ASSERT_EQUAL(aExpectedName, pChart->GetName());
             auto xShape = pChart->getUnoShape();
             uno::Reference<embed::XVisualObject> xVisual(pChart->getXModel(), uno::UNO_QUERY_THROW);
             aResult[i] = { xShape->getPosition(), xShape->getSize(),
