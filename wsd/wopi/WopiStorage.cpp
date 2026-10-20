@@ -32,6 +32,8 @@
 #include <wsd/ProofKey.hpp>
 #include <wsd/RemoteDocumentBroker.hpp>
 
+#include <stdexcept>
+
 #include <Poco/Exception.h>
 #include <Poco/File.h>
 #include <Poco/Net/AcceptCertificateHandler.h>
@@ -148,9 +150,65 @@ void WopiStorage::handleWOPIFileInfo(const WOPIFileInfo& wopiFileInfo, LockConte
     _fileUrl = wopiFileInfo.getFileUrl();
 }
 
+std::optional<WOPIFileInfo::AgentAuthorityProof>
+WOPIFileInfo::parseAgentAuthority(const Poco::JSON::Object::Ptr& object)
+{
+    if (!object || !object->isObject("KreohAgentAuthority"))
+        return std::nullopt;
+    try
+    {
+        const auto proof = object->getObject("KreohAgentAuthority");
+        const auto stringValue = [&](const char* name) {
+            const auto value = proof->get(name);
+            if (!value.isString())
+                throw std::invalid_argument("Invalid agent proof string");
+            const auto text = value.extract<std::string>();
+            if (text.empty() || text.size() > 256)
+                throw std::invalid_argument("Invalid agent proof identity");
+            return text;
+        };
+        const auto positiveInteger = [&](const char* name) -> Poco::Int64 {
+            const auto value = proof->get(name);
+            if (!value.isInteger() || value.isBoolean())
+                throw std::invalid_argument("Invalid agent proof integer");
+            const auto number = value.convert<Poco::Int64>();
+            if (number <= 0)
+                throw std::invalid_argument("Invalid agent proof range");
+            return number;
+        };
+        const auto permission = proof->get("UserCanWrite");
+        if (stringValue("Purpose") != "AGENT" || !permission.isBoolean() ||
+            !permission.extract<bool>())
+            return std::nullopt;
+        AgentAuthorityProof result;
+        result.ownerId = stringValue("OwnerId");
+        result.sessionId = stringValue("SessionId");
+        result.nativeEpoch = stringValue("NativeEpoch");
+        result.authorityEpoch = positiveInteger("AuthorityEpoch");
+        result.accessTokenExpiry = std::chrono::milliseconds(positiveInteger("AccessTokenExpiry"));
+        result.sessionExpiry = std::chrono::milliseconds(positiveInteger("SessionExpiry"));
+        const auto phase = stringValue("RegistrationPhase");
+        if (phase == "REGISTERING")
+            result.phase = AgentAuthorityProof::RegistrationPhase::Registering;
+        else if (phase == "ACKNOWLEDGED")
+            result.phase = AgentAuthorityProof::RegistrationPhase::Acknowledged;
+        else
+            return std::nullopt;
+        if (!result.isLive())
+            return std::nullopt;
+        return result;
+    }
+    catch (const std::exception&)
+    {
+        // An invalid optional extension must not prevent finite document work.
+        return std::nullopt;
+    }
+}
+
 WopiStorage::WOPIFileInfo::WOPIFileInfo(const FileInfo& fileInfo, Poco::JSON::Object::Ptr& object,
                                         const Poco::URI& uriObject)
     : FileInfo(fileInfo)
+    , _agentAuthority(parseAgentAuthority(object))
     , _hideUserList("false")
 {
     JsonUtil::findJSONValue(object, "UserId", _userId);

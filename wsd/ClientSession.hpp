@@ -309,6 +309,15 @@ public:
     void checkAIRequestTimeout(std::chrono::steady_clock::time_point now);
 #endif
 
+#if !MOBILEAPP
+    const WOPIFileInfo::AgentAuthorityProof* getAgentAuthority() const
+    {
+        return _wopiFileInfo && _wopiFileInfo->getAgentAuthority()
+                   ? &*_wopiFileInfo->getAgentAuthority() : nullptr;
+    }
+
+#endif
+
     /// Set WOPI fileinfo object
     void setWopiFileInfo(std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo) { _wopiFileInfo = std::move(wopiFileInfo); }
 

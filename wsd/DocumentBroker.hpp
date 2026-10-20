@@ -704,6 +704,7 @@ public:
 #if ENABLE_DEBUG
     /// Expires retained authority after successful registration in native unit tests only.
     bool expireAgentRegistrationForTesting(const std::string& epoch);
+    bool hasAgentAuthorityBaselineForTesting(const std::string& epoch) const;
 #endif
 
 
@@ -2166,6 +2167,15 @@ private:
         const Authorization authority;
 #endif
 
+#if !MOBILEAPP
+        struct AuthorityBaseline
+        {
+            WOPIFileInfo::AgentAuthorityProof proof;
+            Poco::URI source;
+            std::weak_ptr<ClientSession> render;
+        };
+        std::optional<AuthorityBaseline> authorityBaseline;
+#endif
         std::string epoch;
         std::string requestId;
         std::string renderId;

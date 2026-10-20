@@ -126,6 +126,8 @@ public:
     /// Returns the adjusted expiry epoch in milliseconds, or zero if no expiry.
     static duration adjustExpiryEpoch(duration rawExpiryEpoch);
 
+    std::chrono::milliseconds getExpiryEpoch() const { return _expiryEpoch; }
+
     /// Sets the Token's expiry time from the epoch.
     void setExpiryEpoch(duration epochMs)
     {

@@ -128,6 +128,44 @@ bool retirementFields(const std::string& message, const std::string& command,
     return canonical == message;
 }
 
+#if !MOBILEAPP
+std::optional<Poco::URI> agentAuthoritySource(const Poco::URI& uri)
+{
+    // Agent view selectors identify sockets, not the WOPI file. Never retain credentials.
+    if (!uri.getUserInfo().empty() || !uri.getFragment().empty())
+        return std::nullopt;
+    Poco::URI source(uri);
+    auto parameters = source.getQueryParameters();
+    std::erase_if(parameters, [](const auto& parameter) {
+        return parameter.first == "access_token" || parameter.first == "access_token_ttl" ||
+               parameter.first == "access_header" || parameter.first == "agentview" ||
+               parameter.first == "agentviewid";
+    });
+    std::sort(parameters.begin(), parameters.end());
+    source.setQueryParameters(parameters);
+    return source;
+}
+
+bool matchingAgentAuthority(const std::shared_ptr<ClientSession>& transport,
+                            const std::shared_ptr<ClientSession>& render,
+                            const WOPIFileInfo::AgentAuthorityProof& proof,
+                            const Poco::URI& source)
+{
+    if (!transport || !render || transport->isCloseFrame() || !render->isLive() ||
+        !transport->isWebsocketUrpEnabled() || !render->isAgentRenderView() ||
+        !transport->isWritable() || !render->isWritable() || !proof.isLive() ||
+        !transport->getAuthorization().matches(render->getAuthorization()) ||
+        transport->getAuthorization().getExpiryEpoch() != proof.accessTokenExpiry ||
+        render->getAuthorization().getExpiryEpoch() != proof.accessTokenExpiry)
+        return false;
+    const auto* transportProof = transport->getAgentAuthority();
+    const auto* renderProof = render->getAgentAuthority();
+    return transportProof && renderProof && *transportProof == proof && *renderProof == proof &&
+           agentAuthoritySource(transport->getPublicUri()) == source &&
+           agentAuthoritySource(render->getPublicUri()) == source;
+}
+#endif
+
 bool retirementViewId(const std::string& text, int& view)
 {
     if (text.empty() || text.size() > 10 || text.find_first_not_of("0123456789") != std::string::npos)
@@ -139,6 +177,18 @@ bool retirementViewId(const std::string& text, int& view)
 }
 
 #if ENABLE_DEBUG
+bool DocumentBroker::hasAgentAuthorityBaselineForTesting(const std::string& epoch) const
+{
+    ASSERT_CORRECT_THREAD();
+#if !MOBILEAPP
+    if (UnitWSD::isUnitTesting())
+        for (const auto& record : _agentRetirements)
+            if (record->epoch == epoch)
+                return record->authorityBaseline.has_value();
+#endif
+    return false;
+}
+
 bool DocumentBroker::expireAgentRegistrationForTesting(const std::string& epoch)
 {
     ASSERT_CORRECT_THREAD();
@@ -270,6 +320,13 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
         record->viewId = view;
         record->renderId = render->getId();
         record->transport = session;
+#if !MOBILEAPP
+        const auto* proof = session->getAgentAuthority();
+        const auto source = agentAuthoritySource(session->getPublicUri());
+        if (proof && source && proof->nativeEpoch == record->epoch &&
+            matchingAgentAuthority(session, render, *proof, *source))
+            record->authorityBaseline = AgentRetirementRecord::AuthorityBaseline{*proof, *source, render};
+#endif
         _agentRetirements.push_back(std::move(record));
         _retirementNegotiated = true;
         // The retained record exists before the trusted Kit reservation request.
@@ -381,6 +438,21 @@ bool DocumentBroker::handleAgentRetirementKit(const std::string& message)
             fenceAgentRetirement(record.renderId);
             return false;
         }
+#if !MOBILEAPP
+        if (record.authorityBaseline)
+        {
+            const auto& baseline = *record.authorityBaseline;
+            const auto render = baseline.render.lock();
+            const auto entry = _sessions.find(record.renderId);
+            const auto transportEntry = _sessions.find(session->getId());
+            if (transportEntry == _sessions.end() || transportEntry->second != session ||
+                !render || entry == _sessions.end() || entry->second != render ||
+                render->getKitViewId() != record.viewId ||
+                baseline.proof.nativeEpoch != record.epoch ||
+                !matchingAgentAuthority(session, render, baseline.proof, baseline.source))
+                record.authorityBaseline.reset();
+        }
+#endif
         record.phase = AgentRetirementRecord::Phase::Active;
         _awaitingNextAgentGreeting = false;
         session->bindAgentViewId(record.viewId);

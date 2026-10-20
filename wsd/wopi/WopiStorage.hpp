@@ -41,6 +41,32 @@ public:
         Unset
     };
 
+    struct AgentAuthorityProof
+    {
+        enum class RegistrationPhase { Registering, Acknowledged };
+        std::string ownerId;
+        std::string sessionId;
+        std::string nativeEpoch;
+        Poco::Int64 authorityEpoch = 0;
+        std::chrono::milliseconds accessTokenExpiry{0};
+        std::chrono::milliseconds sessionExpiry{0};
+        RegistrationPhase phase = RegistrationPhase::Registering;
+
+        bool operator==(const AgentAuthorityProof&) const = default;
+        bool isLive() const
+        {
+            return accessTokenExpiry > std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::system_clock::now().time_since_epoch()) &&
+                   accessTokenExpiry <= sessionExpiry;
+        }
+    };
+    static std::optional<AgentAuthorityProof> parseAgentAuthority(const Poco::JSON::Object::Ptr& object);
+    const std::optional<AgentAuthorityProof>& getAgentAuthority() const { return _agentAuthority; }
+
+private:
+    std::optional<AgentAuthorityProof> _agentAuthority;
+
+public:
     /// warning - removes items from object.
     WOPIFileInfo(const FileInfo& fileInfo, Poco::JSON::Object::Ptr& object,
                  const Poco::URI& uriObject);

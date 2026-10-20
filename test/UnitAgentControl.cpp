@@ -16,6 +16,7 @@
 #include <wsd/DocumentBroker.hpp>
 #include <wsd/COOLWSD.hpp>
 #include <map>
+#include <limits>
 #include <sstream>
 #include <cstdlib>
 #include <atomic>
@@ -54,6 +55,80 @@ class UnitAgentControl final : public WopiTestServer
     std::shared_ptr<http::WebSocketSession> _urpSocket;
     std::size_t _invalidViewIdIndex = 0;
     bool _retirement = false;
+    const int _proofMode;
+    std::atomic<unsigned> _agentProofRequests{0}, _nextAgentProofRequests{0};
+    const Poco::Int64 _proofExpiry = std::chrono::duration_cast<std::chrono::milliseconds>(
+        (std::chrono::system_clock::now() + std::chrono::hours(1)).time_since_epoch()).count();
+
+    void initProofWebsocket(std::string path)
+    {
+        if (_proofMode && path.find(AgentToken) != std::string::npos)
+            path += "&access_token_ttl=" + std::to_string(_proofExpiry);
+        initWebsocket(path);
+    }
+
+    Poco::JSON::Object::Ptr authorityProof(const std::string& epoch) const
+    {
+        Poco::JSON::Object::Ptr proof = new Poco::JSON::Object();
+        proof->set("Purpose", "AGENT");
+        proof->set("UserCanWrite", true);
+        proof->set("OwnerId", "owner");
+        proof->set("SessionId", "session");
+        proof->set("AuthorityEpoch", 1);
+        proof->set("NativeEpoch", epoch);
+        proof->set("RegistrationPhase", "REGISTERING");
+        proof->set("AccessTokenExpiry", _proofExpiry);
+        proof->set("SessionExpiry", _proofExpiry + 3600000);
+        return proof;
+    }
+
+    void verifyProofParser()
+    {
+        const auto parse = [](const Poco::JSON::Object::Ptr& proof) {
+            Poco::JSON::Object::Ptr info = new Poco::JSON::Object();
+            info->set("KreohAgentAuthority", proof);
+            return WOPIFileInfo::parseAgentAuthority(info);
+        };
+        LOK_ASSERT(parse(authorityProof("epoch1")));
+        for (const auto* key : {"Purpose", "UserCanWrite", "OwnerId", "SessionId",
+                               "AuthorityEpoch", "NativeEpoch", "RegistrationPhase",
+                               "AccessTokenExpiry", "SessionExpiry"})
+        {
+            auto proof = authorityProof("epoch1");
+            proof->remove(key);
+            LOK_ASSERT(!parse(proof));
+            proof = authorityProof("epoch1");
+            proof->set(key, Poco::JSON::Object::Ptr(new Poco::JSON::Object()));
+            LOK_ASSERT(!parse(proof));
+        }
+        for (const auto* key : {"AuthorityEpoch", "AccessTokenExpiry", "SessionExpiry"})
+        {
+            for (const auto& value : {Poco::Dynamic::Var("1"), Poco::Dynamic::Var(true),
+                                      Poco::Dynamic::Var(1.5), Poco::Dynamic::Var(0),
+                                      Poco::Dynamic::Var(-1),
+                                      Poco::Dynamic::Var(std::numeric_limits<Poco::UInt64>::max())})
+            {
+                auto proof = authorityProof("epoch1");
+                proof->set(key, value);
+                LOK_ASSERT(!parse(proof));
+            }
+        }
+        auto proof = authorityProof("epoch1");
+        proof->set("RegistrationPhase", "ACKNOWLEDGED");
+        LOK_ASSERT(parse(proof));
+        proof->set("RegistrationPhase", "ACTIVE");
+        LOK_ASSERT(!parse(proof));
+        proof = authorityProof("epoch1");
+        proof->set("UserCanWrite", "true");
+        LOK_ASSERT(!parse(proof));
+        proof = authorityProof("epoch1");
+        proof->set("SessionExpiry", _proofExpiry - 1);
+        LOK_ASSERT(!parse(proof));
+        proof = authorityProof("epoch1");
+        proof->set("AccessTokenExpiry", 1);
+        LOK_ASSERT(!parse(proof));
+    }
+
     bool _nextEpoch = false;
     std::string _firstRetirementRequest;
     std::string _firstRetirementResult;
@@ -194,7 +269,7 @@ class UnitAgentControl final : public WopiTestServer
             _renderView.reset();
             _nextEpoch = true;
             TRANSITION_STATE(_phase, Phase::WaitRenderView);
-            initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) + "-2&agentview=1");
+            initProofWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) + "-2&agentview=1");
             _renderSocket = getWs()->getWebSocket();
             WSD_CMD("load url=" + getWopiSrc());
             return;
@@ -231,7 +306,7 @@ class UnitAgentControl final : public WopiTestServer
     {
         const auto invalidIds = invalidAgentViewIds();
         LOK_ASSERT(_invalidViewIdIndex < invalidIds.size());
-        initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) +
+        initProofWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) +
                       "&agentviewid=" + invalidIds[_invalidViewIdIndex]);
         _invalidUrpSocket = getWs()->getWebSocket();
         std::static_pointer_cast<WebSocketHandler>(_invalidUrpSocket)
@@ -240,10 +315,12 @@ class UnitAgentControl final : public WopiTestServer
     }
 
 public:
-    explicit UnitAgentControl(bool retirement = false)
-        : WopiTestServer(retirement ? "UnitAgentRetirement" : "UnitAgentControl", "empty.odt")
+    explicit UnitAgentControl(bool retirement = false, int proofMode = 0)
+        : WopiTestServer(proofMode ? "UnitAgentProof" + std::to_string(proofMode) :
+                         retirement ? "UnitAgentRetirement" : "UnitAgentControl", "empty.odt")
         , _phase(Phase::LoadBrowser)
         , _retirement(retirement)
+        , _proofMode(proofMode)
     {
 #if ENABLE_DEBUG
         setHasKitHooks("unit-agent-control-kit.so");
@@ -254,14 +331,43 @@ public:
     void configure(Poco::Util::LayeredConfiguration& config) override
     {
         config.setBool("security.enable_websocket_urp", true);
+        verifyProofParser();
     }
 
     void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
                              Poco::JSON::Object::Ptr& fileInfo) override
     {
         if (request.getURI().find(AgentToken) != std::string::npos)
+        {
             fileInfo->set("EnableWebsocketURP", true);
+            if (_proofMode)
+            {
+                const bool next = request.getURI().find(std::string(AgentToken) + "-2") != std::string::npos;
+                auto proof = authorityProof(next ? "epoch2" : "epoch1");
+                if (_proofMode == 2)
+                    proof->set("UserCanWrite", "true");
+                if (_proofMode == 3)
+                    proof->set("NativeEpoch", "wrong-epoch");
+                if (_proofMode == 4)
+                    proof->set("AccessTokenExpiry", _proofExpiry + 1);
+                if (_proofMode == 5)
+                    proof->set("OwnerId", (next ? _nextAgentProofRequests : _agentProofRequests).fetch_add(1) == 0
+                                              ? "owner" : "other-owner");
+                if (_proofMode == 6)
+                    proof->set("RegistrationPhase", "ACKNOWLEDGED");
+                fileInfo->set("KreohAgentAuthority", proof);
+            }
+        }
     }
+
+#if ENABLE_DEBUG
+    void agentRetirementRegistered(DocumentBroker* broker, const std::string& epoch,
+                                   int, const std::string&) override
+    {
+        LOK_ASSERT_EQUAL(_proofMode == 1 || _proofMode == 6,
+                         broker->hasAgentAuthorityBaselineForTesting(epoch));
+    }
+#endif
 
     void onDocBrokerAddSession(const std::string&,
                                const std::shared_ptr<ClientSession>& session) override
@@ -337,7 +443,7 @@ public:
             if (_nextEpoch)
             {
                 TRANSITION_STATE(_phase, Phase::WaitUrpAgent);
-                initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) + "-2");
+                initProofWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) + "-2");
                 _urpSocket = getWs()->getWebSocket();
                 registerRetirement();
             }
@@ -351,7 +457,7 @@ public:
         if (_phase == Phase::LoadBrowser)
         {
             TRANSITION_STATE(_phase, Phase::WaitBrowserView);
-            initWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
+            initProofWebsocket("/wopi/files/0?access_token=" + std::string(BrowserToken));
             _browserSocket = getWs()->getWebSocket();
             WSD_CMD("load url=" + getWopiSrc());
         }
@@ -379,7 +485,7 @@ public:
                                browserInvalidation.find("sourceviewid=" +
                                                        std::to_string(browser->getKitViewId())) != std::string::npos);
             TRANSITION_STATE(_phase, Phase::WaitRenderView);
-            initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) +
+            initProofWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) +
                           "&agentview=1");
             _renderSocket = getWs()->getWebSocket();
             WSD_CMD("load url=" + getWopiSrc());
@@ -403,7 +509,7 @@ public:
             }
 
             TRANSITION_STATE(_phase, Phase::WaitUrpAgent);
-            initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+            initProofWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
             _urpSocket = getWs()->getWebSocket();
             if (_retirement)
                 registerRetirement();
@@ -436,7 +542,7 @@ public:
             {
                 if (_nextEpoch)
                 {
-                    initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+                    initProofWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
                     const auto retry = getWs()->getWebSocket();
                     helpers::sendTextFrame(retry, _firstRetirementRequest, getTestname());
                     LOK_ASSERT_EQUAL(_firstRetirementResult,
@@ -493,7 +599,7 @@ public:
             LOK_ASSERT(renderView);
             _urpAgent.reset();
             TRANSITION_STATE(_phase, Phase::WaitReboundUrpAgent);
-            initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) +
+            initProofWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) +
                           "&agentviewid=" + std::to_string(renderView->getKitViewId()));
             _urpSocket = getWs()->getWebSocket();
             std::static_pointer_cast<WebSocketHandler>(_urpSocket)
@@ -1288,6 +1394,9 @@ UnitBase** unit_create_wsd_multi(void)
 #endif
     return new UnitBase* [] { new UnitAgentControl(), new UnitAgentControl(true),
 #if ENABLE_DEBUG
+        new UnitAgentControl(true, 1), new UnitAgentControl(true, 2),
+        new UnitAgentControl(true, 3), new UnitAgentControl(true, 4),
+        new UnitAgentControl(true, 5), new UnitAgentControl(true, 6),
         new UnitAgentRetirementProbe(1), new UnitAgentRetirementProbe(2),
         new UnitAgentRetirementProbe(3), new UnitAgentRetirementProbe(4),
         new UnitAgentRetirementProbe(5), new UnitAgentRetirementProbe(6),
