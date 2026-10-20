@@ -9988,6 +9988,18 @@ COKitScriptResult COKitImpl::executeScript(
     void * consoleCallbackData,
     void (*proxyCallback) (void * data, char const * payload), void * proxyCallbackData)
 {
+    return executeScriptWithControl(script, source, line, std::move(consoleCallback),
+                                    consoleCallbackData, proxyCallback, proxyCallbackData,
+                                    std::chrono::seconds(30), nullptr);
+}
+
+COKitScriptResult COKitImpl::executeScriptWithControl(
+    char const* script, std::string_view source, int line,
+    std::function<void(void* data, std::string_view level, std::string_view message)> consoleCallback,
+    void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
+    void* proxyCallbackData, std::chrono::milliseconds timeout,
+    std::shared_ptr<std::atomic<bool> const> cancelled)
+{
     comphelper::ProfileZone zone("lo_executeScript");
     SolarMutexGuard guard;
     SetLastExceptionMsg();
@@ -10005,7 +10017,7 @@ COKitScriptResult COKitImpl::executeScript(
             OUString::fromUtf8(script), OUString::fromUtf8(source), line,
             [consoleCallback, consoleCallbackData](OUString const & level, OUString const & message)
             { consoleCallback(consoleCallbackData, level.toUtf8(), message.toUtf8()); },
-            std::move(hook), &aScriptResult.bUsedLegacyUnoApi);
+            std::move(hook), &aScriptResult.bUsedLegacyUnoApi, timeout, cancelled.get());
         if (!value.isEmpty()) {
             aScriptResult.oResult = convertOUStringToStdString(value);
         }
@@ -10039,6 +10051,8 @@ COKitScriptResult COKitImpl::executeScript(
     (void) consoleCallbackData;
     (void) proxyCallback;
     (void) proxyCallbackData;
+    (void) timeout;
+    (void) cancelled;
     static constexpr auto msg = u"executeScript: QuickJS support is not enabled in this build"_ustr;
     SetLastExceptionMsg(msg);
     aScriptResult.oError = convertOUStringToStdString(msg);

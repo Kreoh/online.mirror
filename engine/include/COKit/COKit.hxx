@@ -9,10 +9,13 @@
 
 #pragma once
 
+#include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <span>
@@ -1957,6 +1960,30 @@ struct COKit
      */
     virtual COKitTranslateResult translateDocument(const char* pInputPath, const char* pOutputPath,
                                                    const char* pBCP47Language) = 0;
+
+    /**
+     * Execute a script with cooperative JavaScript interruption controls.
+     *
+     * The callback and result contracts are the same as executeScript(). The timeout
+     * starts when jsuno begins execution, after acquiring SolarMutex. A non-null
+     * cancelled token is shared-owned until this synchronous call returns; another
+     * thread may store true in it. Neither control is retained by proxy callbacks.
+     * Use a fresh token for each execution and do not reset it while execution runs.
+     *
+     * Controls are checked at JavaScript interrupt points. They cannot interrupt a
+     * blocked native UNO call, cancel retained proxy listeners or roll back edits.
+     * This method provides no external cancellation transport.
+     *
+     * This appended virtual method requires a matching rebuilt engine. Existing
+     * executeScript() callers retain their entry point and 30-second default budget.
+     */
+    virtual COKitScriptResult executeScriptWithControl(
+        char const* script, std::string_view source, int line,
+        std::function<void(void* data, std::string_view level, std::string_view message)>
+            consoleCallback,
+        void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
+        void* proxyCallbackData, std::chrono::milliseconds timeout,
+        std::shared_ptr<std::atomic<bool> const> cancelled) = 0;
 };
 
 struct COKitDocument
