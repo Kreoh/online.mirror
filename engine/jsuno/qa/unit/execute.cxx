@@ -33,12 +33,12 @@ class DocumentProbe final : public cppu::WeakImplHelper<css::lang::XComponent,
     OUString const m_name;
 public:
     explicit DocumentProbe(OUString name) : m_name(std::move(name)) {}
-    void SAL_CALL dispose() override {}
-    void SAL_CALL addEventListener(cpo::uno::Reference<css::lang::XEventListener> const&) override {}
-    void SAL_CALL removeEventListener(cpo::uno::Reference<css::lang::XEventListener> const&) override {}
-    OUString SAL_CALL getImplementationName() override { return m_name; }
-    sal_Bool SAL_CALL supportsService(OUString const&) override { return false; }
-    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override { return {}; }
+    void dispose() override {}
+    void addEventListener(cpo::uno::Reference<css::lang::XEventListener> const&) override {}
+    void removeEventListener(cpo::uno::Reference<css::lang::XEventListener> const&) override {}
+    OUString getImplementationName() override { return m_name; }
+    bool supportsService(OUString const&) override { return false; }
+    cpo::uno::Sequence<OUString> getSupportedServiceNames() override { return {}; }
 };
 
 class Execute : public CppUnit::TestFixture
