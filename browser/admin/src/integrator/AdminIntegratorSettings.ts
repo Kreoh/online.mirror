@@ -283,7 +283,7 @@ const defaultBrowserSetting: Record<string, any> = {
 		label: 'Default Zoom',
 		customType: 'zoomDropdown',
 	},
-	smoothScroll: true,
+	smoothScroll: false,
 	spreadsheet: {
 		ShowStatusbar: true,
 		A11yCheckDeck: false,
