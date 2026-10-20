@@ -8,9 +8,11 @@
  */
 
 #include <config_crypto.h>
+#include <config_features.h>
 #include <config_oox.h>
 #include <cstdlib>
 #include <memory>
+#include <sstream>
 #include <string_view>
 
 #include <com/sun/star/lang/XComponent.hpp>
@@ -161,6 +163,7 @@ public:
     boost::property_tree::ptree postSaveAndReadResult(COKitDocumentImpl* pDocument,
                                                       const char* pArguments);
 
+    void testRawDocumentCapability();
     void testGetStyles();
     void testGetFonts();
     void testCreateView();
@@ -261,6 +264,7 @@ public:
     void testTableContextOnLoad();
 
     CPPUNIT_TEST_SUITE(DesktopKitTest);
+    CPPUNIT_TEST(testRawDocumentCapability);
     CPPUNIT_TEST(testGetStyles);
     CPPUNIT_TEST(testGetFonts);
     CPPUNIT_TEST(testCreateView);
@@ -548,6 +552,19 @@ void DesktopKitTest::callbackImpl(COKitCallbackType eType, const char* pPayload)
     default:
     break;
     }
+}
+
+void DesktopKitTest::testRawDocumentCapability()
+{
+    COKitImpl office;
+    std::istringstream stream(office.getVersionInfo());
+    boost::property_tree::ptree info;
+    boost::property_tree::read_json(stream, info);
+#if HAVE_FEATURE_QUICKJS
+    CPPUNIT_ASSERT(info.get<bool>("RawDocumentBinding"));
+#else
+    CPPUNIT_ASSERT(!info.get_optional<bool>("RawDocumentBinding"));
+#endif
 }
 
 void DesktopKitTest::testGetStyles()

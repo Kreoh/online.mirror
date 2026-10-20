@@ -5110,13 +5110,25 @@ bool ChildSession::executeScript(char const * buffer, int length, StringVector c
     auto const source = full.substr(lineEnd + 1, sourceEnd - lineEnd - 1);
     std::string const script(full.substr(sourceEnd + 1));
 
-    getLOKitDocument()->setView(_viewId);
+    const auto document = getLOKitDocument();
+    if (!document || _viewId < 0)
+    {
+        sendTextFrameAndLogError("error: cmd=executescript kind=invalidview");
+        return false;
+    }
+    const auto views = document->getViewIds();
+    if (std::find(views.begin(), views.end(), _viewId) == views.end())
+    {
+        sendTextFrameAndLogError("error: cmd=executescript kind=invalidview");
+        return false;
+    }
+    document->setView(_viewId);
 
     // Capturing `this` is safe even though the proxy callback can fire long after
     // executeScript has returned, since the callback runs only while the proxy stays
     // attached and ChildSession outlives that:
-    const COKitScriptResult aScriptResult = _docManager->getLOKit()->executeScript(
-        script.c_str(), source, line,
+    const COKitScriptResult aScriptResult = _docManager->getLOKit()->executeScriptWithDocument(
+        document.get(), script.c_str(), source, line,
         [](void * data, std::string_view level, std::string_view message) {
             static_cast<ChildSession *>(data)->sendTextFrame(
                 std::string("consolemsg ").append(level).append("\n").append(message));
@@ -5126,7 +5138,7 @@ bool ChildSession::executeScript(char const * buffer, int length, StringVector c
             static_cast<ChildSession *>(data)->sendTextFrame(
                 "proxycall: " + std::string(payload));
         },
-        this);
+        this, std::chrono::seconds(30), nullptr);
 
     // Build the response by string concatenation rather than via Poco JSON,
     // because oResult is already a JSON value (whatever JSON.stringify

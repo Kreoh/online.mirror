@@ -20,6 +20,7 @@ $(eval $(call gb_CppunitTest_use_libraries,jsuno_execute, \
     jsuno \
     sal \
     cppu \
+    cppuhelper \
     tl \
     vcl \
 ))

@@ -1984,6 +1984,16 @@ struct COKit
         void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
         void* proxyCallbackData, std::chrono::milliseconds timeout,
         std::shared_ptr<std::atomic<bool> const> cancelled) = 0;
+
+    // Appended ABI slot: requires a matching engine. Legacy entry points remain intact.
+    // Bind only this document's component; nullptr retains the legacy context.
+    virtual COKitScriptResult executeScriptWithDocument(
+        COKitDocument* document, char const* script, std::string_view source, int line,
+        std::function<void(void* data, std::string_view level, std::string_view message)>
+            consoleCallback,
+        void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
+        void* proxyCallbackData, std::chrono::milliseconds timeout,
+        std::shared_ptr<std::atomic<bool> const> cancelled) = 0;
 };
 
 struct COKitDocument

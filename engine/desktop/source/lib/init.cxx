@@ -10000,6 +10000,18 @@ COKitScriptResult COKitImpl::executeScriptWithControl(
     void* proxyCallbackData, std::chrono::milliseconds timeout,
     std::shared_ptr<std::atomic<bool> const> cancelled)
 {
+    return executeScriptWithDocument(nullptr, script, source, line, std::move(consoleCallback),
+                                     consoleCallbackData, proxyCallback, proxyCallbackData,
+                                     timeout, std::move(cancelled));
+}
+
+COKitScriptResult COKitImpl::executeScriptWithDocument(
+    COKitDocument* document, char const* script, std::string_view source, int line,
+    std::function<void(void* data, std::string_view level, std::string_view message)> consoleCallback,
+    void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
+    void* proxyCallbackData, std::chrono::milliseconds timeout,
+    std::shared_ptr<std::atomic<bool> const> cancelled)
+{
     comphelper::ProfileZone zone("lo_executeScript");
     SolarMutexGuard guard;
     SetLastExceptionMsg();
@@ -10017,7 +10029,9 @@ COKitScriptResult COKitImpl::executeScriptWithControl(
             OUString::fromUtf8(script), OUString::fromUtf8(source), line,
             [consoleCallback, consoleCallbackData](OUString const & level, OUString const & message)
             { consoleCallback(consoleCallbackData, level.toUtf8(), message.toUtf8()); },
-            std::move(hook), &aScriptResult.bUsedLegacyUnoApi, timeout, cancelled.get());
+            std::move(hook), &aScriptResult.bUsedLegacyUnoApi, timeout, cancelled.get(),
+            document ? static_cast<COKitDocumentImpl*>(document)->mxComponent
+                     : uno::Reference<css::lang::XComponent>());
         if (!value.isEmpty()) {
             aScriptResult.oResult = convertOUStringToStdString(value);
         }
@@ -10053,6 +10067,7 @@ COKitScriptResult COKitImpl::executeScriptWithControl(
     (void) proxyCallbackData;
     (void) timeout;
     (void) cancelled;
+    (void) document;
     static constexpr auto msg = u"executeScript: QuickJS support is not enabled in this build"_ustr;
     SetLastExceptionMsg(msg);
     aScriptResult.oError = convertOUStringToStdString(msg);
@@ -10141,6 +10156,9 @@ std::string COKitImpl::getVersionInfo()
         "\"ProductVersion\": \"%PRODUCTVERSION\", "
         "\"ProductExtension\": \"%PRODUCTEXTENSION\", "
         "\"BuildId\": \"%BUILDID\""
+#if HAVE_FEATURE_QUICKJS
+        ", \"RawDocumentBinding\": true"
+#endif
 #if BUILDCONFIG_RECORDED
         ", \"BuildConfig\": \"" BUILDCONFIG "\""
 #endif

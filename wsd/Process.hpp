@@ -217,18 +217,22 @@ public:
     template <typename T>
     ChildProcess(const pid_t pid, const std::string& jailId,
                  const std::string& configId,
-                 const std::shared_ptr<StreamSocket>& socket, const T& request, std::map<std::string, std::string> &jailProps)
+                 const std::shared_ptr<StreamSocket>& socket, const T& request,
+                 std::map<std::string, std::string>& jailProps, bool supportsRawDocument = false)
         : WSProcess("ChildProcess", pid, socket,
                     std::make_shared<WebSocketHandler>(socket, request, true))
         , _jailId(jailId)
         , _configId(configId)
         , _jailProps(jailProps)
+        , _supportsRawDocument(supportsRawDocument)
         , _urpFromKitFD(socket->getIncomingFD(SharedFDType::URPFromKit))
         , _urpToKitFD(socket->getIncomingFD(SharedFDType::URPToKit))
     {
     }
 
     ChildProcess(ChildProcess&& other) = delete;
+
+    bool supportsRawDocument() const { return _supportsRawDocument; }
 
     void fenceUrpInput() { _urpInputFenced = true; }
     void resumeUrpInput()
@@ -457,6 +461,7 @@ private:
     std::weak_ptr<StreamSocket> _urpToKit;
     std::shared_ptr<FILE> _smapsFp;
     std::map<std::string, std::string> _jailProps;
+    const bool _supportsRawDocument;
     int _urpFromKitFD;
     int _urpToKitFD;
     bool _urpChannelPoisoned = false;

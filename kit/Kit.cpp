@@ -4710,9 +4710,17 @@ void lokit_main(
             pathAndQuery.append("&configid=");
             pathAndQuery.append(configId);
         }
+        // Query this loaded engine for every child, including spares without version logging.
+        const std::string versionString = coKit->getVersionInfo();
+        Poco::JSON::Object::Ptr engineInfo;
+        if (JsonUtil::parseJSON(versionString, engineInfo))
+        {
+            const auto binding = engineInfo->get("RawDocumentBinding");
+            if (binding.isBoolean() && binding.convert<bool>())
+                pathAndQuery.append("&rawdocument=1");
+        }
         if (queryVersion)
         {
-            std::string versionString = coKit->getVersionInfo();
             if (displayVersion)
                 std::cout << "office version details: " << versionString << std::endl;
 

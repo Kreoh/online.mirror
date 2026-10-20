@@ -221,7 +221,9 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
         return reject();
     if (message == "agentcapabilities")
     {
-        session->sendTextFrame("agentcapabilities:retirement=1");
+        session->sendTextFrame(_childProcess->supportsRawDocument()
+                                   ? "agentcapabilities:retirement=1 rawdocument=1"
+                                   : "agentcapabilities:retirement=1");
         return true;
     }
     std::vector<std::string> fields;

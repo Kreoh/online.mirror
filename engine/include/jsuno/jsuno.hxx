@@ -16,6 +16,8 @@
 #include <functional>
 #include <vector>
 
+#include <com/sun/star/lang/XComponent.hpp>
+#include <cpo/uno/Reference.hxx>
 #include <jsuno/detail/dllapi.hxx>
 #include <rtl/string.hxx>
 #include <rtl/ustring.hxx>
@@ -82,6 +84,15 @@ LO_DLLPUBLIC_JSUNO OUString execute(OUString const& script, OUString const & sou
                                     bool* usedLegacyUnoApi,
                                     std::chrono::milliseconds timeout,
                                     std::atomic<bool> const* cancelled = nullptr);
+
+// Bind the supplied component as a non-writable, non-configurable global document.
+// An empty reference preserves the legacy execution context without a document binding.
+LO_DLLPUBLIC_JSUNO OUString execute(
+    OUString const& script, OUString const& source, int line,
+    std::function<void(OUString const&, OUString const&)> consoleHook,
+    std::function<void(OUString const&)> proxyCallHook, bool* usedLegacyUnoApi,
+    std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
+    cpo::uno::Reference<com::sun::star::lang::XComponent> const& document);
 
 // Deliver an iframe-side `jsonValue` to a `ProxyInvocation::invoke` blocked in Application::
 // Yield on `callId`; spurious callIds are silently ignored:

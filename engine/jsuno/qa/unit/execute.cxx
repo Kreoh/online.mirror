@@ -18,6 +18,8 @@
 #include <cppunit/extensions/HelperMacros.h>
 #include <cppunit/plugin/TestPlugIn.h>
 
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <cppuhelper/implbase.hxx>
 #include <jsuno/jsuno.hxx>
 #include <rtl/ustring.hxx>
 
@@ -25,9 +27,45 @@
 
 namespace
 {
+class DocumentProbe final : public cppu::WeakImplHelper<css::lang::XComponent,
+                                                        css::lang::XServiceInfo>
+{
+    OUString const m_name;
+public:
+    explicit DocumentProbe(OUString name) : m_name(std::move(name)) {}
+    void SAL_CALL dispose() override {}
+    void SAL_CALL addEventListener(cpo::uno::Reference<css::lang::XEventListener> const&) override {}
+    void SAL_CALL removeEventListener(cpo::uno::Reference<css::lang::XEventListener> const&) override {}
+    OUString SAL_CALL getImplementationName() override { return m_name; }
+    sal_Bool SAL_CALL supportsService(OUString const&) override { return false; }
+    cpo::uno::Sequence<OUString> SAL_CALL getSupportedServiceNames() override { return {}; }
+};
+
 class Execute : public CppUnit::TestFixture
 {
 public:
+    void testDocumentBinding()
+    {
+        const cpo::uno::Reference<css::lang::XComponent> first(new DocumentProbe(u"first"_ustr));
+        const cpo::uno::Reference<css::lang::XComponent> second(new DocumentProbe(u"second"_ustr));
+        const auto run = [](OUString const& script,
+                            cpo::uno::Reference<css::lang::XComponent> const& document) {
+            return jsuno::execute(script, u"<document>"_ustr, 1,
+                                  [](OUString const&, OUString const&) {}, {}, nullptr,
+                                  std::chrono::seconds(30), nullptr, document);
+        };
+        CPPUNIT_ASSERT_EQUAL(u"\"first\""_ustr,
+                             run(u"document.getImplementationName()"_ustr, first));
+        CPPUNIT_ASSERT_EQUAL(u"\"second\""_ustr,
+                             run(u"document.getImplementationName()"_ustr, second));
+        CPPUNIT_ASSERT_EQUAL(u"[false,false,\"first\"]"_ustr,
+            run(u"var d = Object.getOwnPropertyDescriptor(globalThis, 'document');"
+                "document = null; delete globalThis.document;"
+                "[d.writable, d.configurable, document.getImplementationName()]"_ustr, first));
+        CPPUNIT_ASSERT_EQUAL(u"\"undefined\""_ustr, testexec(u"typeof document"_ustr).result);
+        CPPUNIT_ASSERT_EQUAL(u"\"undefined\""_ustr, run(u"typeof document"_ustr, {}));
+    }
+
     void testExecutionDeadline()
     {
         auto const start = std::chrono::steady_clock::now();
@@ -187,6 +225,7 @@ public:
     }
 
     CPPUNIT_TEST_SUITE(Execute);
+    CPPUNIT_TEST(testDocumentBinding);
     CPPUNIT_TEST(testExecutionDeadline);
     CPPUNIT_TEST(testExecutionCancellation);
     CPPUNIT_TEST(testCrossThreadCancellation);
