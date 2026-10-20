@@ -23,6 +23,7 @@
 #include <iostream>
 
 #include <docsh.hxx>
+#include <docfunc.hxx>
 #include <global.hxx>
 #include <dpcache.hxx>
 #include <dpobject.hxx>
@@ -1677,10 +1678,10 @@ CPPUNIT_TEST_FIXTURE(ScExportTest2, testChartGeometryDataBindingsXLSX)
     {
         saveAndReload(TestFilter::XLSX);
         checkData(10.0);
-        getScDoc()->SetValue(ScAddress(1, 1, 2), 17.0);
+        CPPUNIT_ASSERT(getScDocShell()->GetDocFunc().SetValueCell(ScAddress(1, 1, 2), 17.0, false));
         getScDoc()->GetChartListenerCollection()->UpdateDirtyCharts();
         checkData(17.0);
-        getScDoc()->SetValue(ScAddress(1, 1, 2), 10.0);
+        CPPUNIT_ASSERT(getScDocShell()->GetDocFunc().SetValueCell(ScAddress(1, 1, 2), 10.0, false));
         getScDoc()->GetChartListenerCollection()->UpdateDirtyCharts();
         checkData(10.0);
     }

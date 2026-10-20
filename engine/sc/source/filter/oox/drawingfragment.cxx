@@ -36,6 +36,7 @@
 #include <com/sun/star/sheet/XSpreadsheet.hpp>
 #include <rtl/strbuf.hxx>
 #include <svx/svdobj.hxx>
+#include <svx/svdoole2.hxx>
 #include <drwlayer.hxx>
 #include <document.hxx>
 #include <externalrefmgr.hxx>
@@ -403,6 +404,15 @@ void DrawingFragment::onEndElement()
                     Rectangle aShapeRectHmm(
                         convertEmuToHmm(aShapeRectEmu32.X > 0 ? aShapeRectEmu32.X : 0), convertEmuToHmm(aShapeRectEmu32.Y > 0 ? aShapeRectEmu32.Y : 0),
                         convertEmuToHmm(aShapeRectEmu32.Width ), convertEmuToHmm(aShapeRectEmu32.Height ) );
+                    // Matrix import uses inclusive rectangles; UNO chart sizes use edge distances.
+                    // Restore exact dimensions for unrotated charts before recording cell anchors.
+                    if (auto* pChart = dynamic_cast<SdrOle2Obj*>(
+                            SdrObject::getSdrObjectFromXShape(mxShape->getXShape()));
+                        pChart && pChart->IsChart() && nRotation == 0)
+                    {
+                        mxShape->getXShape()->setSize(
+                            Size(aShapeRectHmm.Width, aShapeRectHmm.Height));
+                    }
                     extendShapeBoundingBox( aShapeRectHmm );
                     // set cell Anchoring
                     if ( mxAnchor->getEditAs() != ShapeAnchor::ANCHOR_ABSOLUTE )
