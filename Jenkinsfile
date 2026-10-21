@@ -9,6 +9,7 @@ pipeline {
         choice(name: 'BUILD_MODE', choices: ['image', 'client-only'], description: 'Build and publish an image by default; select client-only to export from an existing image.')
         string(name: 'CLIENT_SOURCE_REVISION', defaultValue: '262f997a4b1fccadbe45664a8f21889af3632447', description: 'Full target source revision, independent of the pipeline revision.')
         string(name: 'CLIENT_IMAGE', defaultValue: 'ghcr.io/kreoh/online-office@sha256:bffd112aa342cfcfdeac6bab9884d787f77786cbf17b2bd230a0bb92a6c9aee6', description: 'Exact existing image for client-only export; must already be present on the Jenkins agent.')
+        booleanParam(name: 'NATIVE_VALIDATION_ONLY', defaultValue: false, description: 'Run native tests in an isolated persistent cache without building or publishing a runtime image. Requires image mode.')
         booleanParam(name: 'EXPORT_QUEUE_VALIDATION', defaultValue: false, description: 'Archive the exact builder and debug unit runtime for isolated queue validation. Does not authorise publication.')
     }
     environment {
@@ -25,6 +26,15 @@ pipeline {
         stage('Set Build Variables') {
             steps {
                 script {
+                    if (params.NATIVE_VALIDATION_ONLY && params.BUILD_MODE != 'image') {
+                        error('NATIVE_VALIDATION_ONLY requires BUILD_MODE=image')
+                    }
+                    if (params.EXPORT_QUEUE_VALIDATION && !params.NATIVE_VALIDATION_ONLY) {
+                        error('EXPORT_QUEUE_VALIDATION requires NATIVE_VALIDATION_ONLY')
+                    }
+                    env.ONLINE_OFFICE_RUN_AGENT_CONTROL = params.NATIVE_VALIDATION_ONLY ? '1' : '0'
+                    env.ONLINE_OFFICE_RUN_JSUNO = params.NATIVE_VALIDATION_ONLY ? '1' : '0'
+                    env.NO_DOCKER_IMAGE = params.NATIVE_VALIDATION_ONLY ? '1' : ''
                     env.SHOULD_BUILD = (env.BRANCH_NAME == env.SOURCE_BRANCH && params.BUILD_MODE in ['client-only', 'image'])
                     env.BUILD_MODE = params.BUILD_MODE ?: ''
                 }
@@ -137,6 +147,9 @@ pipeline {
                     workspace_parent="$(dirname "$PWD")"
                     cache_root="${ONLINE_OFFICE_SOURCE_CACHE_ROOT:-$workspace_parent/.online-office-source-cache}"
                     cache_branch="$(printf '%s' "$SOURCE_BRANCH" | tr -c 'A-Za-z0-9_.-' '_')"
+                    if [ "$NATIVE_VALIDATION_ONLY" = true ]; then
+                        cache_branch="$cache_branch-native-validation"
+                    fi
                     source_cache_host="$cache_root/$cache_branch"
                     mkdir -p "$source_cache_host"/build "$source_cache_host"/ccache "$source_cache_host"/home
                     docker run --rm \
@@ -167,8 +180,9 @@ pipeline {
                         -e ONLINE_OFFICE_SOURCE_REVISION="$ONLINE_OFFICE_SOURCE_REVISION" \
                         -e ONLINE_OFFICE_SOURCE_BRANCH="$SOURCE_BRANCH" \
                         -e ONLINE_OFFICE_FINAL_DOCKERFILE=Distroless \
-                        -e ONLINE_OFFICE_RUN_AGENT_CONTROL=1 \
-                        -e ONLINE_OFFICE_RUN_JSUNO=1 \
+                        -e ONLINE_OFFICE_RUN_AGENT_CONTROL="$ONLINE_OFFICE_RUN_AGENT_CONTROL" \
+                        -e ONLINE_OFFICE_RUN_JSUNO="$ONLINE_OFFICE_RUN_JSUNO" \
+                        -e NO_DOCKER_IMAGE="$NO_DOCKER_IMAGE" \
                         -e ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION="$EXPORT_QUEUE_VALIDATION" \
                         -e ONLINE_OFFICE_AGENT_CONTROL_REPORT_DIR="/workspace/native-retirement-reports/$BUILD_NUMBER" \
                         -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \
@@ -176,6 +190,9 @@ pipeline {
                         -e HOME=/workspace-cache/home \
                         "$builder_tag" \
                         docker/from-source/build.sh
+                    if [ "$NATIVE_VALIDATION_ONLY" = true ]; then
+                        exit 0
+                    fi
                     revision=$(
                         docker image inspect \
                             --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
@@ -198,7 +215,7 @@ pipeline {
             }
         }
         stage('Export Java Client') {
-            when { expression { env.SHOULD_BUILD.toBoolean() } }
+            when { expression { env.SHOULD_BUILD.toBoolean() && !params.NATIVE_VALIDATION_ONLY } }
             steps {
                 script {
                     env.CLIENT_SOURCE_REVISION = params.BUILD_MODE == 'image' ? env.ONLINE_OFFICE_SOURCE_REVISION : params.CLIENT_SOURCE_REVISION
@@ -211,13 +228,14 @@ pipeline {
         stage('Push Image') {
             when {
                 expression {
-                    env.SHOULD_BUILD.toBoolean() && params.BUILD_MODE == 'image'
+                    env.SHOULD_BUILD.toBoolean() && params.BUILD_MODE == 'image' && !params.NATIVE_VALIDATION_ONLY
                 }
             }
             steps {
                 withCredentials([string(credentialsId: 'ghcr-packages-pat', variable: 'GITHUB_ACCESS_TOKEN')]) {
                     sh '''
                         set -eu
+                        test "$NATIVE_VALIDATION_ONLY" != true
                         trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
                         echo "$GITHUB_ACCESS_TOKEN" | docker login ghcr.io -u x-access-token --password-stdin
                         docker push "$IMAGE_BASE_NAME:$IMAGE_TAG"
@@ -234,7 +252,7 @@ pipeline {
     post {
         success {
             script {
-                if (env.SHOULD_BUILD.toBoolean() && params.BUILD_MODE == 'image') {
+                if (env.SHOULD_BUILD.toBoolean() && params.BUILD_MODE == 'image' && !params.NATIVE_VALIDATION_ONLY) {
                     echo "Published ${env.IMAGE_BASE_NAME}:${env.IMAGE_TAG}"
                 } else {
                     echo "Skipping image publication for branch ${env.BRANCH_NAME}."

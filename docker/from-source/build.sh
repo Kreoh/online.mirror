@@ -16,6 +16,10 @@
 # * ONLINE_EXTRA_BUILD_OPTIONS - extra build options for online
 # * NO_DOCKER_IMAGE - if set, don't build the docker image itself, just do all the preps
 
+# Native validation is opt-in; the normal image path stays release-only.
+: "${ONLINE_OFFICE_RUN_AGENT_CONTROL:=0}"
+: "${ONLINE_OFFICE_RUN_JSUNO:=0}"
+
 if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == 1 ]]; then
   # Probe the user namespace, then the private mount namespace used by JailUtil.
   # Host namespace restrictions must fail before compilation or first-child startup.
@@ -190,17 +194,6 @@ configure_release()
 ##### engine #####
 
 ( cd online/engine && ./autogen.sh --with-distro=OnlineLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
-
-# Prepare Online's bundled configure dependencies before checking its real consumers.
-( cd online/engine && make \
-    StaticLibrary_PocoFoundation StaticLibrary_PocoXML StaticLibrary_PocoJSON \
-    StaticLibrary_PocoUtil StaticLibrary_PocoNet StaticLibrary_PocoZip \
-    StaticLibrary_PocoCrypto StaticLibrary_PocoNetSSL \
-    StaticLibrary_libpng StaticLibrary_zstd ExternalProject_openssl ) || exit 1
-configure_release || exit 1
-( cd online/engine && make \
-    ONLINE.SRCDIR="$BUILDDIR/online" ONLINE.BUILDDIR="$BUILDDIR/online" \
-    StaticLibrary_forkit StaticLibrary_wsd ) || exit 1
 
 # Run native JavaScript regression tests only on the Jenkins builder.
 if [[ "${ONLINE_OFFICE_RUN_JSUNO:-}" == "1" ]]; then
