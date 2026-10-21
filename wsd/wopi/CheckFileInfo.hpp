@@ -37,17 +37,19 @@ public:
 
     /// Create an instance with a SocketPoll and a RequestDetails instance.
     CheckFileInfo(const std::shared_ptr<TerminatingPoll>& poll, const Poco::URI& url,
-                  std::function<void(CheckFileInfo&)> onFinishCallback)
-        : _url(url)
+                  std::function<void(CheckFileInfo&)> onFinishCallback, bool sensitive = false)
+        : _sensitive(sensitive)
+        , _url(url)
         , _urlFromRedirect(false)
-        , _profileZone("WopiStorage::getWOPIFileInfo", { { "url", url.toString() } })
+        , _profileZone("WopiStorage::getWOPIFileInfo",
+                       { { "url", sensitive ? "<sensitive request>" : url.toString() } })
         , _poll(poll)
-        , _docKey(RequestDetails::getDocKey(url))
+        , _docKey(sensitive ? std::string() : RequestDetails::getDocKey(url))
         , _onFinishCallback(std::move(onFinishCallback))
         , _state(State::None)
     {
-        assert(_url == RequestDetails::sanitizeURI(url.toString()) && "Expected sanitized URL");
-
+        assert((_sensitive || _url == RequestDetails::sanitizeURI(url.toString())) &&
+               "Expected sanitized URL");
     }
 
     /// Returns the state of the request.
@@ -94,6 +96,7 @@ private:
     /// Parses the CheckFileInfo response and validates it.
     bool parseResponseAndValidate(const std::string& response);
 
+    const bool _sensitive;
     Poco::URI _url; ///< Sanitized URL to the document. Can change through redirection.
     bool _urlFromRedirect; ///< True when _url is a redirect target, not the original URL.
     ProfileZone _profileZone;

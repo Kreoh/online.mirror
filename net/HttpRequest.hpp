@@ -463,6 +463,9 @@ public:
     using Iterator = std::vector<Pair>::iterator;
     using ConstIterator = std::vector<Pair>::const_iterator;
 
+    void markSensitive() noexcept { _sensitive = true; }
+    bool isSensitive() const noexcept { return _sensitive; }
+
     ConstIterator begin() const { return _headers.begin(); }
     ConstIterator end() const { return _headers.end(); }
 
@@ -495,13 +498,16 @@ public:
     {
         if (!hasOnlyValidFieldBytes(key) || !hasOnlyValidFieldBytes(value))
         {
-            LOG_WRN_S("Not adding HTTP header field with an invalid byte in it: ["
-                      << HexUtil::stringifyHexLine(key, 0,
-                                                   std::min(key.size(), MaxLoggedFieldBytes))
-                      << "] ["
-                      << HexUtil::stringifyHexLine(value, 0,
-                                                   std::min(value.size(), MaxLoggedFieldBytes))
-                      << ']');
+            {
+                if (!isSensitive())
+                    LOG_WRN_S("Not adding HTTP header field with an invalid byte in it: ["
+                              << HexUtil::stringifyHexLine(
+                                     key, 0, std::min(key.size(), MaxLoggedFieldBytes))
+                              << "] ["
+                              << HexUtil::stringifyHexLine(
+                                     value, 0, std::min(value.size(), MaxLoggedFieldBytes))
+                              << ']');
+            }
             return false;
         }
 
@@ -516,13 +522,16 @@ public:
     {
         if (!hasOnlyValidFieldBytes(key) || !hasOnlyValidFieldBytes(value))
         {
-            LOG_WRN_S("Not setting HTTP header field with an invalid byte in it: ["
-                      << HexUtil::stringifyHexLine(key, 0,
-                                                   std::min(key.size(), MaxLoggedFieldBytes))
-                      << "] ["
-                      << HexUtil::stringifyHexLine(value, 0,
-                                                   std::min(value.size(), MaxLoggedFieldBytes))
-                      << ']');
+            {
+                if (!isSensitive())
+                    LOG_WRN_S("Not setting HTTP header field with an invalid byte in it: ["
+                              << HexUtil::stringifyHexLine(
+                                     key, 0, std::min(key.size(), MaxLoggedFieldBytes))
+                              << "] ["
+                              << HexUtil::stringifyHexLine(
+                                     value, 0, std::min(value.size(), MaxLoggedFieldBytes))
+                              << ']');
+            }
             remove(key);
             return false;
         }
@@ -726,6 +735,8 @@ public:
     /// Serialize the header to string. For logging only.
     [[nodiscard]] std::string toString() const
     {
+        if (isSensitive())
+            return "<sensitive headers>";
         std::ostringstream oss;
         return serialize(oss).str();
     }
@@ -734,6 +745,7 @@ private:
     /// The headers are ordered key/value pairs.
     /// This isn't designed for lookup performance, but to preserve order.
     //TODO: We might not need this and get away with a map.
+    bool _sensitive = false;
     Container _headers;
     bool _chunked = false;
 };
@@ -768,6 +780,13 @@ public:
     [[nodiscard]] static bool hasOnlyValidRequestLineBytes(const std::string_view field)
     {
         return net::hasNoSpaceOrControlByte(field);
+    }
+
+    void markSensitive() noexcept { _header.markSensitive(); }
+    bool isSensitive() const noexcept { return _header.isSensitive(); }
+    std::string_view diagnosticUrl() const noexcept
+    {
+        return isSensitive() ? std::string_view("<sensitive request>") : std::string_view(_url);
     }
 
     /// Get the request URL.
@@ -821,10 +840,11 @@ public:
 
     void dumpState(std::ostream& os, const std::string& indent = "\n  ") const
     {
-        os << indent << "http::Request: " << _version << ' ' << _verb << ' ' << _url;
+        os << indent << "http::Request: " << _version << ' ' << _verb << ' ' << diagnosticUrl();
         os << indent << "\tstage: " << name(_stage);
         os << indent << "\theaders: ";
-        Util::joinPair(os, _header, indent, '\t');
+        if (!isSensitive())
+            Util::joinPair(os, _header, indent, '\t');
     }
 
 protected:
@@ -1015,6 +1035,8 @@ public:
         saveBodyToMemory();
 
         Buffer out;
+        if (request.isSensitive())
+            markSensitive();
         request.writeData(out, INT_MAX);
         [[maybe_unused]] const auto read = readData(out.getBlock(), out.getBlockSize());
         assert(read == static_cast<int64_t>(out.getBlockSize()) &&
@@ -1070,8 +1092,9 @@ public:
 
         std::string childIndent = indent + '\t';
         os << indent;
-        HexUtil::dumpHex(os, _body, "\tbody:\n",
-                         Util::replace(std::move(childIndent), "\n", "").c_str());
+        if (!isSensitive())
+            HexUtil::dumpHex(os, _body, "\tbody:\n",
+                             Util::replace(std::move(childIndent), "\n", "").c_str());
     }
 
 private:
@@ -1147,6 +1170,9 @@ public:
         return StatusCodeClass::Invalid;
     }
 
+    void markSensitive() noexcept { _sensitive = true; }
+    bool isSensitive() const noexcept { return _sensitive; }
+
     /// Parses a Status Line.
     /// Returns the state and clobbers the len on success to the number of bytes read.
     FieldParseState parse(const char* p, int64_t& len);
@@ -1169,6 +1195,7 @@ public:
     const std::string& reasonPhrase() const { return _reasonPhrase; }
 
 private:
+    bool _sensitive = false;
     std::string _httpVersion; ///< Typically "HTTP/1.1"
     unsigned _versionMajor; ///< The first version digit (typically 1).
     unsigned _versionMinor; ///< The second version digit (typically 1).
@@ -1232,6 +1259,13 @@ public:
                Timeout, ///< The request has exceeded the time allocated.
                Complete ///< Successfully completed (does *not* imply 200 OK).
     );
+
+    void markSensitive() noexcept
+    {
+        _header.markSensitive();
+        _statusLine.markSensitive();
+    }
+    bool isSensitive() const noexcept { return _header.isSensitive(); }
 
     /// The state of the Response (for the server's response use statusLine).
     State state() const { return _state; }
@@ -1484,7 +1518,7 @@ public:
     std::shared_ptr<const Response> syncRequest(const Request& req, SocketPoll& poller)
     {
         LOG_TRC_S("syncRequest: " << req.getVerb() << ' ' << host() << ':' << port() << ' '
-                                  << req.getUrl());
+                                  << req.diagnosticUrl());
 
         newRequest(req, false);
         syncRequestImpl(poller);
@@ -1653,7 +1687,10 @@ get(const std::string& url, const std::string& path,
 
 inline std::ostream& operator<<(std::ostream& os, const http::Header& header)
 {
-    Util::joinPair(os, header, " / ");
+    if (header.isSensitive())
+        os << "<sensitive headers>";
+    else
+        Util::joinPair(os, header, " / ");
 
     return os;
 }

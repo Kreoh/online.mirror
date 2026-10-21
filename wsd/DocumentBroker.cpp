@@ -88,6 +88,8 @@
 #include <fstream>
 #include <memory>
 #include <sstream>
+#include <array>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -166,6 +168,48 @@ bool matchingAgentAuthority(const std::shared_ptr<ClientSession>& transport,
 }
 #endif
 
+bool renewalNumber(const std::string& value, std::int64_t& result)
+{
+    if (value.empty() || value.front() == '0' || value.size() > 19)
+        return false;
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), result);
+    return parsed.ec == std::errc() && parsed.ptr == value.data() + value.size() && result > 0 &&
+           std::to_string(result) == value;
+}
+
+std::optional<std::string> renewalCredential(const std::string& encoded)
+{
+    constexpr std::string_view alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    if (encoded.empty() || encoded.size() > 5462 || encoded.size() % 4 == 1)
+        return std::nullopt;
+    std::string decoded;
+    decoded.reserve(encoded.size() * 3 / 4);
+    unsigned accumulator = 0, bits = 0;
+    for (const char ch : encoded)
+    {
+        const auto value = alphabet.find(ch);
+        if (value == std::string_view::npos)
+            return std::nullopt;
+        accumulator = (accumulator << 6) | static_cast<unsigned>(value);
+        bits += 6;
+        if (bits >= 8)
+        {
+            bits -= 8;
+            const char byte = static_cast<char>((accumulator >> bits) & 255);
+            if (std::string_view(
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~+/=")
+                    .find(byte) == std::string_view::npos)
+                return std::nullopt;
+            decoded.push_back(byte);
+        }
+        accumulator &= (1U << bits) - 1;
+    }
+    if (accumulator != 0 || decoded.empty() || decoded.size() > 4096)
+        return std::nullopt;
+    return decoded;
+}
+
 bool retirementViewId(const std::string& text, int& view)
 {
     if (text.empty() || text.size() > 10 || text.find_first_not_of("0123456789") != std::string::npos)
@@ -177,6 +221,127 @@ bool retirementViewId(const std::string& text, int& view)
 }
 
 #if ENABLE_DEBUG
+std::optional<Poco::URI> DocumentBroker::agentAuthoritySourceForTesting(const Poco::URI& uri)
+{
+#if !MOBILEAPP
+    if (UnitWSD::isUnitTesting())
+        return agentAuthoritySource(uri);
+#endif
+    return std::nullopt;
+}
+
+bool DocumentBroker::startAgentAuthorityRequestForTesting(
+    const std::shared_ptr<ClientSession>& session, bool lockRequest)
+{
+    ASSERT_CORRECT_THREAD();
+#if !MOBILEAPP
+    if (!UnitWSD::isUnitTesting() || !session || session->getDocumentBroker().get() != this)
+        return false;
+    if (lockRequest)
+    {
+        std::string error;
+        return updateStorageLockStateAsync(session, StorageBase::LockState::LOCK, error);
+    }
+    if (_docState.activity() != DocumentState::Activity::None || _checkFileInfo)
+        return false;
+    if (!startActivity(DocumentState::Activity::SyncFileTimestamp))
+        return false;
+    checkFileInfo(session, 0);
+    return static_cast<bool>(_checkFileInfo);
+#else
+    return false;
+#endif
+}
+
+bool DocumentBroker::swapAgentChildForTesting(std::shared_ptr<ChildProcess>& replacement)
+{
+    ASSERT_CORRECT_THREAD();
+    if (!UnitWSD::isUnitTesting())
+        return false;
+    if (!replacement)
+        replacement = getNewChild_Blocks(_poll, _configId, _mobileAppDocId);
+    if (!replacement || replacement == _childProcess)
+        return false;
+    _childProcess.swap(replacement);
+    return true;
+}
+
+bool DocumentBroker::startAgentUploadForTesting(const std::shared_ptr<ClientSession>& session)
+{
+    ASSERT_CORRECT_THREAD();
+    if (!UnitWSD::isUnitTesting() || !_storage || !session ||
+        _docState.activity() != DocumentState::Activity::None)
+        return false;
+    Poco::File(_storage->getRootFilePath()).copyTo(_storage->getRootFilePathUploading());
+    startActivity(DocumentState::Activity::Upload);
+    uploadToStorage(session, true);
+    return _uploadRequest && !_uploadRequest->isComplete();
+}
+
+bool DocumentBroker::expireCurrentAgentAuthorityForTesting()
+{
+    ASSERT_CORRECT_THREAD();
+#if !MOBILEAPP
+    if (!UnitWSD::isUnitTesting() || _agentRetirements.empty())
+        return false;
+    auto& record = *_agentRetirements.back();
+    if (!record.renewal || !record.authorityBaseline)
+        return false;
+    const auto expiry = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch()) -
+                        std::chrono::milliseconds(1);
+    for (const auto& session : { record.transport.lock(), record.authorityBaseline->render.lock() })
+    {
+        if (!session)
+            return false;
+        Authorization authority(session->getAuthorization());
+        authority.setExpiryEpoch(expiry);
+        auto uri = std::make_shared<const Poco::URI>(session->getPublicUri());
+        session->installAgentAuthority(authority, uri);
+    }
+    record.currentAuthority.setExpiryEpoch(expiry);
+    record.renewal->previousAuthority.setExpiryEpoch(expiry);
+    // Keep the monotonic deadline future so this exercises current expiry, not the timeout guard.
+    record.renewal->deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    return true;
+#else
+    return false;
+#endif
+}
+
+std::string
+DocumentBroker::exerciseAgentResponseForTesting(const std::shared_ptr<ClientSession>& session,
+                                                bool download)
+{
+    ASSERT_CORRECT_THREAD();
+#if !MOBILEAPP
+    if (!UnitWSD::isUnitTesting() || !session || !_storage)
+        return "unavailable";
+    if (download)
+    {
+        try
+        {
+            AdditionalFilePaths paths;
+            _storage->downloadStorageFileToLocal(session->getAuthorization(), *_lockCtx, "", paths);
+        }
+        catch (const StorageConnectionException& error)
+        {
+            return error.what();
+        }
+        return "unexpected-success";
+    }
+    if (_checkFileInfo && _checkFileInfo->completed())
+        _checkFileInfo.reset();
+    _lastUploadDefinitelyFailed = false;
+    _lastUploadedFileHash = "local-file-hash";
+    _storageManager.setLastModifiedServerTimeString("2020-01-01T00:00:00.000000Z");
+    _currentStorageAttrs.setUserModified(true);
+    return startAgentAuthorityRequestForTesting(session, false) ? "started" : "unavailable";
+#else
+    return "unavailable";
+#endif
+}
+
 bool DocumentBroker::hasAgentAuthorityBaselineForTesting(const std::string& epoch) const
 {
     ASSERT_CORRECT_THREAD();
@@ -199,7 +364,8 @@ bool DocumentBroker::expireAgentRegistrationForTesting(const std::string& epoch)
         if (item->epoch == epoch && item->phase == AgentRetirementRecord::Phase::Active)
         {
             item->authority.expire();
-            return item->authority.isExpired() && !item->authority.isValid();
+            item->currentAuthority.expire();
+            return item->currentAuthority.isExpired() && !item->currentAuthority.isValid();
         }
     }
     return false;
@@ -252,6 +418,311 @@ void DocumentBroker::handleAgentRecoveryRequest(const std::shared_ptr<StreamSock
     HttpHelper::sendErrorAndShutdown(http::StatusCode::NotFound, socket);
 }
 
+bool DocumentBroker::isRegisteredAgent(const std::shared_ptr<ClientSession>& session) const
+{
+    for (const auto& record : _agentRetirements)
+        if (record->transport.lock() == session || record->renderId == session->getId())
+            return true;
+    return false;
+}
+
+bool DocumentBroker::agentRenewalBlocks(const std::shared_ptr<ClientSession>& session) const
+{
+#if !MOBILEAPP
+    for (const auto& record : _agentRetirements)
+        if (record->renewal &&
+            (record->transport.lock() == session || record->renderId == session->getId()))
+            return true;
+#endif
+    return false;
+}
+
+bool DocumentBroker::agentRenewalBusy() const
+{
+#if !MOBILEAPP
+    if (_checkFileInfo)
+        return true;
+#endif
+    // Old-authority callbacks may invalidate a session; finish them before swapping authority.
+    return _lockStateUpdateRequest || !_nativeSaveBarriers.empty() || _agentSaveAttempt ||
+           _saveManager.isSaving() || (_uploadRequest && !_uploadRequest->isComplete()) ||
+           isAsyncUploading();
+}
+
+#if !MOBILEAPP
+bool DocumentBroker::agentRenewalIdentity(const AgentRetirementRecord& record,
+                                          const std::shared_ptr<ClientSession>& transport) const
+{
+    if (record.phase != AgentRetirementRecord::Phase::Active || !record.authorityBaseline ||
+        !transport || record.transport.lock() != transport || _urpTransport.lock() != transport ||
+        transport->isCloseFrame() || !transport->isWritable() ||
+        !transport->isWebsocketUrpEnabled() || transport->getBoundAgentViewId() != record.viewId ||
+        transport->getDocumentBroker().get() != this || !_childProcess ||
+        record.authorityBaseline->child.lock() != _childProcess || isMarkedToDestroy())
+        return false;
+    const auto render = record.authorityBaseline->render.lock();
+    const auto renderEntry = _sessions.find(record.renderId);
+    if (!render || renderEntry == _sessions.end() || renderEntry->second != render ||
+        !render->isLive() || !render->isAgentRenderView() || !render->isWritable() ||
+        render->getKitViewId() != record.viewId || render->getDocumentBroker().get() != this)
+        return false;
+    const auto& current = record.currentAuthority;
+    return current.matches(transport->getAuthorization()) &&
+           current.matches(render->getAuthorization()) &&
+           current.getExpiryEpoch() == transport->getAuthorization().getExpiryEpoch() &&
+           current.getExpiryEpoch() == render->getAuthorization().getExpiryEpoch() &&
+           agentAuthoritySource(transport->getPublicUri()) == record.authorityBaseline->source &&
+           agentAuthoritySource(render->getPublicUri()) == record.authorityBaseline->source;
+}
+
+void DocumentBroker::failAgentRenewal(AgentRetirementRecord& record, std::string_view reason)
+{
+    if (!record.renewal)
+        return;
+    record.renewal->request.reset();
+    // Retain the intent and dispatch fence. Only an exact retry or retirement may resolve it.
+    if (const auto transport = record.transport.lock())
+        transport->sendTextFrame("agentrenewfailed: epoch=" + record.epoch +
+                                 " requestid=" + std::to_string(record.renewal->sequence) +
+                                 " viewid=" + std::to_string(record.viewId) +
+                                 " renderid=" + record.renderId + " kind=" + std::string(reason));
+}
+#endif
+
+bool DocumentBroker::handleAgentRenewal(const std::shared_ptr<ClientSession>& session,
+                                        const std::string& message)
+{
+    ASSERT_CORRECT_THREAD();
+    const auto invalid = [&]
+    {
+        session->sendTextFrame("error: cmd=agentrenew kind=invalid");
+        return false;
+    };
+#if MOBILEAPP || !defined(__linux__) || DOCS_SHARE_PROCESS
+    return invalid();
+#else
+    if (message.size() > 6000 || Util::isKitInProcess())
+        return invalid();
+    const auto tokens = StringVector::tokenize(message);
+    if (tokens.size() != 7 || tokens[0] != "agentrenew")
+        return invalid();
+    const std::array<std::string_view, 6> keys = { "epoch",    "requestid", "viewid",
+                                                   "renderid", "expires",   "credential" };
+    std::array<std::string, 6> fields;
+    std::string canonical = "agentrenew";
+    for (std::size_t i = 0; i < keys.size(); ++i)
+    {
+        const std::string token(tokens[i + 1]);
+        const std::string prefix = std::string(keys[i]) + '=';
+        if (!token.starts_with(prefix))
+            return invalid();
+        fields[i] = token.substr(prefix.size());
+        canonical += ' ' + token;
+    }
+    if (canonical != message)
+        return invalid();
+    std::vector<std::string> identity;
+    if (!retirementFields("agentrenew epoch=" + fields[0] + " renderid=" + fields[3], "agentrenew",
+                          { "epoch", "renderid" }, identity))
+        return invalid();
+    std::int64_t sequence = 0, expiry = 0;
+    int view = -1;
+    const auto token = renewalCredential(fields[5]);
+    const auto maximumExpiry = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::system_clock::duration::max())
+                                   .count();
+    if (!renewalNumber(fields[1], sequence) || !retirementViewId(fields[2], view) ||
+        !renewalNumber(fields[4], expiry) || expiry > maximumExpiry || !token ||
+        _agentRetirements.empty())
+        return invalid();
+    auto& record = *_agentRetirements.back();
+    if (record.epoch != fields[0] || record.renderId != fields[3] || record.viewId != view ||
+        record.transport.lock() != session || !record.authorityBaseline)
+        return invalid();
+    const auto fail = [&](std::string_view reason)
+    {
+        session->sendTextFrame("agentrenewfailed: epoch=" + record.epoch +
+                               " requestid=" + fields[1] + " viewid=" + fields[2] +
+                               " renderid=" + record.renderId + " kind=" + std::string(reason));
+        return false;
+    };
+    if (record.phase != AgentRetirementRecord::Phase::Active)
+        return fail("retired");
+    if (!agentRenewalIdentity(record, session))
+        return fail(record.currentAuthority.isValid() ? "unavailable" : "expired");
+    const auto expiryTime = std::chrono::milliseconds(expiry);
+    if (sequence == record.renewalSequence)
+    {
+        if (record.renewal || record.renewalReceipt.empty() ||
+            record.currentAuthority.getExpiryEpoch() != expiryTime ||
+            !record.currentAuthority.matchesToken(std::string_view(*token)))
+            return fail("conflict");
+        session->sendTextFrame(record.renewalReceipt);
+        return true;
+    }
+    if (record.renewalSequence == std::numeric_limits<std::int64_t>::max() ||
+        sequence != record.renewalSequence + 1)
+        return fail("conflict");
+    if (expiryTime <= record.currentAuthority.getExpiryEpoch() ||
+        expiryTime > record.authorityBaseline->proof.sessionExpiry ||
+        record.currentAuthority.matchesToken(std::string_view(*token)))
+        return fail("expired");
+    if (record.renewal)
+    {
+        if (record.renewal->sequence != sequence ||
+            record.renewal->candidate.getExpiryEpoch() != expiryTime ||
+            !record.renewal->candidate.matchesToken(std::string_view(*token)))
+            return fail("conflict");
+        if (record.renewal->request)
+            return true;
+    }
+    else
+    {
+        Authorization candidate(record.currentAuthority);
+        candidate.resetAccessToken(*token, expiryTime);
+        candidate.markSensitive();
+        record.renewal = std::make_unique<AgentRetirementRecord::Renewal>(record.currentAuthority,
+                                                                          std::move(candidate));
+        record.renewal->sequence = sequence;
+        record.renewal->child = _childProcess;
+    }
+    if (agentRenewalBusy())
+    {
+        failAgentRenewal(record, "busy");
+        return false;
+    }
+    auto& renewal = *record.renewal;
+    const auto remaining = record.currentAuthority.getExpiryEpoch() -
+                           std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::system_clock::now().time_since_epoch());
+    renewal.deadline =
+        std::chrono::steady_clock::now() + std::min(remaining, std::chrono::milliseconds(10000));
+    try
+    {
+        Poco::URI candidateUri(record.authorityBaseline->source);
+        candidateUri.addQueryParameter("access_token", *token);
+        candidateUri.addQueryParameter("access_token_ttl", fields[4]);
+        const auto epoch = record.epoch;
+        renewal.request = std::make_shared<CheckFileInfo>(
+            _poll, candidateUri,
+            [weak = weak_from_this(), epoch, sequence](CheckFileInfo& response)
+            {
+                if (const auto broker = weak.lock())
+                    broker->finishAgentRenewal(epoch, sequence, response);
+            },
+            true);
+        const auto request = renewal.request;
+        if (!request->checkFileInfo(0) && record.renewal && record.renewal->request == request)
+            failAgentRenewal(record, "unavailable");
+    }
+    catch (const std::exception&)
+    {
+        failAgentRenewal(record, "unavailable");
+        return false;
+    }
+    return true;
+#endif
+}
+
+void DocumentBroker::expireAgentRenewal()
+{
+#if !MOBILEAPP
+    if (!_agentRetirements.empty())
+    {
+        auto& record = *_agentRetirements.back();
+        if (record.renewal && record.renewal->request &&
+            std::chrono::steady_clock::now() >= record.renewal->deadline)
+            failAgentRenewal(record, "timeout");
+    }
+#endif
+}
+
+void DocumentBroker::finishAgentRenewal(const std::string& epoch, std::int64_t sequence,
+                                        CheckFileInfo& response)
+{
+    ASSERT_CORRECT_THREAD();
+#if !MOBILEAPP
+    if (_agentRetirements.empty())
+        return;
+    auto& record = *_agentRetirements.back();
+    if (record.epoch != epoch || !record.renewal || record.renewal->sequence != sequence ||
+        record.renewal->request.get() != &response)
+        return;
+    auto& renewal = *record.renewal;
+    const auto transport = record.transport.lock();
+    if (std::chrono::steady_clock::now() >= renewal.deadline)
+        return failAgentRenewal(record, "timeout");
+    if (!agentRenewalIdentity(record, transport) || renewal.child.lock() != _childProcess ||
+        !renewal.previousAuthority.matches(record.currentAuthority) ||
+        renewal.previousAuthority.getExpiryEpoch() != record.currentAuthority.getExpiryEpoch())
+        return failAgentRenewal(record, "unavailable");
+    if (agentRenewalBusy())
+        return failAgentRenewal(record, "busy");
+    if (response.state() != CheckFileInfo::State::Pass)
+        return failAgentRenewal(record, "proof");
+    try
+    {
+        const auto object = response.wopiInfo();
+        const auto proof = WOPIFileInfo::parseAgentAuthority(object);
+        const auto permission = object ? object->get("UserCanWrite") : Poco::Dynamic::Var();
+        const auto urp = object ? object->get("EnableWebsocketURP") : Poco::Dynamic::Var();
+        const auto& baseline = record.authorityBaseline->proof;
+        if (!proof || !permission.isBoolean() || !permission.extract<bool>() || !urp.isBoolean() ||
+            !urp.extract<bool>() ||
+            proof->phase != WOPIFileInfo::AgentAuthorityProof::RegistrationPhase::Acknowledged ||
+            proof->ownerId != baseline.ownerId || proof->sessionId != baseline.sessionId ||
+            proof->authorityEpoch != baseline.authorityEpoch ||
+            proof->nativeEpoch != record.epoch || proof->sessionExpiry != baseline.sessionExpiry ||
+            proof->accessTokenExpiry != renewal.candidate.getExpiryEpoch() ||
+            !renewal.candidate.isValid())
+            return failAgentRenewal(record, "proof");
+        const auto render = record.authorityBaseline->render.lock();
+        const auto prepareUri = [&](const std::shared_ptr<ClientSession>& session)
+        {
+            Poco::URI uri(session->getPublicUri());
+            auto parameters = uri.getQueryParameters();
+            std::erase_if(parameters,
+                          [](const auto& parameter)
+                          {
+                              return parameter.first == "access_token" ||
+                                     parameter.first == "access_token_ttl" ||
+                                     parameter.first == "access_header";
+                          });
+            uri.setQueryParameters(parameters);
+            renewal.candidate.authorizeURI(uri);
+            uri.addQueryParameter("access_token_ttl",
+                                  std::to_string(proof->accessTokenExpiry.count()));
+            return std::make_shared<const Poco::URI>(std::move(uri));
+        };
+        auto transportUri = prepareUri(transport);
+        auto renderUri = prepareUri(render);
+        Authorization transportAuthority(renewal.candidate), renderAuthority(renewal.candidate);
+        std::string receipt =
+            "agentrenewed: epoch=" + record.epoch + " requestid=" + std::to_string(sequence) +
+            " viewid=" + std::to_string(record.viewId) + " renderid=" + record.renderId +
+            " expires=" + std::to_string(proof->accessTokenExpiry.count());
+        // Preparations can allocate. Recheck immediately before the nonthrowing commit.
+        if (std::chrono::steady_clock::now() >= renewal.deadline ||
+            !agentRenewalIdentity(record, transport) || !renewal.candidate.isValid() ||
+            agentRenewalBusy())
+            return failAgentRenewal(record, "expired");
+        transport->installAgentAuthority(transportAuthority, transportUri);
+        render->installAgentAuthority(renderAuthority, renderUri);
+        record.currentAuthority.swap(renewal.candidate);
+        record.renewalReceipt.swap(receipt);
+        record.renewalSequence = sequence;
+        record.renewal.reset();
+        transport->sendTextFrame(record.renewalReceipt);
+    }
+    catch (const std::exception&)
+    {
+        // A send failure after commit retains the receipt; an earlier failure retains the fence.
+        if (record.renewal)
+            failAgentRenewal(record, "unavailable");
+    }
+#endif
+}
+
 bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& session,
                                        const std::string& message)
 {
@@ -271,7 +742,7 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
         return reject();
     if (message == "agentcapabilities")
     {
-        std::string capabilities = "agentcapabilities:retirement=1";
+        std::string capabilities = "agentcapabilities:retirement=1 renewal=1";
         if (_childProcess->supportsRawDocument())
             capabilities += " rawdocument=1";
         if (_childProcess->supportsRawView())
@@ -290,7 +761,8 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
         for (const auto& old : _agentRetirements)
         {
             // No epoch reuse or token migration, including after a lost reply.
-            if (old->epoch == fields[0] || old->authority.matches(session->getAuthorization()))
+            if (old->epoch == fields[0] || old->authority.matches(session->getAuthorization()) ||
+                old->currentAuthority.matches(session->getAuthorization()))
                 return reject();
         }
         if (!_agentRetirements.empty() &&
@@ -325,7 +797,8 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
         const auto source = agentAuthoritySource(session->getPublicUri());
         if (proof && source && proof->nativeEpoch == record->epoch &&
             matchingAgentAuthority(session, render, *proof, *source))
-            record->authorityBaseline = AgentRetirementRecord::AuthorityBaseline{*proof, *source, render};
+            record->authorityBaseline =
+                AgentRetirementRecord::AuthorityBaseline{ *proof, *source, render, _childProcess };
 #endif
         _agentRetirements.push_back(std::move(record));
         _retirementNegotiated = true;
@@ -346,8 +819,9 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
         auto& record = *item;
         if (record.epoch != fields[0])
             continue;
-        if (!record.authority.matches(session->getAuthorization()) || record.viewId != view ||
-            record.renderId != fields[3] ||
+        if ((!record.currentAuthority.matches(session->getAuthorization()) &&
+             !record.authority.matches(session->getAuthorization())) ||
+            record.viewId != view || record.renderId != fields[3] ||
             (!record.requestId.empty() && record.requestId != fields[1]))
             return reject();
         if (record.phase == AgentRetirementRecord::Phase::Registering ||
@@ -379,6 +853,9 @@ void DocumentBroker::fenceAgentRetirement(const std::string& renderId)
     auto& record = *_agentRetirements.back();
     if (record.renderId != renderId || record.phase == AgentRetirementRecord::Phase::Retired)
         return;
+#if !MOBILEAPP
+    record.renewal.reset();
+#endif
     record.phase = AgentRetirementRecord::Phase::Retiring;
     if (const auto transport = _urpTransport.lock())
         transport->bindAgentViewId(-1);
@@ -433,7 +910,7 @@ bool DocumentBroker::handleAgentRetirementKit(const std::string& message)
         }
         const auto session = record.transport.lock();
         if (!session || !session->isWritable() ||
-            !record.authority.matches(session->getAuthorization()))
+            !record.currentAuthority.matches(session->getAuthorization()))
         {
             fenceAgentRetirement(record.renderId);
             return false;
@@ -444,10 +921,9 @@ bool DocumentBroker::handleAgentRetirementKit(const std::string& message)
             const auto& baseline = *record.authorityBaseline;
             const auto render = baseline.render.lock();
             const auto entry = _sessions.find(record.renderId);
-            const auto transportEntry = _sessions.find(session->getId());
-            if (transportEntry == _sessions.end() || transportEntry->second != session ||
-                !render || entry == _sessions.end() || entry->second != render ||
-                render->getKitViewId() != record.viewId ||
+            if (session->getDocumentBroker().get() != this ||
+                baseline.child.lock() != _childProcess || !render || entry == _sessions.end() ||
+                entry->second != render || render->getKitViewId() != record.viewId ||
                 baseline.proof.nativeEpoch != record.epoch ||
                 !matchingAgentAuthority(session, render, baseline.proof, baseline.source))
                 record.authorityBaseline.reset();
@@ -924,6 +1400,12 @@ void DocumentBroker::pollThread()
             }
         };
 
+        expireAgentRenewal();
+#if !MOBILEAPP
+        if (!_agentRetirements.empty() && _agentRetirements.back()->renewal &&
+            _agentRetirements.back()->renewal->request)
+            capPollTimeout(_agentRetirements.back()->renewal->deadline);
+#endif
         capPollTimeout(_checkFileInfoNotBefore);
         if (_lockCtx)
             capPollTimeout(_lockCtx->nextRefresh());
@@ -4347,7 +4829,9 @@ void DocumentBroker::uploadToStorageInternal(const std::shared_ptr<ClientSession
         return;
     }
 
-    const std::string uriAnonym = Anonymizer::anonymizeUrl(uri);
+    const std::string uriAnonym = session->getAuthorization().isSensitive()
+                                      ? "<sensitive request>"
+                                      : Anonymizer::anonymizeUrl(uri);
 
     // If the file timestamp hasn't changed, skip uploading.
     const std::chrono::system_clock::time_point newFileModifiedTime
@@ -4376,8 +4860,9 @@ void DocumentBroker::uploadToStorageInternal(const std::shared_ptr<ClientSession
 
     LOG_DBG("Uploading [" << _docKey << "] after saving to URI [" << uriAnonym << ']');
 
-    _uploadRequest = std::make_unique<UploadRequest>(uriAnonym, newFileModifiedTime, session,
-                                                     isSaveAs, isExport, isRename);
+    _uploadRequest =
+        std::make_unique<UploadRequest>(uriAnonym, newFileModifiedTime, session, isSaveAs, isExport,
+                                        isRename, session->getAuthorization().isSensitive());
 
     StorageBase::AsyncUploadCallback asyncUploadCallback =
         [this](const StorageBase::AsyncUpload& asyncUp)
@@ -4489,6 +4974,8 @@ void DocumentBroker::handleUploadToStorageSuccessful(const StorageBase::UploadRe
 {
     assert(_uploadRequest && "Expected to have a valid UploadRequest instance");
     LOG_DBG("Last upload result: OK");
+    const auto diagnostic = [this](const std::string& value) -> std::string
+    { return _uploadRequest->isSensitive() ? "<sensitive response>" : value; };
 
     if (const auto session = _uploadRequest->session())
     {
@@ -4522,7 +5009,7 @@ void DocumentBroker::handleUploadToStorageSuccessful(const StorageBase::UploadRe
         LOG_DBG("Uploaded docKey ["
                 << _docKey << "] to URI [" << _uploadRequest->uriAnonym()
                 << "] and updated timestamps. Document modified timestamp: "
-                << _storageManager.getLastModifiedServerTimeString()
+                << diagnostic(_storageManager.getLastModifiedServerTimeString())
                 << ", newFileModifiedTime: " << _uploadRequest->newFileModifiedLocalTime()
                 << ". Current Activity: " << DocumentState::name(_docState.activity()));
 
@@ -4608,9 +5095,9 @@ void DocumentBroker::handleUploadToStorageSuccessful(const StorageBase::UploadRe
         const auto session = _uploadRequest->session();
         if (session)
         {
-            LOG_DBG("Uploaded SaveAs docKey [" << _docKey << "] to URI ["
-                                               << Anonymizer::anonymizeUrl(url) << "] with name ["
-                                               << filenameAnonym << "] successfully.");
+            LOG_DBG("Uploaded SaveAs docKey ["
+                    << _docKey << "] to URI [" << diagnostic(Anonymizer::anonymizeUrl(url))
+                    << "] with name [" << diagnostic(filenameAnonym) << "] successfully.");
 
             std::ostringstream oss;
             oss << (_uploadRequest->isExport() ? "exportas:" : "saveas:") << " url=" << url
@@ -4628,8 +5115,9 @@ void DocumentBroker::handleUploadToStorageSuccessful(const StorageBase::UploadRe
         else
         {
             LOG_DBG("Uploaded SaveAs docKey ["
-                    << _docKey << "] to URI [" << Anonymizer::anonymizeUrl(url) << "] with name ["
-                    << filenameAnonym << "] successfully, but the client session is closed.");
+                    << _docKey << "] to URI [" << diagnostic(Anonymizer::anonymizeUrl(url))
+                    << "] with name [" << diagnostic(filenameAnonym)
+                    << "] successfully, but the client session is closed.");
         }
     }
 
@@ -4903,10 +5391,12 @@ void DocumentBroker::handleUploadToStorageFailed(const StorageBase::UploadResult
                 << _storageManager.getSizeAsUploaded() << " bytes because it's changed in storage");
         broadcastSaveResult(false, "Conflict: Document changed in storage",
                             uploadResult.getReason());
-        handleDocumentConflict("Document changed in storage during upload.\nLast known timestamp: " +
-                               _storageManager.getLastModifiedServerTimeString() +
-                               "\nStorage response: " +
-                               getAbbreviatedMessage(uploadResult.getReason()));
+        handleDocumentConflict(
+            _uploadRequest->isSensitive()
+                ? "Document changed in storage during upload"
+                : "Document changed in storage during upload.\nLast known timestamp: " +
+                      _storageManager.getLastModifiedServerTimeString() +
+                      "\nStorage response: " + getAbbreviatedMessage(uploadResult.getReason()));
     }
 
     // We failed to upload, merge the last attributes into the current one.
@@ -5474,8 +5964,8 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
     LOG_ASSERT_MSG(session, "Got null ClientSession");
     const std::string sessionId = session->getId();
 
-    if ((_retirementNegotiated && !_nativeSaveBarriers.empty()) || _agentSaveAttempt ||
-        (_uploadRequest && !_uploadRequest->isComplete()) ||
+    if (agentRenewalBlocks(session) || (_retirementNegotiated && !_nativeSaveBarriers.empty()) ||
+        _agentSaveAttempt || (_uploadRequest && !_uploadRequest->isComplete()) ||
         isAsyncUploading())
     {
         LOG_WRN("Rejecting save while another save or upload owns docKey [" << _docKey << ']');
@@ -7437,7 +7927,8 @@ void DocumentBroker::handleAgentSaveRequest(const std::shared_ptr<StreamSocket>&
 
     const std::shared_ptr<ClientSession> agentSession = _urpTransport.lock();
 
-    if (!agentSession || !agentSession->getAuthorization().matchesToken(bearerToken))
+    if (!agentSession || agentRenewalBlocks(agentSession) ||
+        !agentSession->getAuthorization().matchesToken(bearerToken))
     {
         LOG_WRN("Rejecting agent save request without a matching authorised live session");
         HttpHelper::sendErrorAndShutdown(http::StatusCode::Unauthorized, socket);
@@ -7914,9 +8405,10 @@ bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& sessio
     ASSERT_CORRECT_THREAD();
     LOG_ASSERT_MSG(session, "Must have a valid ClientSession");
 
-    if (message.starts_with("agentregisteredkit:") ||
-        message.starts_with("agentretirefencekit:") ||
-        message.starts_with("agentretiredkit:") ||
+    if (agentRenewalBlocks(session))
+        return false;
+    if (message.starts_with("agentrenew") || message.starts_with("agentregisteredkit:") ||
+        message.starts_with("agentretirefencekit:") || message.starts_with("agentretiredkit:") ||
         message.starts_with("agentregister ") || message.starts_with("agentretire "))
         return false;
 
@@ -7935,7 +8427,7 @@ bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& sessio
             const auto& record = *_agentRetirements.back();
             if (record.phase != AgentRetirementRecord::Phase::Active ||
                 record.transport.lock() != session ||
-                !record.authority.matches(session->getAuthorization()))
+                !record.currentAuthority.matches(session->getAuthorization()))
                 return false;
         }
         if (!session->isWebsocketUrpEnabled())
@@ -8380,7 +8872,9 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
     }
 
     std::weak_ptr<ClientSession> weakSession = session;
-    auto cfiContinuation = [this, weakSession]([[maybe_unused]] CheckFileInfo& checkFileInfo)
+    const bool sensitive = session->getAuthorization().isSensitive();
+    auto cfiContinuation =
+        [this, weakSession, sensitive]([[maybe_unused]] CheckFileInfo& checkFileInfo)
     {
         assert(_docState.activity() == DocumentState::Activity::SyncFileTimestamp &&
                "Expected to be in SyncFileTimestamp activity");
@@ -8395,8 +8889,31 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
         {
             Poco::JSON::Object::Ptr object = _checkFileInfo->wopiInfo();
 
+            const auto readValue = [&]<typename T>(const char* key, T& value)
+            {
+                if (!sensitive)
+                    return JsonUtil::findJSONValue(object, key, value);
+                try
+                {
+                    value = object->get(key).convert<T>();
+                    return true;
+                }
+                catch (const std::exception&)
+                {
+                    return false;
+                }
+            };
+            const auto diagnostic = [sensitive](const std::string& value) -> std::string
+            { return sensitive ? "<sensitive response>" : value; };
             std::string lastModifiedTime;
-            JsonUtil::findJSONValue(object, "LastModifiedTime", lastModifiedTime);
+            readValue("LastModifiedTime", lastModifiedTime);
+            if (sensitive && !lastModifiedTime.empty() && !Util::isIso8601(lastModifiedTime))
+            {
+                // Do not retain arbitrary response text in shared storage state or later diagnostics.
+                _storage->setLastModifiedTimeUnSafe();
+                handleDocumentConflict("Storage returned an invalid modification timestamp");
+                return;
+            }
 
             const std::string& lastKnownTime = _storageManager.getLastModifiedServerTimeString();
             if (lastKnownTime.empty())
@@ -8411,7 +8928,7 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
                         << _docKey
                         << "], we have no last-known timestamp to compare against. Taking the one "
                            "in storage ["
-                        << lastModifiedTime << "] as our baseline");
+                        << diagnostic(lastModifiedTime) << "] as our baseline");
 
                 _storage->setLastModifiedTime(lastModifiedTime);
                 _storageManager.setLastModifiedServerTimeString(lastModifiedTime);
@@ -8424,7 +8941,7 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
                 // the pending upload can simply be retried.
                 LOG_INF("After failing to upload ["
                         << _docKey << "], the timestamp in storage is unchanged at ["
-                        << lastModifiedTime
+                        << diagnostic(lastModifiedTime)
                         << "]. The document in storage is intact; will retry uploading");
             }
             else if (_lastUploadDefinitelyFailed)
@@ -8433,13 +8950,13 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
                 // somebody else's doing. The user has to decide whether to keep
                 // their version or the one in storage.
                 LOG_WRN("After our upload definitely failed, the timestamp in storage ["
-                        << lastModifiedTime << "] no longer matches our last known ["
-                        << lastKnownTime << "]. The document was changed in storage");
+                        << diagnostic(lastModifiedTime) << "] no longer matches our last known ["
+                        << diagnostic(lastKnownTime) << "]. The document was changed in storage");
 
                 handleDocumentConflict("Document changed in storage (timestamp changed after a "
                                        "rejected upload).\nLast known timestamp: " +
-                                       lastKnownTime + "\nTimestamp in storage: " +
-                                       lastModifiedTime);
+                                       diagnostic(lastKnownTime) +
+                                       "\nTimestamp in storage: " + diagnostic(lastModifiedTime));
             }
             else
             {
@@ -8447,10 +8964,10 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
                 // the timeout happened after the host had written the file. Work
                 // out whether the document in storage is the one we sent.
                 std::string storageHash;
-                JsonUtil::findJSONValue(object, "SHA256", storageHash);
+                readValue("SHA256", storageHash);
 
                 std::size_t size = 0;
-                JsonUtil::findJSONValue(object, "Size", size);
+                readValue("Size", size);
 
                 // A hash settles it. Only fall back on the size when the host
                 // reports no hash, or we could not take one of our own: a byte
@@ -8461,8 +8978,8 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
                                                : size == _storageManager.getSizeAsUploaded();
 
                 const std::string evidence =
-                    haveHashes ? "the SHA-256 in storage [" + storageHash + "] and ours [" +
-                                     _lastUploadedFileHash + ']'
+                    haveHashes ? "the SHA-256 in storage [" + diagnostic(storageHash) +
+                                     "] and ours [" + diagnostic(_lastUploadedFileHash) + ']'
                                : "the size in storage " + std::to_string(size) + " and ours " +
                                      std::to_string(_storageManager.getSizeAsUploaded());
 
@@ -8472,7 +8989,8 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
                             << _docKey << "], " << evidence
                             << " agree. Assuming our upload did land and synchronizing the "
                                "timestamp to ["
-                            << lastModifiedTime << "] (from [" << lastKnownTime << "])");
+                            << diagnostic(lastModifiedTime) << "] (from ["
+                            << diagnostic(lastKnownTime) << "])");
 
                     _storage->setLastModifiedTime(lastModifiedTime);
                     _storageManager.setLastModifiedServerTimeString(lastModifiedTime);
@@ -8480,14 +8998,15 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
                 else
                 {
                     LOG_WRN("After failing to get a response to our upload, "
-                            << evidence << " differ, and the timestamp [" << lastModifiedTime
-                            << "] no longer matches our last known [" << lastKnownTime
+                            << evidence << " differ, and the timestamp ["
+                            << diagnostic(lastModifiedTime)
+                            << "] no longer matches our last known [" << diagnostic(lastKnownTime)
                             << "]. The document was changed in storage");
 
                     handleDocumentConflict("Document changed in storage (timestamp changed after "
                                            "an upload with no response).\nLast known timestamp: " +
-                                           lastKnownTime + "\nTimestamp in storage: " +
-                                           lastModifiedTime);
+                                           diagnostic(lastKnownTime) + "\nTimestamp in storage: " +
+                                           diagnostic(lastModifiedTime));
                 }
             }
         }
@@ -8528,7 +9047,8 @@ void DocumentBroker::checkFileInfo(const std::shared_ptr<ClientSession>& session
     // CheckFileInfo asynchronously.
     assert(!_checkFileInfo && "Unexpected CheckFileInfo in progress");
     _checkFileInfo =
-        std::make_shared<CheckFileInfo>(_poll, session->getPublicUri(), std::move(cfiContinuation));
+        std::make_shared<CheckFileInfo>(_poll, session->getPublicUri(), std::move(cfiContinuation),
+                                        session->getAuthorization().isSensitive());
     if (!_checkFileInfo->checkFileInfo(redirectLimit))
     {
         LOG_INF("Resetting async CheckFileInfo as it failed to start");

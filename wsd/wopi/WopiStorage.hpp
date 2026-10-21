@@ -359,6 +359,7 @@ protected:
         const bool hasWopiLockHeader;
         /// The host's Retry-After, when it asked us to come back later.
         const std::optional<std::chrono::seconds> retryAfter;
+        const bool sensitive = false;
     };
 
     /// Handles the response from the server when uploading the document.

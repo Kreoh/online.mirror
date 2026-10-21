@@ -972,7 +972,7 @@ void WebSocketHandler::dumpState(std::ostream& os, const std::string& indent) co
                   std::chrono::steady_clock::now() - _lastPongTime)
            << " ago of "
            << std::chrono::duration_cast<std::chrono::seconds>(net::Defaults.pongTimeout) << ' ';
-    if (_wsPayload.size() > 0)
+    if (!isSensitive() && _wsPayload.size() > 0)
         HexUtil::dumpHex(os, _wsPayload, "\t\tws queued payload:\n", "\t\t");
     os << '\n';
     if (_msgHandler)
@@ -995,9 +995,10 @@ void StreamSocket::dumpState(std::ostream& os)
        << '\t' << std::setw(7) << _outBuffer.capacity() << '\t' << " r: " << std::setw(6)
        << bytesRcvd() << "\t w: " << std::setw(6) << bytesSent() << '\t' << clientAddress() << '\t';
     _socketHandler->dumpState(os);
-    if (_inBuffer.size() > 0)
+    if (!isSensitive() && _inBuffer.size() > 0)
         HexUtil::dumpHex(os, _inBuffer, "\t\tinBuffer:\n", "\t\t");
-    _outBuffer.dumpHex(os, "\t\toutBuffer:\n", "\t\t");
+    if (!isSensitive())
+        _outBuffer.dumpHex(os, "\t\toutBuffer:\n", "\t\t");
 }
 
 bool StreamSocket::send(const http::Response& response)
@@ -1497,8 +1498,11 @@ void StreamSocket::sendFDs([[maybe_unused]] const char* data, [[maybe_unused]] c
 
 #ifdef LOG_SOCKET_DATA
     if (len > 0)
-        LOG_TRC("(Unix) outBuffer (" << len << " bytes):\n"
-                                     << HexUtil::dumpHex(std::string(data, len)));
+    {
+        if (!isSensitive())
+            LOG_TRC("(Unix) outBuffer (" << len << " bytes):\n"
+                                         << HexUtil::dumpHex(std::string(data, len)));
+    }
 #endif
 
     //FIXME: retry on EINTR?
@@ -1563,12 +1567,14 @@ int StreamSocket::readIncomingData()
                              "Read closed (0), have " << _inBuffer.size() << " buffered bytes");
                 else // Success.
 #ifdef LOG_SOCKET_DATA
-                    LOGA_TRC(Socket,
-                             "Read " << len << " bytes in addition to " << _inBuffer.size()
-                                     << " buffered bytes"
-                                     << (len ? HexUtil::dumpHex(std::string(buf, len), ":\n")
-                                             : std::string())
-                    );
+                {
+                    if (!isSensitive())
+                        LOGA_TRC(Socket,
+                                 "Read " << len << " bytes in addition to " << _inBuffer.size()
+                                         << " buffered bytes"
+                                         << (len ? HexUtil::dumpHex(std::string(buf, len), ":\n")
+                                                 : std::string()));
+                }
 #else
                     LOGA_TRC(Socket,
                              "Read " << len << " bytes in addition to " << _inBuffer.size()
@@ -1683,13 +1689,15 @@ void StreamSocket::handlePoll(SocketDisposition& disposition,
         const int read = readIncomingData();
         const int last_errno = errno;
 #ifdef LOG_SOCKET_DATA
-        LOGA_TRC(Socket, "Incoming data buffer "
-                             << _inBuffer.size() << " bytes, read result: " << read
-                             << ", events: 0x" << std::hex << events << std::dec << " ("
-                             << (closed ? "closed" : "not closed") << ')'
-                             << (!_inBuffer.empty() ? HexUtil::dumpHex(_inBuffer, ":\n")
-                                                    : std::string())
-        );
+        {
+            if (!isSensitive())
+                LOGA_TRC(Socket, "Incoming data buffer "
+                                     << _inBuffer.size() << " bytes, read result: " << read
+                                     << ", events: 0x" << std::hex << events << std::dec << " ("
+                                     << (closed ? "closed" : "not closed") << ')'
+                                     << (!_inBuffer.empty() ? HexUtil::dumpHex(_inBuffer, ":\n")
+                                                            : std::string()));
+        }
 #else
         LOGA_TRC(Socket, "Incoming data buffer "
                              << _inBuffer.size() << " bytes, read result: " << read
@@ -1827,13 +1835,15 @@ int StreamSocket::writeOutgoingData()
                          << std::strerror(last_errno) << ')');
             else // Success.
 #ifdef LOG_SOCKET_DATA
-                LOGA_TRC(Socket,
-                         "Wrote "
-                             << len << " bytes of " << _outBuffer.size() << " buffered data"
-                             << (len ? HexUtil::dumpHex(std::string(_outBuffer.getBlock(), len),
-                                                        ":\n")
-                                     : std::string())
-                );
+            {
+                if (!isSensitive())
+                    LOGA_TRC(Socket,
+                             "Wrote "
+                                 << len << " bytes of " << _outBuffer.size() << " buffered data"
+                                 << (len ? HexUtil::dumpHex(std::string(_outBuffer.getBlock(), len),
+                                                            ":\n")
+                                         : std::string()));
+            }
 #else
                 LOGA_TRC(Socket,
                          "Wrote "

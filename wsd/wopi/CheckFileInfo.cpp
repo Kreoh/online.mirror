@@ -14,6 +14,7 @@
 #include "CheckFileInfo.hpp"
 
 #include <common/JsonUtil.hpp>
+#include <Poco/JSON/Parser.h>
 #include <common/Log.hpp>
 #include <common/TraceEvent.hpp>
 #include <common/Util.hpp>
@@ -26,12 +27,15 @@
 
 bool CheckFileInfo::checkFileInfo(int redirectLimit)
 {
-    std::string uriAnonym = Anonymizer::anonymizeUrl(_url.toString());
+    std::string uriAnonym =
+        _sensitive ? "<sensitive request>" : Anonymizer::anonymizeUrl(_url.toString());
 
     LOG_DBG("Getting info for wopi uri [" << uriAnonym << ']');
     _httpSession = _urlFromRedirect ? StorageConnectionManager::getHttpSession(_url)
                                     : StorageConnectionManager::getWopiHttpSession(_url);
     Authorization auth = Authorization::create(_url);
+    if (_sensitive)
+        auth.markSensitive();
     const http::Request httpRequest = StorageConnectionManager::createHttpRequest(_url, auth);
 
     const auto startTime = std::chrono::steady_clock::now();
@@ -61,7 +65,7 @@ bool CheckFileInfo::checkFileInfo(int redirectLimit)
         const http::StatusCode statusCode = httpResponse->statusLine().statusCode();
         if (http::isRedirectStatusCode(statusCode))
         {
-            if (redirectLimit != 0)
+            if (!_sensitive && redirectLimit != 0)
             {
                 const std::string location = httpResponse->get("Location");
                 LOG_INF("WOPI::CheckFileInfo redirect to URI ["
@@ -87,7 +91,7 @@ bool CheckFileInfo::checkFileInfo(int redirectLimit)
         const bool unauthorized =
             http::isUnauthorizedStatusCode(httpResponse->statusLine().statusCode());
 
-        if (Log::isEnabled(failed ? Log::Level::ERR : Log::Level::TRC))
+        if (!_sensitive && Log::isEnabled(failed ? Log::Level::ERR : Log::Level::TRC))
         {
             std::ostringstream oss;
             oss << "WOPI::CheckFileInfo returned " << httpResponse->statusLine().statusCode() << ' '
@@ -140,9 +144,12 @@ bool CheckFileInfo::checkFileInfo(int redirectLimit)
         {
             if (parseResponseAndValidate(wopiResponse))
             {
-                LOG_DBG("WOPI::CheckFileInfo ("
-                        << callDurationMs
-                        << "): " << (Anonymizer::enabled() ? "obfuscated" : wopiResponse));
+                {
+                    if (!_sensitive)
+                        LOG_DBG("WOPI::CheckFileInfo ("
+                                << callDurationMs
+                                << "): " << (Anonymizer::enabled() ? "obfuscated" : wopiResponse));
+                }
 
                 _state = State::Pass;
             }
@@ -150,11 +157,14 @@ bool CheckFileInfo::checkFileInfo(int redirectLimit)
             {
                 _state = State::Fail;
 
-                LOG_ERR("WOPI::CheckFileInfo ("
-                        << callDurationMs
-                        << ") failed or no valid JSON payload returned. Access denied. "
-                           "Original response: ["
-                        << COOLProtocol::getAbbreviatedMessage(wopiResponse) << ']');
+                {
+                    if (!_sensitive)
+                        LOG_ERR("WOPI::CheckFileInfo ("
+                                << callDurationMs
+                                << ") failed or no valid JSON payload returned. Access denied. "
+                                   "Original response: ["
+                                << COOLProtocol::getAbbreviatedMessage(wopiResponse) << ']');
+                }
             }
         }
 
@@ -229,18 +239,39 @@ void CheckFileInfo::checkFileInfoSync(int redirectionLimit)
 
 bool CheckFileInfo::parseResponseAndValidate(const std::string& response)
 {
-    if (JsonUtil::parseJSON(response, _wopiInfo))
+    bool parsed = false;
+    if (_sensitive)
+    {
+        try
+        {
+            _wopiInfo = Poco::JSON::Parser().parse(response).extract<Poco::JSON::Object::Ptr>();
+            parsed = static_cast<bool>(_wopiInfo);
+        }
+        catch (const std::exception&)
+        {
+            LOG_WRN("Sensitive CheckFileInfo returned invalid JSON");
+        }
+    }
+    else
+        parsed = JsonUtil::parseJSON(response, _wopiInfo);
+    if (parsed)
     {
         // Validate the filename is sane.
         std::string filename;
-        if (JsonUtil::findJSONValue(_wopiInfo, "BaseFileName", filename) &&
+        const auto name = _wopiInfo->get("BaseFileName");
+        if (name.isString())
+            filename = name.extract<std::string>();
+        if (name.isString() && !filename.empty() &&
             filename.find_first_of('/') == std::string::npos)
         {
             return true; // We're good.
         }
 
-        LOG_ERR("BaseFileName should be the name of the file without a path, but is: [" << filename
-                                                                                        << ']');
+        {
+            if (!_sensitive)
+                LOG_ERR("BaseFileName should be the name of the file without a path, but is: ["
+                        << filename << ']');
+        }
     }
 
     _wopiInfo.reset(); // Clear the parsed JSON, if any.
@@ -264,8 +295,11 @@ CheckFileInfo::wopiFileInfo(const Poco::URI& uriPublic) const
         JsonUtil::findJSONValue(_wopiInfo, "LastModifiedTime", modifiedTime);
 
         if (!modifiedTime.empty() && !Util::isIso8601(modifiedTime))
-            LOG_WRN("CheckFileInfo returned a LastModifiedTime ["
-                    << modifiedTime << "] that is not a parsable ISO8601 timestamp");
+        {
+            if (!_sensitive)
+                LOG_WRN("CheckFileInfo returned a LastModifiedTime ["
+                        << modifiedTime << "] that is not a parsable ISO8601 timestamp");
+        }
 
         assert(filename.find_first_of('/') == std::string::npos &&
                "Invalid BaseFileName, which had passed prior validation");

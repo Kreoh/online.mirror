@@ -134,7 +134,11 @@ namespace http
 
 int64_t Header::parse(const char* p, int64_t len)
 {
-    LOG_TRC("Parsing header given " << len << " bytes: " << std::string(p, std::min<int64_t>(len, 80L)));
+    {
+        if (!isSensitive())
+            LOG_TRC("Parsing header given "
+                    << len << " bytes: " << std::string(p, std::min<int64_t>(len, 80L)));
+    }
     if (len < 4)
     {
         // Incomplete; we need at least \r\n\r\n.
@@ -182,18 +186,25 @@ int64_t Header::parse(const char* p, int64_t len)
 
         _chunked = getTransferEncoding() == "chunked";
 
-        LOG_TRC("Read " << static_cast<std::size_t>(data.tellg())
-                        << " bytes of header. hasContentLength: " << hasContentLength()
-                        << ", contentLength: " << (hasContentLength() ? getContentLength() : -1)
-                        << ", chunked: " << getChunkedTransferEncoding() << ":\n"
-                        << std::string_view(p, data.tellg()));
+        {
+            if (!isSensitive())
+                LOG_TRC("Read " << static_cast<std::size_t>(data.tellg())
+                                << " bytes of header. hasContentLength: " << hasContentLength()
+                                << ", contentLength: "
+                                << (hasContentLength() ? getContentLength() : -1)
+                                << ", chunked: " << getChunkedTransferEncoding() << ":\n"
+                                << std::string_view(p, data.tellg()));
+        }
 
         // We consumed the full header, including the blank line.
         return endPos + 1;
     }
     catch (const Poco::Exception& exc)
     {
-        LOG_TRC("ERROR while parsing http header: " << exc.displayText());
+        {
+            if (!isSensitive())
+                LOG_TRC("ERROR while parsing http header: " << exc.displayText());
+        }
     }
 
     return 0;
@@ -222,8 +233,12 @@ int64_t Header::getContentLength() const
 FieldParseState StatusLine::parse(const char* p, int64_t& len)
 {
 #ifdef DEBUG_HTTP
-    LOG_TRC("StatusLine::parse: " << len << " bytes available\n"
-                                  << HexUtil::dumpHex(std::string(p, std::min(len, 10 * 1024L))));
+    {
+        if (!isSensitive())
+            LOG_TRC("StatusLine::parse: "
+                    << len << " bytes available\n"
+                    << HexUtil::dumpHex(std::string(p, std::min(len, 10 * 1024L))));
+    }
 #endif //DEBUG_HTTP
 
     // First line is the status line.
@@ -252,8 +267,11 @@ FieldParseState StatusLine::parse(const char* p, int64_t& len)
         (versionMaj < 0 || versionMaj > 9) || version[VersionDotPos] != '.' ||
         (versionMin < 0 || versionMin > 9) || !isWhitespace(version[VersionBreakPos]))
     {
-        LOG_ERR("StatusLine::parse: Invalid HTTP version [" << std::string(version, VersionLen)
-                                                            << "]");
+        {
+            if (!isSensitive())
+                LOG_ERR("StatusLine::parse: Invalid HTTP version ["
+                        << std::string(version, VersionLen) << "]");
+        }
         return FieldParseState::Invalid;
     }
 
@@ -338,10 +356,14 @@ bool Request::writeData(Buffer& out, std::size_t capacity)
         if (!hasOnlyValidRequestLineBytes(getVerb()) || !hasOnlyValidRequestLineBytes(getUrl()) ||
             !hasOnlyValidRequestLineBytes(getVersion()))
         {
-            LOG_ERR("Not sending a request whose request line holds a byte it cannot carry: ["
-                    << HexUtil::stringifyHexLine(
-                           getUrl(), 0, std::min(getUrl().size(), Header::MaxLoggedFieldBytes))
-                    << ']');
+            {
+                if (!isSensitive())
+                    LOG_ERR(
+                        "Not sending a request whose request line holds a byte it cannot carry: ["
+                        << HexUtil::stringifyHexLine(
+                               getUrl(), 0, std::min(getUrl().size(), Header::MaxLoggedFieldBytes))
+                        << ']');
+            }
             return false;
         }
 
@@ -425,8 +447,11 @@ bool Request::writeData(Buffer& out, std::size_t capacity)
     }
 
 #ifdef DEBUG_HTTP
-    LOG_TRC("Request::writeData: " << buffered_size << " bytes buffered\n"
-                                   << HexUtil::dumpHex(out));
+    {
+        if (!isSensitive())
+            LOG_TRC("Request::writeData: " << buffered_size << " bytes buffered\n"
+                                           << HexUtil::dumpHex(out));
+    }
 #endif //DEBUG_HTTP
 
     return true;
@@ -592,8 +617,11 @@ int64_t RequestParser::readData(const char* p, const int64_t len)
             (versionMaj < 0 || versionMaj > 9) || version[VersionDotPos] != '.' ||
             (versionMin < 0 || versionMin > 9) || !isWhitespace(version[VersionBreakPos]))
         {
-            LOG_ERR("RequestParser::dataRead: Invalid HTTP version ["
-                    << std::string(version, VersionLen) << "]");
+            {
+                if (!isSensitive())
+                    LOG_ERR("RequestParser::dataRead: Invalid HTTP version ["
+                            << std::string(version, VersionLen) << "]");
+            }
             return -1;
         }
 
@@ -630,9 +658,12 @@ int64_t RequestParser::readData(const char* p, const int64_t len)
             available -= read;
 
 #ifdef DEBUG_HTTP
-            LOG_TRC("After Header: "
-                    << available << " bytes availble\n"
-                    << HexUtil::dumpHex(std::string(p, std::min(available, 1 * 1024UL))));
+            {
+                if (!isSensitive())
+                    LOG_TRC("After Header: "
+                            << available << " bytes availble\n"
+                            << HexUtil::dumpHex(std::string(p, std::min(available, 1 * 1024UL))));
+            }
 #endif //DEBUG_HTTP
         }
     }
@@ -666,9 +697,12 @@ int64_t RequestParser::readData(const char* p, const int64_t len)
                 while (available)
                 {
 #ifdef DEBUG_HTTP
-                    LOG_TRC("New Chunk, "
-                            << available << " bytes available\n"
-                            << HexUtil::dumpHex(std::string(p, std::min(available, 10 * 1024UL))));
+                    {
+                        if (!isSensitive())
+                            LOG_TRC("New Chunk, " << available << " bytes available\n"
+                                                  << HexUtil::dumpHex(std::string(
+                                                         p, std::min(available, 10 * 1024UL))));
+                    }
 #endif //DEBUG_HTTP
 
                     // Read ahead to see if we have enough data
@@ -834,9 +868,12 @@ int64_t Response::readData(const char* p, int64_t len)
             p += read;
 
 #ifdef DEBUG_HTTP
-            LOG_TRC("After Header: "
-                    << available << " bytes available\n"
-                    << HexUtil::dumpHex(std::string(p, std::min(available, 1 * 1024L))));
+            {
+                if (!isSensitive())
+                    LOG_TRC("After Header: "
+                            << available << " bytes available\n"
+                            << HexUtil::dumpHex(std::string(p, std::min(available, 1 * 1024L))));
+            }
 #endif //DEBUG_HTTP
 
             // Assume we have a body unless we have reason to expect otherwise.
@@ -848,7 +885,12 @@ int64_t Response::readData(const char* p, int64_t len)
                 // Reset parser state to read the actual final response.
                 LOG_TRC("Got 100 Continue, resetting parser for final response");
                 _statusLine = StatusLine();
+                if (isSensitive())
+                    _statusLine.markSensitive();
+                const bool sensitive = isSensitive();
                 _header = Header();
+                if (sensitive)
+                    _header.markSensitive();
                 _parserStage = ParserStage::StatusLine;
                 _recvBodySize = 0;
             }
@@ -877,16 +919,23 @@ int64_t Response::readData(const char* p, int64_t len)
                         // 3.3.2.  Content-Length
                         // A sender MUST NOT send a Content-Length header field in any message
                         // that contains a Transfer-Encoding header field.
-                        LOG_ERR("Unexpected Content-Length header in response: "
-                                << _header.getContentLength()
-                                << ", Transfer-Encoding: " << _header.getTransferEncoding());
+                        {
+                            if (!isSensitive())
+                                LOG_ERR("Unexpected Content-Length header in response: "
+                                        << _header.getContentLength() << ", Transfer-Encoding: "
+                                        << _header.getTransferEncoding());
+                        }
                         return -1;
                     }
                     else if (_bodySizeLimit > 0 && _header.getContentLength() > _bodySizeLimit)
                     {
-                        LOG_ERR("Response Content-Length " << _header.getContentLength()
-                                                           << " passes the body size limit of "
-                                                           << _bodySizeLimit << " bytes");
+                        {
+                            if (!isSensitive())
+                                LOG_ERR("Response Content-Length "
+                                        << _header.getContentLength()
+                                        << " passes the body size limit of " << _bodySizeLimit
+                                        << " bytes");
+                        }
                         return -1;
                     }
                     else if (_header.getContentLength() == 0)
@@ -912,9 +961,12 @@ int64_t Response::readData(const char* p, int64_t len)
             while (available)
             {
 #ifdef DEBUG_HTTP
-                LOG_TRC("New Chunk, "
-                        << available << " bytes available\n"
-                        << HexUtil::dumpHex(std::string(p, std::min(available, 10 * 1024L))));
+                {
+                    if (!isSensitive())
+                        LOG_TRC("New Chunk, " << available << " bytes available\n"
+                                              << HexUtil::dumpHex(std::string(
+                                                     p, std::min(available, 10 * 1024L))));
+                }
 #endif //DEBUG_HTTP
 
                 // Read ahead to see if we have enough data
@@ -1183,6 +1235,12 @@ bool Response::writeData(Buffer& out) const
 void Response::dumpState(std::ostream& os, const std::string& indent) const
 {
     os << indent << "http::Response: #" << _fd;
+    if (isSensitive())
+    {
+        os << " status=" << static_cast<int>(statusCode()) << " state=" << name(_state)
+           << " bytes=" << _recvBodySize;
+        return;
+    }
     os << indent << "\tstatusLine: " << _statusLine.httpVersion() << ' '
        << getReasonPhraseForCode(_statusLine.statusCode()) << ' ' << _statusLine.reasonPhrase();
     os << indent << "\tstate: " << name(_state);
@@ -1289,7 +1347,7 @@ std::shared_ptr<const Response>
 Session::syncDownload(const Request& req, const std::string& saveToFilePath, SocketPoll& poller)
 {
     LOG_TRC_S("syncDownload: " << req.getVerb() << ' ' << host() << ':' << port() << ' '
-                               << req.getUrl());
+                               << req.diagnosticUrl());
 
     newRequest(req, false);
 
@@ -1304,7 +1362,7 @@ std::shared_ptr<const Response> Session::syncRequest(const Request& req,
                                                      std::chrono::milliseconds timeout)
 {
     LOG_TRC("syncRequest: " << req.getVerb() << ' ' << host() << ':' << port() << ' '
-                            << req.getUrl());
+                            << req.diagnosticUrl());
 
     const auto origTimeout = getTimeout();
     setTimeout(timeout);
@@ -1325,7 +1383,7 @@ bool Session::asyncRequest(const Request& req, const std::weak_ptr<SocketPoll>& 
     if (!socketPoll)
     {
         LOG_ERR("Cannot start new asyncRequest without a valid SocketPoll: "
-                << req.getVerb() << ' ' << host() << ':' << port() << ' ' << req.getUrl());
+                << req.getVerb() << ' ' << host() << ':' << port() << ' ' << req.diagnosticUrl());
 
         if (_onConnectFail)
         {
@@ -1337,8 +1395,8 @@ bool Session::asyncRequest(const Request& req, const std::weak_ptr<SocketPoll>& 
         return false;
     }
 
-    LOG_TRC("New asyncRequest on [" << socketPoll->name() << "]: " << req.getVerb() << ' '
-                                    << host() << ':' << port() << ' ' << req.getUrl());
+    LOG_TRC("New asyncRequest on [" << socketPoll->name() << "]: " << req.getVerb() << ' ' << host()
+                                    << ':' << port() << ' ' << req.diagnosticUrl());
 
     newRequest(req, asyncShutdownOnFinish);
 
@@ -1355,7 +1413,7 @@ bool Session::asyncRequest(const Request& req, const std::weak_ptr<SocketPoll>& 
     }
 
     LOG_DBG("Starting asyncRequest on [" << socketPoll->name() << "]: " << req.getVerb() << ' '
-                                         << host() << ':' << port() << ' ' << req.getUrl());
+                                         << host() << ':' << port() << ' ' << req.diagnosticUrl());
     return true;
 }
 
@@ -1442,8 +1500,8 @@ bool Session::syncRequestImpl(SocketPoll& poller)
         poller.insertNewSocket(socket);
     }
 
-    LOG_TRC("Starting syncRequest: " << _request.getVerb() << ' ' << host() << ':' << port()
-                                     << ' ' << _request.getUrl());
+    LOG_TRC("Starting syncRequest: " << _request.getVerb() << ' ' << host() << ':' << port() << ' '
+                                     << _request.diagnosticUrl());
 
     poller.poll(timeout);
     while (!_response->done())
@@ -1483,7 +1541,10 @@ void Session::callOnFinished()
     }
     catch (const std::exception& exc)
     {
-        LOG_ERR("Error while invoking onFinished client callback: " << exc.what());
+        {
+            if (!isSensitive())
+                LOG_ERR("Error while invoking onFinished client callback: " << exc.what());
+        }
     }
 }
 
@@ -1521,6 +1582,13 @@ void Session::newRequest(const Request& req, bool asyncShutdownOnFinish)
     _response = std::make_shared<Response>(onFinished, _fd);
 
     _request = req;
+    if (req.isSensitive())
+        markSensitive();
+    if (isSensitive())
+    {
+        _request.markSensitive();
+        _response->markSensitive();
+    }
 
     _asyncShutdownOnFinish = asyncShutdownOnFinish;
 
@@ -1588,9 +1656,12 @@ void Session::handleIncomingMessage(SocketDisposition& disposition)
             return;
         }
 
-        LOG_TRC("HandleIncomingMessage: buffer has:\n"
-                << HexUtil::dumpHex(
-                       std::string(data.data(), std::min<size_t>(data.size(), 256UL))));
+        {
+            if (!isSensitive())
+                LOG_TRC("HandleIncomingMessage: buffer has:\n"
+                        << HexUtil::dumpHex(
+                               std::string(data.data(), std::min<size_t>(data.size(), 256UL))));
+        }
 
 #if !(defined QTAPP || defined _WIN32 || defined(MACOS))
         // Response::readData is not build with CODA.
@@ -1657,7 +1728,10 @@ void Session::callOnConnectFail()
     }
     catch (const std::exception& exc)
     {
-        LOG_ERR("Error while invoking onConnectFail client callback: " << exc.what());
+        {
+            if (!isSensitive())
+                LOG_ERR("Error while invoking onConnectFail client callback: " << exc.what());
+        }
     }
 }
 
@@ -1787,7 +1861,8 @@ bool Session::checkTimeout(std::chrono::steady_clock::time_point now)
         SigUtil::getTerminationFlag())
     {
         LOG_WRN("CheckTimeout: Timeout while requesting [" << _request.getVerb() << ' ' << _host
-                                                           << _request.getUrl() << "] after " << duration);
+                                                           << _request.diagnosticUrl() << "] after "
+                                                           << duration);
 
         // Flag that we timed out.
         _response->timeout();

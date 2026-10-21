@@ -220,8 +220,12 @@ protected:
         // Don't send close-frame more than once.
         if (!_shuttingDown)
         {
-            LOGA_TRC(WebSocket, "Shutdown websocket, code: "
-                     << static_cast<unsigned>(statusCode) << ", message: " << statusMessage);
+            {
+                if (!isSensitive())
+                    LOGA_TRC(WebSocket,
+                             "Shutdown websocket, code: " << static_cast<unsigned>(statusCode)
+                                                          << ", message: " << statusMessage);
+            }
             _shuttingDown = true;
 
             if (!Util::isMobileApp())
@@ -391,10 +395,14 @@ private:
                 return true;
             }
 
-            LOGA_TRC(WebSocket, "Incoming WebSocket data of "
-                                    << len << " bytes: "
-                                    << HexUtil::stringifyHexLine(socket->getInBuffer(), 0,
-                                                                 std::min(size_t(32), len)));
+            {
+                if (!isSensitive())
+                    LOGA_TRC(WebSocket,
+                             "Incoming WebSocket data of "
+                                 << len << " bytes: "
+                                 << HexUtil::stringifyHexLine(socket->getInBuffer(), 0,
+                                                              std::min(size_t(32), len)));
+            }
 
             unsigned char *data = p + headerLen;
 
@@ -506,13 +514,18 @@ private:
 
             socket->eraseFirstInputBytes(headerLen + payloadLen);
 
-            LOGA_TRC(WebSocket, "Incoming WebSocket frame code "
-                                    << static_cast<unsigned>(code) << ", fin? " << fin << ", mask? "
-                                    << hasMask << ", payload length: " << payloadLen
-                                    << ", residual socket data: " << socket->getInBuffer().size()
-                                    << " bytes, unmasked data: " +
-                                           HexUtil::stringifyHexLine(
-                                               _wsPayload, 0, std::min(size_t(32), _wsPayload.size())));
+            {
+                if (!isSensitive())
+                    LOGA_TRC(
+                        WebSocket,
+                        "Incoming WebSocket frame code "
+                            << static_cast<unsigned>(code) << ", fin? " << fin << ", mask? "
+                            << hasMask << ", payload length: " << payloadLen
+                            << ", residual socket data: " << socket->getInBuffer().size()
+                            << " bytes, unmasked data: " +
+                                   HexUtil::stringifyHexLine(
+                                       _wsPayload, 0, std::min(size_t(32), _wsPayload.size())));
+            }
 
             if (fin)
             {
@@ -524,11 +537,17 @@ private:
                 }
                 catch (const Poco::Exception& ex)
                 {
-                    LOG_ERR("Error during handleMessage: " << ex.displayText());
+                    {
+                        if (!isSensitive())
+                            LOG_ERR("Error during handleMessage: " << ex.displayText());
+                    }
                 }
                 catch (const std::exception& exception)
                 {
-                    LOG_ERR("Error during handleMessage: " << exception.what());
+                    {
+                        if (!isSensitive())
+                            LOG_ERR("Error during handleMessage: " << exception.what());
+                    }
                 }
                 catch (...)
                 {
@@ -561,7 +580,10 @@ private:
             }
             catch (const std::exception& exception)
             {
-                LOG_ERR("Error during handleMessage: " << exception.what());
+                {
+                    if (!isSensitive())
+                        LOG_ERR("Error during handleMessage: " << exception.what());
+                }
             }
             catch (...)
             {
@@ -604,7 +626,10 @@ protected:
                 }
                 catch (const std::exception& ex)
                 {
-                    LOG_DBG("handleClientUpgrade exception caught: " << ex.what());
+                    {
+                        if (!isSensitive())
+                            LOG_DBG("handleClientUpgrade exception caught: " << ex.what());
+                    }
                 }
 
                 return;
@@ -877,7 +902,7 @@ protected:
                  << " bytes buffered");
 
 #if ENABLE_DEBUG
-        if ((flags & 0xf) == int(WSOpCode::Text)) // utf8 validate
+        if (!isSensitive() && (flags & 0xf) == int(WSOpCode::Text)) // utf8 validate
         {
             size_t offset = Util::isValidUtf8(reinterpret_cast<unsigned char const*>(data), len);
             if (offset < len)

@@ -128,6 +128,8 @@ http::Request StorageConnectionManager::createHttpRequest(const Poco::URI& uri,
                                                           const Authorization& auth)
 {
     http::Request httpRequest(uri.getPathAndQuery());
+    if (auth.isSensitive())
+        httpRequest.markSensitive();
 
     //FIXME: Hack Hack Hack! Use own version.
     Poco::Net::HTTPRequest request;

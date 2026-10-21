@@ -20,6 +20,7 @@
 #include <chrono>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace Poco
 {
@@ -56,6 +57,7 @@ private:
     std::chrono::steady_clock::time_point _tokenRefreshStartTime; ///< Only when refreshing.
     std::chrono::seconds _tokenRefreshTimeout; ///< Maximum time to wait for Token refresh.
     bool _noHeader;
+    bool _sensitive = false;
 
     Authorization()
         : Authorization(Type::None, std::string(), false)
@@ -78,6 +80,20 @@ public:
     /// Expects access_token (preferred) or access_header.
     static Authorization create(const Poco::URI& uri);
     static Authorization create(const std::string& uri);
+
+    void markSensitive() noexcept { _sensitive = true; }
+    bool isSensitive() const noexcept { return _sensitive; }
+    void swap(Authorization& other) noexcept
+    {
+        _data.swap(other._data);
+        std::swap(_type, other._type);
+        std::swap(_credentialType, other._credentialType);
+        std::swap(_expiryEpoch, other._expiryEpoch);
+        std::swap(_tokenRefreshStartTime, other._tokenRefreshStartTime);
+        std::swap(_tokenRefreshTimeout, other._tokenRefreshTimeout);
+        std::swap(_noHeader, other._noHeader);
+        std::swap(_sensitive, other._sensitive);
+    }
 
     void resetAccessToken(std::string accessToken, duration expiryEpoch)
     {
@@ -208,7 +224,8 @@ public:
     {
         const auto now = std::chrono::system_clock::now();
 
-        os << indent << "Authorization: " << (Anonymizer::enabled() ? "<redacted>" : _data);
+        os << indent
+           << "Authorization: " << (isSensitive() || Anonymizer::enabled() ? "<redacted>" : _data);
         os << indent << "\ttype: " << name(_type);
         os << indent << "\tcredentialType: " << name(_credentialType);
         os << indent << "\texpiryEpoch (TTL): " << _expiryEpoch

@@ -28,6 +28,7 @@
 #include <Poco/Util/LayeredConfiguration.h>
 
 #include <functional>
+#include <atomic>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -97,10 +98,125 @@ protected:
         LOK_ASSERT(_controlSession->asyncRequest(request, socketPoll()));
     }
 
-private:
+protected:
     std::shared_ptr<http::Session> _controlSession;
     std::shared_ptr<http::WebSocketSession> _agentRenderSocket;
     std::shared_ptr<http::WebSocketSession> _agentTransportSocket;
+};
+
+class UnitRenewedAgentSave final : public AgentSaveTestBase
+{
+    std::atomic<int> _phase{ 0 };
+    std::shared_ptr<ClientSession> _render;
+    const Poco::Int64 _expiry =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            (std::chrono::system_clock::now() + std::chrono::hours(1)).time_since_epoch())
+            .count();
+    static constexpr std::string_view Candidate = "agent-save-token-renewed";
+
+public:
+    UnitRenewedAgentSave()
+        : AgentSaveTestBase("UnitRenewedAgentSave")
+    {
+#if ENABLE_DEBUG
+        setHasKitHooks("unit-agent-control-kit.so");
+#endif
+        setTimeout(std::chrono::seconds(90));
+    }
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+    void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
+                             Poco::JSON::Object::Ptr& info) override
+    {
+        info->set("EnableWebsocketURP", true);
+        const bool renewed = request.getURI().find(Candidate) != std::string::npos;
+        Poco::JSON::Object::Ptr proof = new Poco::JSON::Object();
+        proof->set("Purpose", "AGENT");
+        proof->set("UserCanWrite", true);
+        proof->set("OwnerId", "save-owner");
+        proof->set("SessionId", "save-session");
+        proof->set("AuthorityEpoch", 1);
+        proof->set("NativeEpoch", "save-epoch");
+        proof->set("RegistrationPhase", renewed ? "ACKNOWLEDGED" : "REGISTERING");
+        proof->set("AccessTokenExpiry", _expiry + (renewed ? 600000 : 0));
+        proof->set("SessionExpiry", _expiry + 3600000);
+        info->set("KreohAgentAuthority", proof);
+    }
+    void onDocBrokerViewLoaded(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        if (!session->isAgentRenderView())
+            return;
+        _render = session;
+        _phase.store(2);
+    }
+    void invokeWSDTest() override
+    {
+        if (_phase.load() == 0)
+        {
+            _phase.store(1);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) +
+                          "&access_token_ttl=" + std::to_string(_expiry) + "&agentview=1");
+            _agentRenderSocket = getWs()->getWebSocket();
+            WSD_CMD("load url=" + getWopiSrc());
+        }
+        else if (_phase.load() == 2)
+        {
+            _phase.store(3);
+            initWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken) +
+                          "&access_token_ttl=" + std::to_string(_expiry));
+            _agentTransportSocket = getWs()->getWebSocket();
+            helpers::sendTextFrame(_agentTransportSocket,
+                                   "agentregister epoch=save-epoch viewid=" +
+                                       std::to_string(_render->getKitViewId()),
+                                   getTestname());
+            LOK_ASSERT(!helpers::getResponseString(_agentTransportSocket,
+                                                   "agentregistered:", getTestname())
+                            .empty());
+            const std::string identity =
+                "epoch=save-epoch requestid=1 viewid=" + std::to_string(_render->getKitViewId()) +
+                " renderid=" + _render->getId();
+            std::static_pointer_cast<WebSocketHandler>(_agentTransportSocket)
+                ->sendTextMessage("agentrenew " + identity +
+                                  " expires=" + std::to_string(_expiry + 600000) +
+                                  " credential=YWdlbnQtc2F2ZS10b2tlbi1yZW5ld2Vk");
+            LOK_ASSERT_EQUAL(
+                "agentrenewed: " + identity + " expires=" + std::to_string(_expiry + 600000),
+                helpers::getResponseString(_agentTransportSocket, "agentrenewed:", getTestname()));
+            helpers::sendTextFrame(_agentRenderSocket, "key type=input char=97 key=0",
+                                   getTestname());
+            helpers::sendTextFrame(_agentRenderSocket, "key type=up char=0 key=512", getTestname());
+            requestAgentSave(AgentToken, OperationId,
+                             [this](const std::shared_ptr<http::Session>& response)
+                             {
+                                 LOK_ASSERT_EQUAL(http::StatusCode::Unauthorized,
+                                                  response->response()->statusCode());
+                                 _phase.store(4);
+                             });
+        }
+        else if (_phase.load() == 4)
+        {
+            _phase.store(5);
+            requestAgentSave(Candidate, OperationId,
+                             [](const std::shared_ptr<http::Session>& response)
+                             {
+                                 LOK_ASSERT_EQUAL(http::StatusCode::Accepted,
+                                                  response->response()->statusCode());
+                             });
+        }
+    }
+    std::unique_ptr<http::Response>
+    assertPutFileRequest(const Poco::Net::HTTPRequest& request) override
+    {
+        LOK_ASSERT_EQUAL("Bearer " + std::string(Candidate), request.get("Authorization", ""));
+        LOK_ASSERT_EQUAL(std::string(OperationId), request.get("X-COOL-WOPI-ExtendedData", ""));
+        _phase.store(6);
+        passTest("Browser-independent paired renewal saves with the candidate and rejects the old "
+                 "bearer");
+        return nullptr;
+    }
 };
 
 class UnitAgentSave final : public AgentSaveTestBase
@@ -974,13 +1090,13 @@ public:
 
 UnitBase** unit_create_wsd_multi(void)
 {
-    return new UnitBase* [] { new UnitAgentSave(), new UnitClosedAgentCannotSave(),
-                             new UnitWaitDisconnectAgentCannotSave(),
-                             new UnitAgentExpiryDuringSave(),
-                             new UnitAgentCoreSaveFailure(),
-                             new UnitAgentUploadFailure(),
-                             new UnitOrdinarySaveTimeoutRecovery(),
-                             new UnitBrowserCannotAgentSave(), nullptr };
+    return new UnitBase* []
+    {
+        new UnitAgentSave(), new UnitRenewedAgentSave(), new UnitClosedAgentCannotSave(),
+            new UnitWaitDisconnectAgentCannotSave(), new UnitAgentExpiryDuringSave(),
+            new UnitAgentCoreSaveFailure(), new UnitAgentUploadFailure(),
+            new UnitOrdinarySaveTimeoutRecovery(), new UnitBrowserCannotAgentSave(), nullptr
+    };
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

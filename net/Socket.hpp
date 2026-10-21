@@ -590,6 +590,13 @@ protected:
     void logPrefix(std::ostream& os) const { os << getLogPrefix(); }
 
 public:
+    void markSensitive() noexcept { _sensitiveDiagnostics = true; }
+    bool isSensitive() const noexcept { return _sensitiveDiagnostics; }
+
+private:
+    bool _sensitiveDiagnostics = false;
+
+public:
     ProtocolHandlerInterface()
         : _fdSocket(-1)
         , _owner(ProcUtil::getThreadId())
@@ -1121,6 +1128,7 @@ class StreamSocket : public Socket,
                      public std::enable_shared_from_this<StreamSocket>
 {
 public:
+    bool isSensitive() const noexcept { return _socketHandler && _socketHandler->isSensitive(); }
     STATE_ENUM(ReadType, NormalRead, UseRecvmsgExpectFD);
 
     /// Create a StreamSocket from native FD.

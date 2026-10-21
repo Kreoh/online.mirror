@@ -17,6 +17,10 @@
 #include <wsd/COOLWSD.hpp>
 #include <map>
 #include <limits>
+#if defined(__linux__)
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 #include <sstream>
 #include <cstdlib>
 #include <atomic>
@@ -26,6 +30,11 @@
 #include <test/helpers.hpp>
 #include <test/lokassert.hpp>
 #include <wsd/ClientSession.hpp>
+#include <wsd/Process.hpp>
+#include <Poco/Channel.h>
+#include <Poco/Logger.h>
+#include <Poco/Message.h>
+#include <Poco/Version.h>
 
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Parser.h>
@@ -35,12 +44,55 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace
 {
 constexpr std::string_view AgentToken = "agent-control-token";
 constexpr std::string_view BrowserToken = "browser-token";
+// Capture the real consumer log records while retaining each original output channel.
+class SensitiveConsumerChannel final : public Poco::Channel
+{
+    Poco::AutoPtr<Poco::Channel> _original;
+    std::shared_ptr<std::atomic<bool>> _leaked;
+    std::shared_ptr<std::atomic<unsigned>> _observed;
+
+public:
+    SensitiveConsumerChannel(Poco::Channel* original, std::shared_ptr<std::atomic<bool>> leaked,
+                             std::shared_ptr<std::atomic<unsigned>> observed)
+        : _original(original, true)
+        , _leaked(std::move(leaked))
+        , _observed(std::move(observed))
+    {
+    }
+    void log(const Poco::Message& message) override
+    {
+        const auto& text = message.getText();
+        if (text.find("DocumentBroker.cpp") != std::string::npos ||
+            text.find("WopiStorage.cpp") != std::string::npos ||
+            text.find("CheckFileInfo.cpp") != std::string::npos ||
+            text.find("JsonUtil.hpp") != std::string::npos)
+        {
+            ++*_observed;
+            if (text.find("agent-control-token-renewed-private-marker") != std::string::npos)
+                _leaked->store(true);
+        }
+        if (_original)
+            _original->log(message);
+    }
+    Poco::Channel* original() const { return _original.get(); }
+    const auto& owner() const { return _leaked; }
+    static Poco::Channel* current(Poco::Logger& logger)
+    {
+#if POCO_VERSION >= 0x010C0501
+        return logger.getChannel().get();
+#else
+        return logger.getChannel();
+#endif
+    }
+};
+
 class UnitAgentControl final : public WopiTestServer
 {
     STATE_ENUM(Phase, LoadBrowser, WaitBrowserView, VerifyBrowserOrigin, WaitRenderView,
@@ -57,6 +109,25 @@ class UnitAgentControl final : public WopiTestServer
     bool _retirement = false;
     const int _proofMode;
     std::atomic<unsigned> _agentProofRequests{0}, _nextAgentProofRequests{0};
+    std::atomic<unsigned> _renewalCfiRequests{ 0 };
+    std::atomic<bool> _lateResponseSent{ false };
+    std::shared_ptr<StreamSocket> _heldRenewal;
+    std::shared_ptr<StreamSocket> _heldAuthorityRequest;
+    std::atomic<bool> _authorityRequestStarted{ false };
+    std::shared_ptr<ChildProcess> _replacedChild;
+    std::shared_ptr<std::atomic<bool>> _consumerLeak = std::make_shared<std::atomic<bool>>(false);
+    std::shared_ptr<std::atomic<unsigned>> _consumerObserved =
+        std::make_shared<std::atomic<unsigned>>(0);
+    std::atomic<bool> _overlapUploadCompleted{ false };
+    std::atomic<int> _consumerScenario{ 0 }, _consumerConflicts{ 0 };
+    std::atomic<bool> _consumerDownloadDone{ false };
+    std::string _consumerDownloadError;
+    std::map<std::string, int> _loggerLevels;
+    std::mutex _renewalMutex;
+    std::shared_ptr<ClientSession> _registrationTransport;
+    static constexpr std::string_view RenewedToken = "agent-control-token-renewed-private-marker";
+    static constexpr std::string_view SecondRenewedToken =
+        "agent-control-token-renewed-private-marker-second";
     const Poco::Int64 _proofExpiry = std::chrono::duration_cast<std::chrono::milliseconds>(
         (std::chrono::system_clock::now() + std::chrono::hours(1)).time_since_epoch()).count();
 
@@ -80,6 +151,339 @@ class UnitAgentControl final : public WopiTestServer
         proof->set("AccessTokenExpiry", _proofExpiry);
         proof->set("SessionExpiry", _proofExpiry + 3600000);
         return proof;
+    }
+
+    bool verifyRenewal()
+    {
+        const auto render = _renderView.lock();
+        const auto transport = _urpAgent.lock();
+        LOK_ASSERT(render && transport);
+        const std::string identity =
+            "epoch=epoch1 requestid=1 viewid=" + std::to_string(render->getKitViewId()) +
+            " renderid=" + render->getId();
+        const std::string request =
+            "agentrenew " + identity + " expires=" + std::to_string(_proofExpiry + 600000) +
+            " credential=YWdlbnQtY29udHJvbC10b2tlbi1yZW5ld2VkLXByaXZhdGUtbWFya2Vy";
+        const auto send = [&](const std::string& value)
+        { std::static_pointer_cast<WebSocketHandler>(_urpSocket)->sendTextMessage(value); };
+        // Rejections must not echo encoded credentials, nor start candidate validation.
+        for (const auto& invalid : { request + " extra=1", request + "\n", request + "=",
+                                     "agentrenew " + identity + " expires=01 credential=A" })
+        {
+            send(invalid);
+            LOK_ASSERT_EQUAL(std::string("error: cmd=agentrenew kind=invalid"),
+                             helpers::getResponseString(_urpSocket, "error:", getTestname()));
+        }
+        LOK_ASSERT_EQUAL(0U, _renewalCfiRequests.load());
+        if (_proofMode == 7)
+        {
+            initProofWebsocket("/wopi/files/0?access_token=" + std::string(AgentToken));
+            const auto replacement = getWs()->getWebSocket();
+            std::static_pointer_cast<WebSocketHandler>(replacement)->sendTextMessage(request);
+            LOK_ASSERT_EQUAL(std::string("error: cmd=agentrenew kind=invalid"),
+                             helpers::getResponseString(replacement, "error:", getTestname()));
+            replacement->asyncShutdown();
+        }
+        send(request);
+        send(request);
+        if (_proofMode == 18 || _proofMode == 19)
+        {
+            if (_proofMode == 18)
+                LOK_ASSERT(!helpers::getResponseString(_urpSocket, "agentretired:", getTestname())
+                                .empty());
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (!_lateResponseSent && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            LOK_ASSERT(_lateResponseSent.load());
+            LOK_ASSERT(helpers::getResponseString(_urpSocket, "agentrenewed:", getTestname(),
+                                                  std::chrono::milliseconds(200))
+                           .empty());
+            LOK_ASSERT(!transport->getAuthorization().matchesToken(RenewedToken));
+            TRANSITION_STATE(_phase, Phase::Done);
+            passTest("Retirement or render removal prevents late candidate installation");
+            return false;
+        }
+        if (_proofMode == 21 || _proofMode == 22)
+        {
+            LOK_ASSERT(helpers::getResponseString(_urpSocket, "agentrenewfailed:", getTestname())
+                           .find("kind=busy") != std::string::npos);
+            LOK_ASSERT(!transport->getAuthorization().matchesToken(RenewedToken));
+            LOK_ASSERT(!render->getAuthorization().matchesToken(RenewedToken));
+            send("agentretire epoch=epoch1 requestid=old-authority viewid=" +
+                 std::to_string(render->getKitViewId()) + " renderid=" + render->getId());
+            LOK_ASSERT(
+                !helpers::getResponseString(_urpSocket, "agentretired:", getTestname()).empty());
+            socketPoll()->addCallback(
+                [this]
+                {
+                    std::shared_ptr<StreamSocket> held;
+                    {
+                        std::lock_guard<std::mutex> lock(_renewalMutex);
+                        held = std::move(_heldAuthorityRequest);
+                    }
+                    LOK_ASSERT(held);
+                    http::Response response(http::StatusCode::Unauthorized);
+                    held->sendAndShutdown(response);
+                    _lateResponseSent = true;
+                });
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (!_lateResponseSent && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            LOK_ASSERT(_lateResponseSent.load());
+            LOK_ASSERT(helpers::getResponseString(_urpSocket, "agentrenewed:", getTestname(),
+                                                  std::chrono::milliseconds(200))
+                           .empty());
+            LOK_ASSERT(!render->getAuthorization().matchesToken(RenewedToken));
+            LOK_ASSERT(!transport->getAuthorization().matchesToken(RenewedToken));
+            TRANSITION_STATE(_phase, Phase::Done);
+            passTest(
+                "Old-authority callback blocks installation and cannot renew after retirement");
+            return false;
+        }
+        if (_proofMode != 7 && _proofMode != 26)
+        {
+            const auto failure = helpers::getResponseString(
+                _urpSocket, "agentrenewfailed:", getTestname(), std::chrono::seconds(15));
+            LOK_ASSERT(!failure.empty());
+            if (_proofMode == 23)
+                LOK_ASSERT(failure.find("kind=unavailable") != std::string::npos);
+            if (_proofMode == 24)
+                LOK_ASSERT(failure.find("kind=busy") != std::string::npos);
+            if (_proofMode == 25)
+                LOK_ASSERT(failure.find("kind=unavailable") != std::string::npos);
+            LOK_ASSERT(failure.find(RenewedToken) == std::string::npos);
+            send("urp forbidden-after-failed-renewal");
+            LOK_ASSERT(!helpers::getResponseString(_urpSocket, "error:", getTestname()).empty());
+            if (_proofMode == 23)
+            {
+                auto restored = std::make_shared<std::atomic<bool>>(false);
+                render->getDocumentBroker()->addCallback(
+                    [this, render, restored]
+                    {
+#if ENABLE_DEBUG
+                        LOK_ASSERT(
+                            render->getDocumentBroker()->swapAgentChildForTesting(_replacedChild));
+#endif
+                        restored->store(true);
+                    });
+                const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                while (!restored->load() && std::chrono::steady_clock::now() < until)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                LOK_ASSERT(restored->load());
+            }
+            if (_proofMode == 24)
+            {
+                socketPoll()->addCallback(
+                    [this]
+                    {
+                        std::shared_ptr<StreamSocket> held;
+                        {
+                            std::lock_guard<std::mutex> lock(_renewalMutex);
+                            held = std::move(_heldAuthorityRequest);
+                        }
+                        LOK_ASSERT(held);
+                        http::Response response(http::StatusCode::OK);
+                        response.setBody("{\"LastModifiedTime\":\"2026-01-01T00:00:00.000000Z\"}");
+                        held->sendAndShutdown(response);
+                    });
+            }
+            if (_proofMode == 24)
+            {
+                const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                while (!_overlapUploadCompleted && std::chrono::steady_clock::now() < until)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                LOK_ASSERT(_overlapUploadCompleted.load());
+                LOK_ASSERT(!transport->getAuthorization().matchesToken(RenewedToken));
+            }
+            if (_proofMode == 25)
+            {
+                LOK_ASSERT(render->getAuthorization().isExpired());
+                LOK_ASSERT(transport->getAuthorization().isExpired());
+            }
+            else
+            {
+                LOK_ASSERT(render->getAuthorization().matchesToken(AgentToken));
+                LOK_ASSERT(transport->getAuthorization().matchesToken(AgentToken));
+            }
+            TRANSITION_STATE(_phase, Phase::Done);
+            passTest("Rejected renewal retains both authorities and fences agent dispatch");
+            return false;
+        }
+        const std::string expected =
+            "agentrenewed: " + identity + " expires=" + std::to_string(_proofExpiry + 600000);
+        LOK_ASSERT_EQUAL(expected,
+                         helpers::getResponseString(_urpSocket, "agentrenewed:", getTestname()));
+        // Model lost acknowledgement: discard it, then resend the identical persisted candidate.
+        send(request);
+        LOK_ASSERT_EQUAL(expected,
+                         helpers::getResponseString(_urpSocket, "agentrenewed:", getTestname()));
+        LOK_ASSERT_EQUAL(1U, _renewalCfiRequests.load());
+        LOK_ASSERT(render->getAuthorization().matchesToken(RenewedToken));
+        LOK_ASSERT(transport->getAuthorization().matchesToken(RenewedToken));
+        for (const auto& session : { render, transport })
+        {
+            unsigned tokens = 0;
+            for (const auto& parameter : session->getPublicUri().getQueryParameters())
+                if (parameter.first == "access_token")
+                {
+                    ++tokens;
+                    LOK_ASSERT_EQUAL(std::string(RenewedToken), parameter.second);
+                }
+            LOK_ASSERT_EQUAL(1U, tokens);
+            std::ostringstream state;
+            session->getAuthorization().dumpState(state);
+            LOK_ASSERT(state.str().find(RenewedToken) == std::string::npos);
+        }
+        std::string conflict = request;
+        conflict.replace(conflict.find("expires=") + 8,
+                         std::to_string(_proofExpiry + 600000).size(),
+                         std::to_string(_proofExpiry + 600001));
+        send(conflict);
+        LOK_ASSERT(helpers::getResponseString(_urpSocket, "agentrenewfailed:", getTestname())
+                       .find("kind=conflict") != std::string::npos);
+        const std::string secondIdentity =
+            "epoch=epoch1 requestid=2 viewid=" + std::to_string(render->getKitViewId()) +
+            " renderid=" + render->getId();
+        send("agentrenew " + secondIdentity + " expires=" + std::to_string(_proofExpiry + 1200000) +
+             " credential=YWdlbnQtY29udHJvbC10b2tlbi1yZW5ld2VkLXByaXZhdGUtbWFya2VyLXNlY29uZA");
+        const std::string secondReceipt = "agentrenewed: " + secondIdentity +
+                                          " expires=" + std::to_string(_proofExpiry + 1200000);
+        // Drain the duplicate first receipt if it arrived after our lost-ack retry.
+        auto receipt = helpers::getResponseString(_urpSocket, "agentrenewed:", getTestname());
+        if (receipt == expected)
+            receipt = helpers::getResponseString(_urpSocket, "agentrenewed:", getTestname());
+        LOK_ASSERT_EQUAL(secondReceipt, receipt);
+        LOK_ASSERT(render->getAuthorization().matchesToken(SecondRenewedToken));
+        LOK_ASSERT(transport->getAuthorization().matchesToken(SecondRenewedToken));
+        send(request);
+        LOK_ASSERT(helpers::getResponseString(_urpSocket, "agentrenewfailed:", getTestname())
+                       .find("kind=conflict") != std::string::npos);
+        LOK_ASSERT_EQUAL(2U, _renewalCfiRequests.load());
+        send("resetaccesstoken forbidden");
+        LOK_ASSERT(helpers::getResponseString(_urpSocket, "error:", getTestname())
+                       .find("agentrenewalrequired") != std::string::npos);
+        if (_proofMode == 26)
+        {
+            std::vector<std::string> names;
+            Poco::Logger::names(names);
+            for (const auto& name : names)
+            {
+                auto& logger = Poco::Logger::get(name);
+                _loggerLevels.emplace(name, logger.getLevel());
+                logger.setChannel(new SensitiveConsumerChannel(
+                    SensitiveConsumerChannel::current(logger), _consumerLeak, _consumerObserved));
+                logger.setLevel(Poco::Message::PRIO_TRACE);
+            }
+        }
+        if (_proofMode == 26)
+        {
+            LOK_ASSERT(!_loggerLevels.empty());
+            const auto broker = render->getDocumentBroker();
+            for (int scenario = 1; scenario <= 2; ++scenario)
+            {
+                _consumerScenario = scenario;
+                broker->addCallback(
+                    [broker, render]
+                    {
+#if ENABLE_DEBUG
+                        LOK_ASSERT_EQUAL(std::string("started"),
+                                         broker->exerciseAgentResponseForTesting(render, false));
+#endif
+                    });
+                const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                while (_consumerConflicts < scenario && std::chrono::steady_clock::now() < until)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                LOK_ASSERT(_consumerConflicts >= scenario);
+            }
+            _consumerScenario = 3;
+            broker->addCallback(
+                [this, broker, render]
+                {
+#if ENABLE_DEBUG
+                    _consumerDownloadError = broker->exerciseAgentResponseForTesting(render, true);
+#endif
+                    _consumerDownloadDone = true;
+                });
+            const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (!_consumerDownloadDone && std::chrono::steady_clock::now() < until)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            LOK_ASSERT(_consumerDownloadDone.load());
+            LOK_ASSERT_EQUAL(std::string("Sensitive WOPI download failed"), _consumerDownloadError);
+            LOK_ASSERT(_consumerObserved->load() > 0);
+            LOK_ASSERT(!_consumerLeak->load());
+            TRANSITION_STATE(_phase, Phase::Done);
+            passTest("Sensitive reflected responses remain absent from real consumer logs and "
+                     "client errors");
+            return false;
+        }
+        return true;
+    }
+
+    void verifySensitiveDiagnostics()
+    {
+        const std::string marker(RenewedToken);
+        http::Request request("/private?access_token=" + marker);
+        request.markSensitive();
+        request.set("Authorization", "Bearer " + marker);
+        std::ostringstream output;
+        request.dumpState(output);
+        output << request.header() << request.header().toString() << request.diagnosticUrl();
+        LOK_ASSERT(output.str().find(marker) == std::string::npos);
+        http::RequestParser requestParser(request);
+        std::ostringstream parsedRequest;
+        requestParser.dumpState(parsedRequest);
+        LOK_ASSERT(parsedRequest.str().find(marker) == std::string::npos);
+        // Real parser paths include interim status, headers, malformed JSON body and dumps.
+        http::Response response;
+        response.markSensitive();
+        const std::string interim = "HTTP/1.1 100 Continue\r\nX-Private: " + marker + "\r\n\r\n";
+        LOK_ASSERT(response.readData(interim.data(), interim.size()) > 0);
+        LOK_ASSERT(response.isSensitive());
+        const std::string wire = "HTTP/1.1 403 " + marker + "\r\nX-Private: " + marker +
+                                 "\r\nContent-Length: " + std::to_string(marker.size()) +
+                                 "\r\n\r\n" + marker;
+        LOK_ASSERT(response.readData(wire.data(), wire.size()) > 0);
+        std::ostringstream responseState;
+        response.dumpState(responseState);
+        responseState << response.header();
+        LOK_ASSERT(responseState.str().find(marker) == std::string::npos);
+        LOK_ASSERT_EQUAL(marker, response.getBody());
+        http::Header invalidHeader;
+        invalidHeader.markSensitive();
+        LOK_ASSERT(!invalidHeader.set("Authorization", marker + "\n"));
+#if defined(__linux__)
+        int descriptors[2];
+        LOK_ASSERT_EQUAL(0, ::socketpair(AF_UNIX, SOCK_STREAM, 0, descriptors));
+        auto protocol = std::make_shared<WebSocketHandler>(false, false);
+        protocol->markSensitive();
+        auto socket =
+            StreamSocket::create<StreamSocket>("sensitive-test", descriptors[0], Socket::Type::Unix,
+                                               false, HostType::LocalHost, protocol);
+        socket->getInBuffer().append(marker);
+        socket->getOutBuffer().append(marker);
+        std::ostringstream socketState;
+        socket->dumpState(socketState);
+        LOK_ASSERT(socketState.str().find(marker) == std::string::npos);
+        socket->getInBuffer().clear();
+        socket->getOutBuffer().clear();
+        socket.reset();
+        ::close(descriptors[1]);
+#endif
+#if ENABLE_DEBUG
+        const auto source = DocumentBroker::agentAuthoritySourceForTesting(Poco::URI(
+            "https://office.invalid/wopi/1?z=2&access_token=old&access_token=duplicate&"
+            "%61ccess_token=encoded&access_header=secret&access_token_ttl=1&agentview=1&a=1"));
+        LOK_ASSERT(source);
+        LOK_ASSERT_EQUAL(std::string("https://office.invalid/wopi/1?a=1&z=2"), source->toString());
+        LOK_ASSERT(source == DocumentBroker::agentAuthoritySourceForTesting(
+                                 Poco::URI("https://office.invalid/wopi/1?a=1&agentviewid=4&z=2")));
+        LOK_ASSERT(!DocumentBroker::agentAuthoritySourceForTesting(
+            Poco::URI("https://user:secret@office.invalid/wopi/1")));
+        LOK_ASSERT(!DocumentBroker::agentAuthoritySourceForTesting(
+            Poco::URI("https://office.invalid/wopi/1#fragment")));
+        LOK_ASSERT(source != DocumentBroker::agentAuthoritySourceForTesting(
+                                 Poco::URI("https://office.invalid/wopi/other?a=1&z=2")));
+#endif
     }
 
     void verifyProofParser()
@@ -328,15 +732,228 @@ public:
         setTimeout(std::chrono::seconds(90));
     }
 
+    ~UnitAgentControl() override
+    {
+        if (_proofMode == 26)
+        {
+            std::vector<std::string> names;
+            Poco::Logger::names(names);
+            for (const auto& name : names)
+            {
+                auto& logger = Poco::Logger::get(name);
+                if (auto* channel = dynamic_cast<SensitiveConsumerChannel*>(
+                        SensitiveConsumerChannel::current(logger));
+                    channel && channel->owner() == _consumerLeak)
+                {
+                    Poco::AutoPtr<Poco::Channel> original(channel->original(), true);
+                    logger.setChannel(original);
+                    if (const auto level = _loggerLevels.find(name); level != _loggerLevels.end())
+                        logger.setLevel(level->second);
+                }
+            }
+        }
+    }
+
+    void onDocumentUploaded(bool success) override
+    {
+        if (_proofMode == 24)
+        {
+            LOK_ASSERT(success);
+            _overlapUploadCompleted = true;
+        }
+    }
+
+    bool onFilterSendWebSocketMessage(std::string_view data, WSOpCode, bool, int&) override
+    {
+        if (_proofMode == 26 && _consumerScenario != 0 &&
+            data.find("documentconflict") != std::string_view::npos)
+        {
+            LOK_ASSERT(data.find(RenewedToken) == std::string_view::npos);
+            // A conflict is broadcast to more than one session; identify the completed response.
+            if (data.find("invalid modification timestamp") != std::string_view::npos)
+                _consumerConflicts.store(1);
+            else if (data.find("sensitive response") != std::string_view::npos)
+                _consumerConflicts.store(2);
+        }
+        return false;
+    }
+
     void configure(Poco::Util::LayeredConfiguration& config) override
     {
         config.setBool("security.enable_websocket_urp", true);
         verifyProofParser();
+        verifySensitiveDiagnostics();
+    }
+
+    bool handleHttpRequest(const Poco::Net::HTTPRequest& request, std::istream& body,
+                           const std::shared_ptr<StreamSocket>& socket) override
+    {
+        if (_proofMode == 26 && _consumerScenario != 0)
+        {
+            if (_consumerScenario == 3)
+            {
+                http::Response response(http::StatusCode::Forbidden);
+                response.setBody(std::string(RenewedToken));
+                socket->sendAndShutdown(response);
+            }
+            else
+            {
+                Poco::JSON::Object info;
+                info.set("BaseFileName", "empty.odt");
+                info.set("LastModifiedTime", _consumerScenario == 1
+                                                 ? std::string(RenewedToken)
+                                                 : "2026-01-01T00:00:00.000000Z");
+                info.set("SHA256", std::string(RenewedToken));
+                info.set("Size", 1);
+                std::ostringstream payload;
+                info.stringify(payload);
+                http::Response response(http::StatusCode::OK);
+                response.setBody(payload.str());
+                socket->sendAndShutdown(response);
+            }
+            return true;
+        }
+        if ((_proofMode == 21 || _proofMode == 22 || _proofMode == 24) &&
+            _authorityRequestStarted &&
+            (request.getURI().find(AgentToken) != std::string::npos ||
+             (_proofMode == 24 && request.getURI().find(BrowserToken) != std::string::npos)) &&
+            request.getURI().find(RenewedToken) == std::string::npos)
+        {
+            std::shared_ptr<StreamSocket> candidate;
+            {
+                std::lock_guard<std::mutex> lock(_renewalMutex);
+                _heldAuthorityRequest = socket;
+                candidate = std::move(_heldRenewal);
+            }
+            LOK_ASSERT(candidate);
+            Poco::JSON::Object info;
+            info.set("BaseFileName", "empty.odt");
+            info.set("UserCanWrite", true);
+            info.set("EnableWebsocketURP", true);
+            auto proof = authorityProof("epoch1");
+            proof->set("AccessTokenExpiry", _proofExpiry + 600000);
+            proof->set("RegistrationPhase", "ACKNOWLEDGED");
+            info.set("KreohAgentAuthority", proof);
+            std::ostringstream responseBody;
+            info.stringify(responseBody);
+            http::Response response(http::StatusCode::OK);
+            response.setBody(responseBody.str());
+            candidate->sendAndShutdown(response);
+            return true;
+        }
+        if (_proofMode >= 18 && _proofMode != 26 &&
+            request.getURI().find(RenewedToken) != std::string::npos)
+        {
+            ++_renewalCfiRequests;
+            const auto render = _renderView.lock();
+            const auto broker = render->getDocumentBroker();
+            if (_proofMode == 21 || _proofMode == 22 || _proofMode == 24)
+            {
+                {
+                    std::lock_guard<std::mutex> lock(_renewalMutex);
+                    _heldRenewal = socket;
+                }
+                _authorityRequestStarted = true;
+                broker->addCallback(
+                    [this, broker, render]
+                    {
+#if ENABLE_DEBUG
+                        if (_proofMode == 24)
+                            LOK_ASSERT(broker->startAgentUploadForTesting(_browser.lock()));
+                        else
+                            LOK_ASSERT(broker->startAgentAuthorityRequestForTesting(
+                                render, _proofMode == 22));
+                        LOK_ASSERT(broker->agentRenewalBusy());
+#endif
+                    });
+                return true;
+            }
+            broker->addCallback(
+                [this, broker, render, socket]
+                {
+                    LOK_ASSERT(broker->agentRenewalBlocks(_registrationTransport));
+                    LOK_ASSERT(!broker->forwardToChild(_registrationTransport, "urp fenced", true));
+                    LOK_ASSERT(!broker->manualSave(render, true, false, "", false));
+                    if (_proofMode == 18)
+                    {
+                        LOK_ASSERT(broker->handleAgentControl(
+                            _registrationTransport,
+                            "agentretire epoch=epoch1 requestid=renewal-retire viewid=" +
+                                std::to_string(render->getKitViewId()) +
+                                " renderid=" + render->getId()));
+                    }
+                    else if (_proofMode == 19)
+                        broker->removeSession(render);
+                    else if (_proofMode == 23)
+                    {
+#if ENABLE_DEBUG
+                        LOK_ASSERT(broker->swapAgentChildForTesting(_replacedChild));
+#endif
+                    }
+                    else if (_proofMode == 25)
+                    {
+#if ENABLE_DEBUG
+                        LOK_ASSERT(broker->expireCurrentAgentAuthorityForTesting());
+#endif
+                    }
+                    else
+                        LOK_ASSERT(broker->manualSave(_browser.lock(), true, false, "", false));
+                    socketPoll()->addCallback(
+                        [this, socket]
+                        {
+                            Poco::JSON::Object info;
+                            info.set("BaseFileName", "empty.odt");
+                            info.set("UserCanWrite", true);
+                            info.set("EnableWebsocketURP", true);
+                            auto proof = authorityProof("epoch1");
+                            proof->set("AccessTokenExpiry", _proofExpiry + 600000);
+                            proof->set("RegistrationPhase", "ACKNOWLEDGED");
+                            info.set("KreohAgentAuthority", proof);
+                            std::ostringstream body;
+                            info.stringify(body);
+                            http::Response response(http::StatusCode::OK);
+                            response.setBody(body.str());
+                            socket->sendAndShutdown(response);
+                            _lateResponseSent = true;
+                        });
+                });
+            return true;
+        }
+        if ((_proofMode == 12 || _proofMode == 13) &&
+            request.getURI().find(RenewedToken) != std::string::npos)
+        {
+            ++_renewalCfiRequests;
+            if (_proofMode == 12)
+            {
+                http::Response response(http::StatusCode::Found);
+                response.set("Location", "/must-not-follow-renewal");
+                socket->sendAndShutdown(response);
+            }
+            else
+            {
+                std::lock_guard<std::mutex> lock(_renewalMutex);
+                _heldRenewal = socket;
+            }
+            return true;
+        }
+        LOK_ASSERT(request.getURI().find("must-not-follow-renewal") == std::string::npos);
+        return WopiTestServer::handleHttpRequest(request, body, socket);
+    }
+
+    std::unique_ptr<http::Response>
+    assertPutFileRequest(const Poco::Net::HTTPRequest& request) override
+    {
+        if (_proofMode == 7 && !_nextEpoch)
+            LOK_ASSERT_EQUAL("Bearer " + std::string(SecondRenewedToken),
+                             request.get("Authorization", ""));
+        return nullptr;
     }
 
     void configCheckFileInfo(const Poco::Net::HTTPRequest& request,
                              Poco::JSON::Object::Ptr& fileInfo) override
     {
+        if (_proofMode == 22)
+            fileInfo->set("SupportsLocks", true);
         if (request.getURI().find(AgentToken) != std::string::npos)
         {
             fileInfo->set("EnableWebsocketURP", true);
@@ -355,16 +972,81 @@ public:
                                               ? "owner" : "other-owner");
                 if (_proofMode == 6)
                     proof->set("RegistrationPhase", "ACKNOWLEDGED");
+                if (request.getURI().find(RenewedToken) != std::string::npos)
+                {
+                    ++_renewalCfiRequests;
+                    proof->set("AccessTokenExpiry",
+                               _proofExpiry +
+                                   (request.getURI().find(SecondRenewedToken) != std::string::npos
+                                        ? 1200000
+                                        : 600000));
+                    proof->set("RegistrationPhase", "ACKNOWLEDGED");
+                    if (_proofMode == 8)
+                        proof->set("RegistrationPhase", "REGISTERING");
+                    if (_proofMode == 9)
+                        proof->set("OwnerId", "different-owner");
+                    if (_proofMode == 10)
+                        return;
+                    if (_proofMode == 11)
+                        proof->set("AccessTokenExpiry", _proofExpiry + 600001);
+                    if (_proofMode == 14)
+                        proof->set("UserCanWrite", false);
+                }
                 fileInfo->set("KreohAgentAuthority", proof);
             }
         }
     }
 
 #if ENABLE_DEBUG
+    bool filterSessionInput(Session* session, const char* buffer, int length,
+                            std::unique_ptr<std::vector<char>>&) override
+    {
+        if (std::string_view(buffer, length).starts_with("agentregister "))
+            if (const auto client = dynamic_cast<ClientSession*>(session))
+                _registrationTransport =
+                    std::static_pointer_cast<ClientSession>(client->shared_from_this());
+        return false;
+    }
+
+    bool filterChildMessage(const std::vector<char>& payload) override
+    {
+        if (_proofMode == 20 &&
+            std::string_view(payload.data(), payload.size()).find(".uno:Save") !=
+                std::string_view::npos)
+            return true; // Keep the browser's save barrier unresolved during candidate validation.
+        if (_proofMode < 15 || _proofMode >= 18 ||
+            !std::string_view(payload.data(), payload.size()).starts_with("agentregisteredkit:"))
+            return false;
+        const auto render = _renderView.lock();
+        LOK_ASSERT(render && _registrationTransport);
+        const auto broker = render->getDocumentBroker();
+        if (_proofMode == 15)
+        {
+            // The proof was live when captured, then authority changed before Kit acknowledged.
+            Authorization expired(render->getAuthorization());
+            expired.setExpiryEpoch(std::chrono::milliseconds(1));
+            auto uri = std::make_shared<const Poco::URI>(render->getPublicUri());
+            render->installAgentAuthority(expired, uri);
+        }
+        else
+        {
+            broker->removeSession(_proofMode == 16 ? render : _registrationTransport);
+            const std::string request =
+                "agentrenew epoch=epoch1 requestid=1 viewid=" +
+                std::to_string(render->getKitViewId()) + " renderid=" + render->getId() +
+                " expires=" + std::to_string(_proofExpiry + 600000) + " credential=YWdlbnQ";
+            LOK_ASSERT(!broker->handleAgentRenewal(_registrationTransport, request));
+            TRANSITION_STATE(_phase, Phase::Done);
+            passTest("Removal before registration acknowledgement cannot grant renewal");
+        }
+        return false;
+    }
+
     void agentRetirementRegistered(DocumentBroker* broker, const std::string& epoch,
                                    int, const std::string&) override
     {
-        LOK_ASSERT_EQUAL(_proofMode == 1 || _proofMode == 6,
+        LOK_ASSERT_EQUAL(_proofMode == 1 ||
+                             (_proofMode >= 6 && (_proofMode < 15 || _proofMode >= 18)),
                          broker->hasAgentAuthorityBaselineForTesting(epoch));
     }
 #endif
@@ -523,7 +1205,8 @@ public:
             {
                 const auto capabilities =
                     helpers::getResponseString(_urpSocket, "agentcapabilities:", getTestname());
-                LOK_ASSERT_EQUAL(std::string("agentcapabilities:retirement=1"), capabilities);
+                LOK_ASSERT(capabilities.find("retirement=1") != std::string::npos);
+                LOK_ASSERT(capabilities.find("renewal=1") != std::string::npos);
                 const auto registered =
                     helpers::getResponseString(_urpSocket, "agentregistered:", getTestname());
                 const auto render = _renderView.lock();
@@ -538,6 +1221,16 @@ public:
             LOK_ASSERT_MESSAGE(
                 "The pending Core greeting must reach the direct transport after binding",
                 !greeting.empty());
+            if (_proofMode == 15)
+            {
+                TRANSITION_STATE(_phase, Phase::Done);
+                passTest(
+                    "Authority changed before Kit acknowledgement removes the renewal baseline");
+                return;
+            }
+            if (_proofMode >= 7 && (_proofMode < 15 || _proofMode >= 18) && !_nextEpoch &&
+                !verifyRenewal())
+                return;
             if (_retirement)
             {
                 if (_nextEpoch)
@@ -1392,20 +2085,33 @@ UnitBase** unit_create_wsd_multi(void)
         external && std::string_view(external) == "1")
         return new UnitBase*[] { new UnitAgentQueueExternal(), nullptr };
 #endif
-    return new UnitBase* [] { new UnitAgentControl(), new UnitAgentControl(true),
+    return new UnitBase* []
+    {
+        new UnitAgentControl(), new UnitAgentControl(true),
 #if ENABLE_DEBUG
-        new UnitAgentControl(true, 1), new UnitAgentControl(true, 2),
-        new UnitAgentControl(true, 3), new UnitAgentControl(true, 4),
-        new UnitAgentControl(true, 5), new UnitAgentControl(true, 6),
-        new UnitAgentRetirementProbe(1), new UnitAgentRetirementProbe(2),
-        new UnitAgentRetirementProbe(3), new UnitAgentRetirementProbe(4),
-        new UnitAgentRetirementProbe(5), new UnitAgentRetirementProbe(6),
-        new UnitAgentRetirementProbe(7), new UnitAgentRetirementProbe(8),
-        new UnitAgentRetirementProbe(9), new UnitAgentRetirementProbe(10),
-        new UnitAgentRetirementProbe(11), new UnitAgentRetirementProbe(13),
-        new UnitAgentRetirementProbe(14),
+            new UnitAgentControl(true, 1), new UnitAgentControl(true, 2),
+            new UnitAgentControl(true, 3), new UnitAgentControl(true, 4),
+            new UnitAgentControl(true, 5), new UnitAgentControl(true, 6),
+            new UnitAgentControl(true, 7), new UnitAgentControl(true, 8),
+            new UnitAgentControl(true, 9), new UnitAgentControl(true, 10),
+            new UnitAgentControl(true, 11), new UnitAgentControl(true, 12),
+            new UnitAgentControl(true, 13), new UnitAgentControl(true, 14),
+            new UnitAgentControl(true, 15), new UnitAgentControl(true, 16),
+            new UnitAgentControl(true, 17), new UnitAgentControl(true, 18),
+            new UnitAgentControl(true, 19), new UnitAgentControl(true, 20),
+            new UnitAgentControl(true, 21), new UnitAgentControl(true, 22),
+            new UnitAgentControl(true, 23), new UnitAgentControl(true, 24),
+            new UnitAgentControl(true, 25), new UnitAgentControl(true, 26),
+            new UnitAgentRetirementProbe(1), new UnitAgentRetirementProbe(2),
+            new UnitAgentRetirementProbe(3), new UnitAgentRetirementProbe(4),
+            new UnitAgentRetirementProbe(5), new UnitAgentRetirementProbe(6),
+            new UnitAgentRetirementProbe(7), new UnitAgentRetirementProbe(8),
+            new UnitAgentRetirementProbe(9), new UnitAgentRetirementProbe(10),
+            new UnitAgentRetirementProbe(11), new UnitAgentRetirementProbe(13),
+            new UnitAgentRetirementProbe(14),
 #endif
-        nullptr };
+            nullptr
+    };
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

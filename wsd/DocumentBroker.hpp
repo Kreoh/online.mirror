@@ -42,6 +42,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -698,6 +699,14 @@ public:
     void handleAgentRecoveryRequest(const std::shared_ptr<StreamSocket>& socket,
                                     std::string_view bearerToken, const std::string& epoch,
                                     const std::string& requestId);
+    bool handleAgentRenewal(const std::shared_ptr<ClientSession>& session,
+                            const std::string& message);
+    bool isRegisteredAgent(const std::shared_ptr<ClientSession>& session) const;
+    bool agentRenewalBlocks(const std::shared_ptr<ClientSession>& session) const;
+    void finishAgentRenewal(const std::string& epoch, std::int64_t sequence,
+                            CheckFileInfo& response);
+    void expireAgentRenewal();
+    bool agentRenewalBusy() const;
     bool handleAgentControl(const std::shared_ptr<ClientSession>& session, const std::string& message);
     bool handleAgentRetirementKit(const std::string& message);
     void fenceAgentRetirement(const std::string& renderId);
@@ -705,6 +714,14 @@ public:
     /// Expires retained authority after successful registration in native unit tests only.
     bool expireAgentRegistrationForTesting(const std::string& epoch);
     bool hasAgentAuthorityBaselineForTesting(const std::string& epoch) const;
+    static std::optional<Poco::URI> agentAuthoritySourceForTesting(const Poco::URI& uri);
+    bool startAgentAuthorityRequestForTesting(const std::shared_ptr<ClientSession>& session,
+                                              bool lockRequest);
+    bool swapAgentChildForTesting(std::shared_ptr<ChildProcess>& replacement);
+    bool startAgentUploadForTesting(const std::shared_ptr<ClientSession>& session);
+    bool expireCurrentAgentAuthorityForTesting();
+    std::string exerciseAgentResponseForTesting(const std::shared_ptr<ClientSession>& session,
+                                                bool download);
 #endif
 
 
@@ -1614,7 +1631,7 @@ private:
         UploadRequest(std::string uriAnonym,
                       std::chrono::system_clock::time_point newFileModifiedLocalTime,
                       const std::shared_ptr<class ClientSession>& session, bool isSaveAs,
-                      bool isExport, bool isRename)
+                      bool isExport, bool isRename, bool sensitive)
             : _startTime(std::chrono::steady_clock::now())
             , _uriAnonym(std::move(uriAnonym))
             , _newFileModifiedLocalTime(newFileModifiedLocalTime)
@@ -1622,6 +1639,7 @@ private:
             , _isSaveAs(isSaveAs)
             , _isExport(isExport)
             , _isRename(isRename)
+            , _sensitive(sensitive)
             , _completed(false)
         {
         }
@@ -1638,6 +1656,7 @@ private:
         bool isSaveAs() const { return _isSaveAs; }
         bool isExport() const { return _isExport; }
         bool isRename() const { return _isRename; }
+        bool isSensitive() const { return _sensitive; }
 
         /// When the callback fires, we set this request as completed, so we destroy it.
         bool isComplete() const { return _completed; }
@@ -1651,6 +1670,7 @@ private:
         const bool _isSaveAs;
         const bool _isExport;
         const bool _isRename;
+        const bool _sensitive;
         bool _completed;
     };
 
@@ -2160,7 +2180,11 @@ private:
     struct AgentRetirementRecord
     {
         enum class Phase { Registering, Active, Retiring, Retired };
-        explicit AgentRetirementRecord(const Authorization& auth) : authority(auth) {}
+        explicit AgentRetirementRecord(const Authorization& auth)
+            : authority(auth)
+            , currentAuthority(auth)
+        {
+        }
 #if ENABLE_DEBUG
         Authorization authority; // Mutable only for deterministic unit-test expiry.
 #else
@@ -2168,14 +2192,33 @@ private:
 #endif
 
 #if !MOBILEAPP
+        struct Renewal
+        {
+            Renewal(const Authorization& previous, Authorization next)
+                : previousAuthority(previous)
+                , candidate(std::move(next))
+            {
+            }
+            Authorization previousAuthority;
+            Authorization candidate;
+            std::int64_t sequence = 0;
+            std::chrono::steady_clock::time_point deadline;
+            std::weak_ptr<ChildProcess> child;
+            std::shared_ptr<CheckFileInfo> request;
+        };
+        std::unique_ptr<Renewal> renewal;
+        std::int64_t renewalSequence = 0;
+        std::string renewalReceipt;
         struct AuthorityBaseline
         {
             WOPIFileInfo::AgentAuthorityProof proof;
             Poco::URI source;
             std::weak_ptr<ClientSession> render;
+            std::weak_ptr<ChildProcess> child;
         };
         std::optional<AuthorityBaseline> authorityBaseline;
 #endif
+        Authorization currentAuthority;
         std::string epoch;
         std::string requestId;
         std::string renderId;
@@ -2187,6 +2230,11 @@ private:
         std::weak_ptr<ClientSession> transport;
         std::weak_ptr<ClientSession> reply;
     };
+#if !MOBILEAPP
+    bool agentRenewalIdentity(const AgentRetirementRecord& record,
+                              const std::shared_ptr<ClientSession>& transport) const;
+    void failAgentRenewal(AgentRetirementRecord& record, std::string_view reason);
+#endif
     std::vector<std::unique_ptr<AgentRetirementRecord>> _agentRetirements;
     bool _retirementNegotiated = false;
     bool _awaitingNextAgentGreeting = false;

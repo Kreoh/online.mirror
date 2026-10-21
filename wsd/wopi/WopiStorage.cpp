@@ -33,6 +33,7 @@
 #include <wsd/RemoteDocumentBroker.hpp>
 
 #include <stdexcept>
+#include <Poco/JSON/Parser.h>
 
 #include <Poco/Exception.h>
 #include <Poco/File.h>
@@ -57,6 +58,26 @@
 
 namespace
 {
+
+void applyStorageAuthority(const Authorization& auth, Poco::URI& uri)
+{
+    if (auth.isSensitive())
+    {
+        auto parameters = uri.getQueryParameters();
+        std::erase_if(parameters,
+                      [](const auto& parameter)
+                      {
+                          return parameter.first == "access_token" ||
+                                 parameter.first == "access_token_ttl" ||
+                                 parameter.first == "access_header";
+                      });
+        uri.setQueryParameters(parameters);
+        if (auth.getExpiryEpoch().count() > 0)
+            uri.addQueryParameter("access_token_ttl",
+                                  std::to_string(auth.getExpiryEpoch().count()));
+    }
+    auth.authorizeURI(uri);
+}
 
 constexpr bool isTemplate(const std::string_view filename)
 {
@@ -500,6 +521,8 @@ StorageBase::LockUpdateResult
 classifyLockResponse(const std::shared_ptr<const http::Response>& httpResponse,
                      StorageBase::LockState lock, std::string failureReason)
 {
+    if (httpResponse->isSensitive())
+        failureReason = "Sensitive WOPI lock request failed";
     using Status = StorageBase::LockUpdateResult::Status;
 
     const http::StatusCode statusCode = httpResponse->statusLine().statusCode();
@@ -539,7 +562,7 @@ StorageBase::LockUpdateResult WopiStorage::updateLockState(const Authorization& 
         return LockUpdateResult(LockUpdateResult::Status::UNSUPPORTED, lock);
 
     Poco::URI uriObject(getUri());
-    auth.authorizeURI(uriObject);
+    applyStorageAuthority(auth, uriObject);
 
     const std::string uriAnonym = getAnonymizedUri();
 
@@ -562,8 +585,11 @@ StorageBase::LockUpdateResult WopiStorage::updateLockState(const Authorization& 
                    : httpSession->syncRequest(httpRequest);
         const std::string& responseString = httpResponse->getBody();
 
-        LOG_INF(wopiLog << " status: " << httpResponse->statusLine().statusCode()
-                        << ", response: " << responseString);
+        {
+            if (!httpResponse->isSensitive())
+                LOG_INF(wopiLog << " status: " << httpResponse->statusLine().statusCode()
+                                << ", response: " << responseString);
+        }
 
         if (httpResponse->statusLine().statusCode() == http::StatusCode::OK)
         {
@@ -573,18 +599,26 @@ StorageBase::LockUpdateResult WopiStorage::updateLockState(const Authorization& 
 
         failureReason = httpResponse->get("X-WOPI-LockFailureReason", "");
 
-        LOG_ERR("Un-successful " << wopiLog << " with HTTP status "
-                                 << httpResponse->statusLine().statusCode()
-                                 << ", response state " << httpResponse->state()
-                                 << ", failure reason: [" << failureReason << "] and response: ["
-                                 << responseString << ']');
+        {
+            if (!httpResponse->isSensitive())
+                LOG_ERR("Un-successful " << wopiLog << " with HTTP status "
+                                         << httpResponse->statusLine().statusCode()
+                                         << ", response state " << httpResponse->state()
+                                         << ", failure reason: [" << failureReason
+                                         << "] and response: [" << responseString << ']');
+        }
 
         return classifyLockResponse(httpResponse, lock, std::move(failureReason));
     }
     catch (const std::exception& exc)
     {
-        LOG_ERR("Cannot " << wopiLog << " uri [" << uriAnonym << "]. Error: " << exc.what());
-        failureReason = std::string("Internal error: ") + exc.what();
+        {
+            if (!auth.isSensitive())
+                LOG_ERR("Cannot " << wopiLog << " uri [" << uriAnonym
+                                  << "]. Error: " << exc.what());
+        }
+        failureReason =
+            auth.isSensitive() ? "Internal error" : std::string("Internal error: ") + exc.what();
     }
 
     return LockUpdateResult(LockUpdateResult::Status::FAILED, lock, std::move(failureReason));
@@ -597,7 +631,8 @@ void WopiStorage::updateLockStateAsync(const Authorization& auth, LockContext& l
 {
     auto profileZone = std::make_shared<ProfileZone>(
         std::string("WopiStorage::uploadLockStateAsync"),
-        std::map<std::string, std::string>{ { "url", getUri().toString() } });
+        std::map<std::string, std::string>{
+            { "url", auth.isSensitive() ? "<sensitive request>" : getUri().toString() } });
 
     // Always invoke the callback with the result of the async locking.
     ScopedInvokeAsyncRequestCallback<AsyncLockStateCallback, AsyncLockUpdate> scopedInvokeCallback(
@@ -622,7 +657,7 @@ void WopiStorage::updateLockStateAsync(const Authorization& auth, LockContext& l
     const auto startTime = std::chrono::steady_clock::now();
 
     Poco::URI uriObject(getUri());
-    auth.authorizeURI(uriObject);
+    applyStorageAuthority(auth, uriObject);
 
     const std::string uriAnonym = getAnonymizedUri();
 
@@ -653,8 +688,11 @@ void WopiStorage::updateLockStateAsync(const Authorization& auth, LockContext& l
         // Handle the response.
         const std::string& responseString = httpResponse->getBody();
 
-        LOG_INF(wopiLog << " status: " << httpResponse->statusLine().statusCode()
-                        << ", response: " << responseString);
+        {
+            if (!httpResponse->isSensitive())
+                LOG_INF(wopiLog << " status: " << httpResponse->statusLine().statusCode()
+                                << ", response: " << responseString);
+        }
 
         if (httpResponse->statusLine().statusCode() == http::StatusCode::OK)
         {
@@ -665,11 +703,14 @@ void WopiStorage::updateLockStateAsync(const Authorization& auth, LockContext& l
 
         std::string failureReason = httpResponse->get("X-WOPI-LockFailureReason", "");
 
-        LOG_ERR("Un-successful " << wopiLog << " with HTTP status "
-                                 << httpResponse->statusLine().statusCode()
-                                 << ", response state " << httpResponse->state()
-                                 << ", failure reason: [" << failureReason << "] and response: ["
-                                 << responseString << ']');
+        {
+            if (!httpResponse->isSensitive())
+                LOG_ERR("Un-successful " << wopiLog << " with HTTP status "
+                                         << httpResponse->statusLine().statusCode()
+                                         << ", response state " << httpResponse->state()
+                                         << ", failure reason: [" << failureReason
+                                         << "] and response: [" << responseString << ']');
+        }
 
         return asyncLockStateCallback(AsyncLockUpdate(
             AsyncLockUpdate::State::Error,
@@ -694,23 +735,34 @@ std::string WopiStorage::downloadStorageFileToLocal(const Authorization& auth,
                                                     const std::string& templateUri,
                                                     AdditionalFilePaths& /*additionalFileLocalPaths*/)
 {
-    ProfileZone profileZone("WopiStorage::downloadStorageFileToLocal", { { "url", _fileUrl } });
+    ProfileZone profileZone("WopiStorage::downloadStorageFileToLocal",
+                            { { "url", auth.isSensitive() ? "<sensitive request>" : _fileUrl } });
 
     if (!templateUri.empty())
     {
         // Download the template file and load it normally.
         // The document will get saved once loading in Core is complete.
-        const std::string templateUriAnonym = Anonymizer::anonymizeUrl(templateUri);
+        const std::string templateUriAnonym =
+            auth.isSensitive() ? "<sensitive request>" : Anonymizer::anonymizeUrl(templateUri);
         try
         {
             LOG_INF("WOPI::GetFile template source: " << templateUriAnonym);
             return downloadDocument(Poco::URI(templateUri), templateUriAnonym, auth,
                                     HTTP_REDIRECTION_LIMIT, false);
         }
+        catch (const StorageSpaceLowException&)
+        {
+            throw;
+        }
         catch (const std::exception& ex)
         {
-            LOG_ERR("Could not download template from [" << templateUriAnonym << "]. Error: "
-                    << ex.what());
+            {
+                if (!auth.isSensitive())
+                    LOG_ERR("Could not download template from [" << templateUriAnonym
+                                                                 << "]. Error: " << ex.what());
+            }
+            if (auth.isSensitive())
+                throw StorageConnectionException("Sensitive WOPI download failed");
             throw; // Bubble-up the exception.
         }
     }
@@ -718,7 +770,8 @@ std::string WopiStorage::downloadStorageFileToLocal(const Authorization& auth,
     // First try the FileUrl, if provided.
     if (!_fileUrl.empty())
     {
-        const std::string fileUrlAnonym = Anonymizer::anonymizeUrl(_fileUrl);
+        const std::string fileUrlAnonym =
+            auth.isSensitive() ? "<sensitive request>" : Anonymizer::anonymizeUrl(_fileUrl);
         try
         {
             LOG_INF("WOPI::GetFile using FileUrl: " << fileUrlAnonym);
@@ -731,9 +784,11 @@ std::string WopiStorage::downloadStorageFileToLocal(const Authorization& auth,
         }
         catch (const std::exception& ex)
         {
-            LOG_ERR("Could not download document from WOPI FileUrl [" << fileUrlAnonym <<
-                        "]. Will use default URL. Error: "
-                    << ex.what());
+            {
+                if (!auth.isSensitive())
+                    LOG_ERR("Could not download document from WOPI FileUrl ["
+                            << fileUrlAnonym << "]. Will use default URL. Error: " << ex.what());
+            }
         }
     }
 
@@ -742,19 +797,29 @@ std::string WopiStorage::downloadStorageFileToLocal(const Authorization& auth,
     // Add it here to get the payload instead of file info.
     Poco::URI uriObject(getUri());
     uriObject.setPath(uriObject.getPath() + "/contents");
-    auth.authorizeURI(uriObject);
+    applyStorageAuthority(auth, uriObject);
 
-    const std::string uriAnonym = getAnonymizedUri("/contents");
+    const std::string uriAnonym =
+        auth.isSensitive() ? "<sensitive request>" : getAnonymizedUri("/contents");
 
     try
     {
         LOG_INF("WOPI::GetFile using default URI: " << uriAnonym);
         return downloadDocument(uriObject, uriAnonym, auth, HTTP_REDIRECTION_LIMIT, true);
     }
+    catch (const StorageSpaceLowException&)
+    {
+        throw;
+    }
     catch (const std::exception& ex)
     {
-        LOG_ERR("Cannot download document from WOPI storage uri [" << uriAnonym << "]. Error: "
-                << ex.what());
+        {
+            if (!auth.isSensitive())
+                LOG_ERR("Cannot download document from WOPI storage uri ["
+                        << uriAnonym << "]. Error: " << ex.what());
+        }
+        if (auth.isSensitive())
+            throw StorageConnectionException("Sensitive WOPI download failed");
         throw; // Bubble-up the exception.
     }
 }
@@ -813,7 +878,10 @@ std::string WopiStorage::downloadDocument(const Poco::URI& uriObject, const std:
         if (redirectLimit)
         {
             const std::string location = httpResponse->get("Location");
-            LOG_TRC("WOPI::GetFile redirect to URI [" << Anonymizer::anonymizeUrl(location) << ']');
+            LOG_TRC(
+                "WOPI::GetFile redirect to URI ["
+                << (auth.isSensitive() ? "<sensitive request>" : Anonymizer::anonymizeUrl(location))
+                << ']');
 
             Poco::URI redirectUriObject(location);
             return downloadDocument(redirectUriObject, uriAnonym, auth, redirectLimit - 1,
@@ -830,8 +898,9 @@ std::string WopiStorage::downloadDocument(const Poco::URI& uriObject, const std:
         const std::string& responseString = httpResponse->getBody();
         LOG_ERR("WOPI::GetFile [" << uriAnonym << "] failed with Status Code: "
                                   << httpResponse->statusLine().statusCode());
-        throw StorageConnectionException("WOPI::GetFile [" + uriAnonym +
-                                         "] failed: " + responseString);
+        throw StorageConnectionException(
+            "WOPI::GetFile [" + uriAnonym +
+            "] failed: " + (auth.isSensitive() ? "Sensitive WOPI response" : responseString));
     }
 
     // Successful
@@ -880,9 +949,10 @@ std::size_t WopiStorage::uploadLocalFileToStorageAsync(
     const std::string& saveAsFilename, const bool isRename, const Attributes& attribs,
     const std::shared_ptr<SocketPoll>& socketPoll, const AsyncUploadCallback& asyncUploadCallback)
 {
-    auto profileZone =
-        std::make_shared<ProfileZone>(std::string("WopiStorage::uploadLocalFileToStorageAsync"),
-                                      std::map<std::string, std::string>{ { "url", _fileUrl } });
+    auto profileZone = std::make_shared<ProfileZone>(
+        std::string("WopiStorage::uploadLocalFileToStorageAsync"),
+        std::map<std::string, std::string>{
+            { "url", auth.isSensitive() ? "<sensitive request>" : _fileUrl } });
 
     // TODO: Check if this URI has write permission (canWrite = true)
 
@@ -915,9 +985,10 @@ std::size_t WopiStorage::uploadLocalFileToStorageAsync(
     Poco::URI uriObject(getUri());
     uriObject.setPath(isSaveAs || isRename ? uriObject.getPath()
                                            : uriObject.getPath() + "/contents");
-    auth.authorizeURI(uriObject);
+    applyStorageAuthority(auth, uriObject);
 
-    std::string uriAnonym = Anonymizer::anonymizeUrl(uriObject.toString());
+    std::string uriAnonym =
+        auth.isSensitive() ? "<sensitive request>" : Anonymizer::anonymizeUrl(uriObject.toString());
 
     const std::string wopiLog(isSaveAs ? "WOPI::PutRelativeFile"
                                        : (isRename ? "WOPI::RenameFile" : "WOPI::PutFile"));
@@ -1012,14 +1083,16 @@ std::size_t WopiStorage::uploadLocalFileToStorageAsync(
 
             WopiUploadDetails details = { filePathAnonym,
                                           uriAnonym,
-                                          httpResponse->statusLine().reasonPhrase(),
+                                          httpResponse->isSensitive()
+                                              ? "Sensitive WOPI response"
+                                              : httpResponse->statusLine().reasonPhrase(),
                                           size,
                                           httpResponse->statusLine().statusCode(),
                                           isSaveAs,
                                           isRename,
                                           httpResponse->header().has("X-WOPI-Lock"),
-                                          http::parseRetryAfter(
-                                              httpResponse->get("Retry-After")) };
+                                          http::parseRetryAfter(httpResponse->get("Retry-After")),
+                                          httpResponse->isSensitive() };
 
             // Handle the response.
             StorageBase::UploadResult res =
@@ -1035,7 +1108,8 @@ std::size_t WopiStorage::uploadLocalFileToStorageAsync(
 
         _uploadHttpSession->setConnectFailHandler(
             [this, asyncUploadCallback,
-             uri=uriObject.toString()](const std::shared_ptr<http::Session>& /* httpSession */)
+             uri = auth.isSensitive() ? "<sensitive request>" : uriObject.toString()](
+                const std::shared_ptr<http::Session>& /* httpSession */)
             {
                 LOG_ERR("Cannot connect to [" << uri << "] for uploading to wopi storage");
                 // Retire.
@@ -1057,15 +1131,21 @@ std::size_t WopiStorage::uploadLocalFileToStorageAsync(
     }
     catch (const Poco::Exception& ex)
     {
-        LOG_ERR(wopiLog << " cannot upload file to WOPI storage uri [" << uriAnonym
-                        << "]. Error: " << ex.displayText()
-                        << (ex.nested() ? " (" + ex.nested()->displayText() + ')' : ""));
+        {
+            if (!auth.isSensitive())
+                LOG_ERR(wopiLog << " cannot upload file to WOPI storage uri [" << uriAnonym
+                                << "]. Error: " << ex.displayText()
+                                << (ex.nested() ? " (" + ex.nested()->displayText() + ')' : ""));
+        }
         _uploadHttpSession.reset();
     }
     catch (const std::exception& ex)
     {
-        LOG_ERR(wopiLog << " cannot upload file to WOPI storage uri [" << uriAnonym << "]. Error: "
-                        << ex.what());
+        {
+            if (!auth.isSensitive())
+                LOG_ERR(wopiLog << " cannot upload file to WOPI storage uri [" << uriAnonym
+                                << "]. Error: " << ex.what());
+        }
         _uploadHttpSession.reset();
     }
 
@@ -1081,8 +1161,38 @@ StorageBase::UploadResult
 WopiStorage::handleUploadToStorageResponse(const WopiUploadDetails& details,
                                            std::string responseString)
 {
+    const auto parseResponse = [&](const std::string& text, Poco::JSON::Object::Ptr& object)
+    {
+        if (!details.sensitive)
+            return JsonUtil::parseJSON(text, object);
+        try
+        {
+            object = Poco::JSON::Parser().parse(text).extract<Poco::JSON::Object::Ptr>();
+            return static_cast<bool>(object);
+        }
+        catch (const std::exception&)
+        {
+            return false;
+        }
+    };
+    const auto value =
+        [&]<typename T>(const Poco::JSON::Object::Ptr& object, const std::string& key)
+    {
+        if (!details.sensitive)
+            return JsonUtil::getJSONValue<T>(object, key);
+        try
+        {
+            return object->get(key).convert<T>();
+        }
+        catch (const std::exception&)
+        {
+            return T();
+        }
+    };
     // Assume we failed, unless we have confirmation of success.
-    StorageBase::UploadResult result(UploadResult::Result::FAILED, responseString);
+    StorageBase::UploadResult result(UploadResult::Result::FAILED,
+                                     details.sensitive ? "Sensitive WOPI upload failed"
+                                                       : responseString);
 
     // An Invalid status category means we never got a response: the request
     // timed out or the connection was dropped, and the host may or may not have
@@ -1103,12 +1213,12 @@ WopiStorage::handleUploadToStorageResponse(const WopiUploadDetails& details,
                                       ? "WOPI::PutRelativeFile"
                                       : (details.isRename ? "WOPI::RenameFile" : "WOPI::PutFile"));
 
-        if (Log::isEnabled(Log::Level::INF))
+        if (!details.sensitive && Log::isEnabled(Log::Level::INF))
         {
             if (Anonymizer::enabled())
             {
                 Poco::JSON::Object::Ptr object;
-                if (JsonUtil::parseJSON(responseString, object))
+                if (parseResponse(responseString, object))
                 {
                     // Anonymize the filename
                     std::string url;
@@ -1135,33 +1245,56 @@ WopiStorage::handleUploadToStorageResponse(const WopiUploadDetails& details,
                 }
             }
 
-            LOG_INF(wopiLog << " uploaded " << details.size << " bytes in " << _wopiSaveDuration
-                            << " from [" << details.filePathAnonym << "] -> [" << details.uriAnonym
-                            << "]: " << details.httpResponseCode << ' '
-                            << details.httpResponseReason << ": " << responseString);
+            {
+                if (!details.sensitive)
+                    LOG_INF(wopiLog << " uploaded " << details.size << " bytes in "
+                                    << _wopiSaveDuration << " from [" << details.filePathAnonym
+                                    << "] -> [" << details.uriAnonym
+                                    << "]: " << details.httpResponseCode << ' '
+                                    << details.httpResponseReason << ": " << responseString);
+            }
         }
 
         if (details.httpResponseCode == http::StatusCode::OK)
         {
             result.setResult(StorageBase::UploadResult::Result::OK);
             Poco::JSON::Object::Ptr object;
-            if (JsonUtil::parseJSON(origResponseString, object))
+            if (parseResponse(origResponseString, object))
             {
                 const std::string lastModifiedTime =
-                    JsonUtil::getJSONValue<std::string>(object, "LastModifiedTime");
-                LOG_TRC(wopiLog << " returns LastModifiedTime [" << lastModifiedTime << "].");
+                    value.operator()<std::string>(object, "LastModifiedTime");
+                {
+                    if (!details.sensitive)
+                        LOG_TRC(wopiLog << " returns LastModifiedTime [" << lastModifiedTime
+                                        << "].");
+                }
                 if (!lastModifiedTime.empty() && !Util::isIso8601(lastModifiedTime))
-                    LOG_WRN(wopiLog << " returned a LastModifiedTime [" << lastModifiedTime
-                                    << "] that is not a parsable ISO8601 timestamp");
-                setLastModifiedTime(lastModifiedTime);
+                {
+                    if (!details.sensitive)
+                        LOG_WRN(wopiLog << " returned a LastModifiedTime [" << lastModifiedTime
+                                        << "] that is not a parsable ISO8601 timestamp");
+                }
+                if (details.sensitive && !lastModifiedTime.empty() &&
+                    !Util::isIso8601(lastModifiedTime))
+                    setLastModifiedTimeUnSafe();
+                else
+                    setLastModifiedTime(lastModifiedTime);
 
                 if (details.isSaveAs || details.isRename)
                 {
-                    const std::string name = JsonUtil::getJSONValue<std::string>(object, "Name");
-                    LOG_TRC(wopiLog << " returns Name [" << Anonymizer::anonymizeUrl(name) << "].");
+                    const std::string name = value.operator()<std::string>(object, "Name");
+                    {
+                        if (!details.sensitive)
+                            LOG_TRC(wopiLog << " returns Name [" << Anonymizer::anonymizeUrl(name)
+                                            << "].");
+                    }
 
-                    const std::string url = JsonUtil::getJSONValue<std::string>(object, "Url");
-                    LOG_TRC(wopiLog << " returns Url [" << Anonymizer::anonymizeUrl(url) << "].");
+                    const std::string url = value.operator()<std::string>(object, "Url");
+                    {
+                        if (!details.sensitive)
+                            LOG_TRC(wopiLog << " returns Url [" << Anonymizer::anonymizeUrl(url)
+                                            << "].");
+                    }
 
                     result.setSaveAsResult(name, url);
                 }
@@ -1196,12 +1329,12 @@ WopiStorage::handleUploadToStorageResponse(const WopiUploadDetails& details,
             result.setResult(StorageBase::UploadResult::Result::CONFLICT);
             Poco::JSON::Object::Ptr object;
             bool docChanged = false;
-            if (JsonUtil::parseJSON(origResponseString, object))
+            if (parseResponse(origResponseString, object))
             {
                 const unsigned coolStatusCode =
-                    JsonUtil::getJSONValue<unsigned>(object, "COOLStatusCode");
+                    value.operator()<unsigned>(object, "COOLStatusCode");
                 if (coolStatusCode == static_cast<unsigned>(COOLStatusCode::DOC_CHANGED) ||
-                    JsonUtil::getJSONValue<unsigned>(object, "LOOLStatusCode") ==
+                    value.operator()<unsigned>(object, "LOOLStatusCode") ==
                         static_cast<unsigned>(COOLStatusCode::DOC_CHANGED))
                 {
                     docChanged = true;
@@ -1250,11 +1383,14 @@ WopiStorage::handleUploadToStorageResponse(const WopiUploadDetails& details,
                 responseString = oss.str();
             }
 
-            LOG_ERR("Unexpected response to "
-                    << wopiLog << ". Cannot upload file to WOPI storage uri [" << details.uriAnonym
-                    << "]: " << responseString);
+            {
+                if (!details.sensitive)
+                    LOG_ERR("Unexpected response to "
+                            << wopiLog << ". Cannot upload file to WOPI storage uri ["
+                            << details.uriAnonym << "]: " << responseString);
+            }
             result.setResult(StorageBase::UploadResult::Result::FAILED);
-            result.setReason(responseString);
+            result.setReason(details.sensitive ? "Sensitive WOPI upload failed" : responseString);
 
             // If we cannot be sure whether we up-loaded successfully eg. we got
             // a timeout then try to recover in DocBroker.
@@ -1262,15 +1398,21 @@ WopiStorage::handleUploadToStorageResponse(const WopiUploadDetails& details,
     }
     catch (const Poco::Exception& pexc)
     {
-        LOG_ERR("Cannot upload file to WOPI storage uri ["
-                << details.uriAnonym << "]. Error: " << pexc.displayText()
-                << (pexc.nested() ? " (" + pexc.nested()->displayText() + ')' : ""));
+        {
+            if (!details.sensitive)
+                LOG_ERR("Cannot upload file to WOPI storage uri ["
+                        << details.uriAnonym << "]. Error: " << pexc.displayText()
+                        << (pexc.nested() ? " (" + pexc.nested()->displayText() + ')' : ""));
+        }
         result.setResult(StorageBase::UploadResult::Result::FAILED);
     }
     catch (const BadRequestException& exc)
     {
-        LOG_ERR("Cannot upload file to WOPI storage uri [" << details.uriAnonym << "]. Error: "
-                << exc.what());
+        {
+            if (!details.sensitive)
+                LOG_ERR("Cannot upload file to WOPI storage uri [" << details.uriAnonym
+                                                                   << "]. Error: " << exc.what());
+        }
         result.setResult(StorageBase::UploadResult::Result::FAILED);
     }
 

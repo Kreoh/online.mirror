@@ -265,7 +265,16 @@ public:
     /// Note: This URI is unsafe - when connecting to existing sessions, we must
     /// ignore everything but the access_token, and use the access_token with
     /// the URI of the initial request.
-    const Poco::URI& getPublicUri() const { return _uriPublic; }
+    const Poco::URI& getPublicUri() const
+    {
+        return _renewedPublicUri ? *_renewedPublicUri : _uriPublic;
+    }
+    void installAgentAuthority(Authorization& prepared,
+                               std::shared_ptr<const Poco::URI>& preparedUri) noexcept
+    {
+        _auth.swap(prepared);
+        _renewedPublicUri.swap(preparedUri);
+    }
 
     const AdditionalFilePocoUris& getAdditionalFilePublicUri() const { return _additionalFileUrisPublic; }
 
@@ -666,6 +675,7 @@ private:
 private:
     /// URI with which client made request to us
     const Poco::URI _uriPublic;
+    std::shared_ptr<const Poco::URI> _renewedPublicUri;
 
     const AdditionalFilePocoUris _additionalFileUrisPublic;
 

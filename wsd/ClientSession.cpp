@@ -735,7 +735,9 @@ void ClientSession::checkAIRequestTimeout(std::chrono::steady_clock::time_point 
 
 bool ClientSession::_handleInput(const char *buffer, int length)
 {
-    LOG_TRC("handling incoming [" << getAbbreviatedMessage(buffer, length) << ']');
+    if ((!_protocol || !_protocol->isSensitive()) &&
+        !std::string_view(buffer, length).starts_with("agentrenew"))
+        LOG_TRC("handling incoming [" << getAbbreviatedMessage(buffer, length) << ']');
     const std::string firstLine = getFirstLine(buffer, length);
     const StringVector tokens = StringVector::tokenize(firstLine.data(), firstLine.size());
 
@@ -749,6 +751,16 @@ bool ClientSession::_handleInput(const char *buffer, int length)
     if (tokens.size() < 1)
     {
         sendTextFrameAndLogError("error: cmd=empty kind=unknown");
+        return false;
+    }
+
+    // Renewal credentials must never enter application handlers or trace dumps.
+    if (tokens.equals(0, "agentrenew"))
+        return docBroker->handleAgentRenewal(client_from_this(), std::string(buffer, length));
+    if (docBroker->agentRenewalBlocks(client_from_this()) && !tokens.equals(0, "agentretire") &&
+        !tokens.equals(0, "agentcapabilities"))
+    {
+        sendTextFrame("error: cmd=agentcontrol kind=renewalpending");
         return false;
     }
 
@@ -855,7 +867,8 @@ bool ClientSession::_handleInput(const char *buffer, int length)
         return false;
     }
 
-    COOLWSD::dumpIncomingTrace(docBroker->getJailId(), getId(), firstLine);
+    if (!_protocol || !_protocol->isSensitive())
+        COOLWSD::dumpIncomingTrace(docBroker->getJailId(), getId(), firstLine);
 
     if (COOLProtocol::tokenIndicatesUserInteraction(tokens[0]))
     {
@@ -1519,6 +1532,11 @@ bool ClientSession::_handleInput(const char *buffer, int length)
 #endif
     else if (tokens.equals(0, "resetaccesstoken"))
     {
+        if (docBroker->isRegisteredAgent(client_from_this()))
+        {
+            sendTextFrame("error: cmd=resetaccesstoken kind=agentrenewalrequired");
+            return false;
+        }
         if (tokens.size() <= 1 || tokens.size() > 3)
         {
             LOG_ERR("Bad syntax for: " << tokens[0]);
@@ -1880,7 +1898,7 @@ void ClientSession::uploadSettingsToWopiHost(const std::string& filePath,
     try
     {
         const Authorization& auth = getAuthorization();
-        Poco::URI uriObject = DocumentBroker::getPresetUploadBaseUrl(_uriPublic);
+        Poco::URI uriObject = DocumentBroker::getPresetUploadBaseUrl(getPublicUri());
 
         // A relative URI has no host to send the request to.
         if (uriObject.isRelative())
@@ -3069,6 +3087,12 @@ void ClientSession::setWebsocketUrpEnabled(const bool enabled)
 {
     _agentRenderView = enabled && _agentRenderRequested;
     _websocketUrpEnabled = enabled && !_agentRenderRequested;
+    if (enabled)
+    {
+        _auth.markSensitive();
+        if (_protocol)
+            _protocol->markSensitive();
+    }
     LOG_DBG("WOPI session classification: urp-authorised=" << enabled
                                                             << " agent-render="
                                                             << _agentRenderView
