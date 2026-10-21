@@ -67,6 +67,12 @@ for mode, native, queue, branch in itertools.product(
 assignments = re.findall(
     r"env\.(ONLINE_OFFICE_RUN_AGENT_CONTROL|ONLINE_OFFICE_RUN_JSUNO|NO_DOCKER_IMAGE) = params.NATIVE_VALIDATION_ONLY \? '([^']*)' : '([^']*)'",
     setup)
+parameter_exports = re.findall(
+    r"env\.(NATIVE_VALIDATION_ONLY|EXPORT_QUEUE_VALIDATION) = params\.\1 \? '([^']*)' : '([^']*)'",
+    setup)
+assert dict((name, (yes, no)) for name, yes, no in parameter_exports) == {
+    'NATIVE_VALIDATION_ONLY': ('true', 'false'),
+    'EXPORT_QUEUE_VALIDATION': ('true', 'false')}
 assert len(assignments) == 3
 assert dict((name, (yes, no)) for name, yes, no in assignments) == {
     'ONLINE_OFFICE_RUN_AGENT_CONTROL': ('1', '0'),
@@ -119,7 +125,7 @@ if args[:2] == ['image', 'inspect']:
     shell_path = fixture / 'stage.sh'
     shell_path.write_text(stage_shell)
     subprocess.run(['bash', '-n', str(shell_path)], check=True)
-    for native, queue, failure in [(False, False, False), (True, False, False),
+    for native, queue, failure in [(None, None, False), (False, False, False), (True, False, False),
                                    (True, True, False), (True, False, True)]:
         log = fixture / 'docker.log'
         log.write_text('')
@@ -128,9 +134,20 @@ if args[:2] == ['image', 'inspect']:
                            IMAGE_TAG='fixture', ONLINE_OFFICE_SOURCE_REVISION='b' * 40,
                            BUILD_NUMBER='1', SOURCE_BRANCH='main',
                            ONLINE_OFFICE_SOURCE_CACHE_ROOT=str(fixture / 'cache'),
-                           EXPORT_QUEUE_VALIDATION=str(queue).lower(),
-                           NATIVE_VALIDATION_ONLY=str(native).lower(), FAIL_NATIVE=str(int(failure)))
-        environment.update({name: yes if native else no for name, yes, no in assignments})
+                           FAIL_NATIVE=str(int(failure)))
+        # New parameters may be absent from the inherited Jenkins environment on their first run.
+        # Apply the explicit setup exports, including the null parameter default, before the shell.
+        parameter_values = {'NATIVE_VALIDATION_ONLY': native, 'EXPORT_QUEUE_VALIDATION': queue}
+        for name, yes, no in parameter_exports:
+            environment.pop(name, None)
+            environment[name] = yes if parameter_values[name] else no
+        # Jenkins may omit empty assignments entirely from the shell environment.
+        for name, yes, no in assignments:
+            environment.pop(name, None)
+            value = yes if native else no
+            if value:
+                environment[name] = value
+        assert ('NO_DOCKER_IMAGE' in environment) == bool(native)
         result = subprocess.run(['bash', str(shell_path)], cwd=fixture, env=environment,
                                 capture_output=True, text=True, timeout=5)
         assert result.returncode == (23 if failure else 0), result.stderr

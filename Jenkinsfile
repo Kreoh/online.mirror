@@ -32,6 +32,9 @@ pipeline {
                     if (params.EXPORT_QUEUE_VALIDATION && !params.NATIVE_VALIDATION_ONLY) {
                         error('EXPORT_QUEUE_VALIDATION requires NATIVE_VALIDATION_ONLY')
                     }
+                    // Export explicit defaults when a newly added parameter has no build environment entry.
+                    env.NATIVE_VALIDATION_ONLY = params.NATIVE_VALIDATION_ONLY ? 'true' : 'false'
+                    env.EXPORT_QUEUE_VALIDATION = params.EXPORT_QUEUE_VALIDATION ? 'true' : 'false'
                     env.ONLINE_OFFICE_RUN_AGENT_CONTROL = params.NATIVE_VALIDATION_ONLY ? '1' : '0'
                     env.ONLINE_OFFICE_RUN_JSUNO = params.NATIVE_VALIDATION_ONLY ? '1' : '0'
                     env.NO_DOCKER_IMAGE = params.NATIVE_VALIDATION_ONLY ? '1' : ''
@@ -182,7 +185,7 @@ pipeline {
                         -e ONLINE_OFFICE_FINAL_DOCKERFILE=Distroless \
                         -e ONLINE_OFFICE_RUN_AGENT_CONTROL="$ONLINE_OFFICE_RUN_AGENT_CONTROL" \
                         -e ONLINE_OFFICE_RUN_JSUNO="$ONLINE_OFFICE_RUN_JSUNO" \
-                        -e NO_DOCKER_IMAGE="$NO_DOCKER_IMAGE" \
+                        -e NO_DOCKER_IMAGE="${NO_DOCKER_IMAGE:-}" \
                         -e ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION="$EXPORT_QUEUE_VALIDATION" \
                         -e ONLINE_OFFICE_AGENT_CONTROL_REPORT_DIR="/workspace/native-retirement-reports/$BUILD_NUMBER" \
                         -e ONLINE_OFFICE_SOURCE_CACHE_DIR=/workspace-cache/build \
