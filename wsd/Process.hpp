@@ -302,8 +302,9 @@ public:
         closeScriptControl();
         _scriptControlFD = descriptor;
         _scriptGeneration = std::move(generation);
-        if (_scriptControlFD >= 0 && _ws)
-            _ws->markSensitive();
+        const auto handler = getWSHandler();
+        if (_scriptControlFD >= 0 && handler)
+            handler->markSensitive();
     }
     int scriptControlFD() const { return _scriptControlFD; }
     const std::string& scriptGeneration() const { return _scriptGeneration; }

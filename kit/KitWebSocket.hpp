@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 
 class ChildSession;
 class Document;
@@ -64,6 +65,20 @@ public:
     }
 
     void shutdownForBackgroundSave();
+
+    bool postScriptConsole(const std::string_view data) const
+    {
+        if (data.size() > 4096)
+            return false;
+        const auto socket = getSocket().lock();
+        if (!socket || !socket->isOpen())
+            return false;
+        ASSERT_CORRECT_SOCKET_THREAD(socket);
+        const auto queued = socket->getOutBuffer().size();
+        if (queued > 65536 || data.size() + 14 > 65536 - queued)
+            return false;
+        return sendMessage(data.data(), data.size(), WSOpCode::Text, false) > 0;
+    }
 
 protected:
     virtual void handleMessage(const std::vector<char>& data) override;

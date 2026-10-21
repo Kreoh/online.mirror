@@ -941,14 +941,8 @@ bool Document::postMessage(const std::string_view data, const WSOpCode code) con
     {
         if (_isBgSaveProcess || !_websocketHandler || code != WSOpCode::Text || data.size() > 4096)
             return false;
-        const auto socket = _websocketHandler->getSocket().lock();
-        if (!socket || !socket->isOpen())
-            return false;
-        ASSERT_CORRECT_SOCKET_THREAD(socket);
-        const auto queued = socket->getOutBuffer().size();
-        if (queued > 65536 || data.size() + 14 > 65536 - queued)
-            return false;
-        return _websocketHandler->sendMessage(data.data(), data.size(), code, false) > 0;
+        const auto handler = std::dynamic_pointer_cast<KitWebSocketHandler>(_websocketHandler);
+        return handler && handler->postScriptConsole(data);
     }
     if (Message::isAgentScriptControl(data))
     {
@@ -4035,7 +4029,7 @@ static void startMainLoop(const COKit* kit, const std::shared_ptr<COKit>& loKit,
     {
         const auto callbacks = engineInfo->get("RawSourceCallbacks");
         if (callbacks.isInteger() && callbacks.convert<int>() == 1 && !loKit->drainScriptOwners())
-            std::_Exit(TimeoutExitCode);
+            std::_Exit(EX_SOFTWARE);
     }
 #endif
 
@@ -4885,10 +4879,8 @@ void lokit_main(
             versionJSON->set("tunnelled_dialog_image_cache_size", std::to_string(LOKitHelper::tunnelledDialogImageCacheSize));
             std::stringstream ss;
             versionJSON->stringify(ss);
-            versionString = ss.str();
-
             std::string encodedVersion;
-            Poco::URI::encode(versionString, "?#/", encodedVersion);
+            Poco::URI::encode(ss.str(), "?#/", encodedVersion);
             pathAndQuery.append("&version=");
             pathAndQuery.append(encodedVersion);
         }
