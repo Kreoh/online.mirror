@@ -479,7 +479,7 @@ void COOLWSD::cleanupDocBrokers()
         docBroker->timeoutNotLoaded(now);
 
         // Remove only when not alive.
-        if (!docBroker->isAlive())
+        if (!docBroker->agentRecoveryFenced() && !docBroker->isAlive())
         {
             LastSubForKitBrokerExitTimes[docBroker->getConfigId()] = now;
             LOG_INF("Removing DocumentBroker for docKey ["
@@ -1210,10 +1210,405 @@ void InotifySocket::handlePoll(SocketDisposition & /* disposition */, std::chron
 
 #if !MOBILEAPP
 
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+namespace
+{
+using RecoveryKey = std::pair<int, std::string>;
+using RecoveryClock = std::chrono::steady_clock;
+struct PendingRecoveryBirth
+{
+    std::shared_ptr<KitRecoveryConnection> connection;
+    RecoveryClock::time_point until;
+};
+struct PendingRecoveryKit
+{
+    std::weak_ptr<ChildProcess> child;
+    RecoveryClock::time_point until;
+};
+// All maps belong to the prisoner poll. Bounds also apply while the peer is silent.
+std::map<RecoveryKey, PendingRecoveryBirth> RecoveryBirths, RecoverySubBirths;
+std::map<RecoveryKey, PendingRecoveryKit> RecoveryKits;
+std::map<RecoveryKey, PendingRecoveryBirth> RecoveryForKits;
+std::map<RecoveryKey, std::weak_ptr<KitRecoveryBinding>> RecoveryBindings;
+unsigned* RecoveryHelloCaptureForTesting = nullptr;
+
+void pruneRecoveryBirths()
+{
+    const auto now = RecoveryClock::now();
+    for (auto* map : { &RecoveryBirths, &RecoverySubBirths, &RecoveryForKits })
+        for (auto it = map->begin(); it != map->end();)
+            if (it->second.until <= now || !it->second.connection->connected)
+                it = map->erase(it);
+            else
+                ++it;
+    for (auto it = RecoveryKits.begin(); it != RecoveryKits.end();)
+        if (it->second.until <= now || it->second.child.expired())
+            it = RecoveryKits.erase(it);
+        else
+            ++it;
+    for (auto it = RecoveryBindings.begin(); it != RecoveryBindings.end();)
+        if (it->second.expired())
+            it = RecoveryBindings.erase(it);
+        else
+            ++it;
+}
+void matchRecoveryKit(const RecoveryKey& key)
+{
+    const auto birth = RecoveryBirths.find(key);
+    const auto pending = RecoveryKits.find(key);
+    if (birth == RecoveryBirths.end() || pending == RecoveryKits.end())
+        return;
+    const auto child = pending->second.child.lock();
+    const auto& connection = birth->second.connection;
+    if (!child || !connection->authenticated || !connection->connected ||
+        child->getConfigId() != connection->config || child->getPid() != key.first ||
+        child->recoveryBinding() || RecoveryBindings.size() >= 256)
+        return;
+    auto binding = std::make_shared<KitRecoveryBinding>();
+    binding->connection = connection;
+    binding->originalForKit = connection->owner.lock();
+    if (!binding->originalForKit)
+        return;
+    binding->pid = key.first;
+    binding->jail = key.second;
+    child->bindRecoveryBirth(binding);
+    RecoveryBindings.emplace(key, binding);
+    RecoveryBirths.erase(birth);
+    RecoveryKits.erase(pending);
+}
+void authenticateRecoveryForKit(const std::shared_ptr<KitRecoveryConnection>& connection)
+{
+    if (!connection->connected || connection->authenticated.exchange(true))
+        return;
+    if (UnitWSD::isUnitTesting() && RecoveryHelloCaptureForTesting)
+    {
+        ++*RecoveryHelloCaptureForTesting;
+        return;
+    }
+    try
+    {
+        const auto handler = connection->handler.lock();
+        if (!handler || handler->sendTextMessage("recoveryhello " + connection->nonce) < 0)
+            connection->connected = false;
+    }
+    catch (const std::exception&)
+    {
+        connection->connected = false;
+    }
+}
+void matchRecoveryForKit(const RecoveryKey& key)
+{
+    const auto birth = RecoverySubBirths.find(key);
+    const auto pending = RecoveryForKits.find(key);
+    if (birth == RecoverySubBirths.end() || pending == RecoveryForKits.end())
+        return;
+    if (!birth->second.connection->authenticated || !birth->second.connection->connected ||
+        !birth->second.connection->config.empty())
+        return;
+    authenticateRecoveryForKit(pending->second.connection);
+    RecoverySubBirths.erase(birth);
+    RecoveryForKits.erase(pending);
+}
+void registerRecoveryForKit(const std::shared_ptr<ForKitProcess>& process,
+                            const std::string& config)
+{
+    if (!UnitWSD::isUnitTesting())
+        return;
+    pruneRecoveryBirths();
+    const auto handler = process->recoveryHandler();
+    const auto connection = handler->recovery;
+    connection->handler = handler;
+    connection->owner = process;
+    connection->pid = process->getPid(); // SO_PEERCRED, checked against main PID by caller.
+    connection->config = config;
+    if (config.empty())
+        authenticateRecoveryForKit(connection);
+    else if (RecoveryForKits.size() < 256)
+    {
+        const RecoveryKey key{ connection->pid, config };
+        RecoveryForKits.emplace(
+            key,
+            PendingRecoveryBirth{ connection, RecoveryClock::now() + std::chrono::seconds(5) });
+        matchRecoveryForKit(key);
+    }
+}
+void registerRecoveryKit(const std::shared_ptr<ChildProcess>& child)
+{
+    if (!UnitWSD::isUnitTesting())
+        return;
+    pruneRecoveryBirths();
+    if (RecoveryKits.size() >= 256)
+        return;
+    const RecoveryKey key{ child->getPid(), child->getJailId() };
+    RecoveryKits.emplace(
+        key, PendingRecoveryKit{ child, RecoveryClock::now() + std::chrono::seconds(5) });
+    matchRecoveryKit(key);
+}
+bool handleRecoveryMessage(const std::shared_ptr<KitRecoveryConnection>& connection,
+                           const std::string& message)
+{
+    if (!message.starts_with("recovery"))
+        return false;
+    if (!UnitWSD::isUnitTesting() || message.size() > 512 || !connection->authenticated ||
+        !connection->connected)
+        return true;
+    pruneRecoveryBirths();
+    std::istringstream input(message);
+    std::string command, nonce, jail, request, extra;
+    int pid = -1, code = 0, status = 0;
+    input >> command >> nonce;
+    if (nonce != connection->nonce)
+        return true;
+    if (command == "recoveryfailed" || command == "recoverychecked")
+        input >> request;
+    if (!(input >> pid >> jail) || pid <= 1)
+        return true;
+    const RecoveryKey key{ pid, jail };
+    if (command == "recoverysub")
+    {
+        if ((input >> extra) || !connection->config.empty() || jail.size() > 256 ||
+            RecoverySubBirths.size() >= 256)
+            return true;
+        const RecoveryKey subKey{ pid, Uri::decode(jail) };
+        RecoverySubBirths.emplace(
+            subKey,
+            PendingRecoveryBirth{ connection, RecoveryClock::now() + std::chrono::seconds(5) });
+        matchRecoveryForKit(subKey);
+        return true;
+    }
+    if (jail.size() != 16 ||
+        jail.find_first_not_of(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") !=
+            std::string::npos)
+        return true;
+    if (command == "recoverybirth")
+    {
+        if ((input >> extra) || RecoveryBirths.size() >= 256 || RecoveryBindings.contains(key))
+            return true;
+        RecoveryBirths.emplace(
+            key,
+            PendingRecoveryBirth{ connection, RecoveryClock::now() + std::chrono::seconds(5) });
+        matchRecoveryKit(key);
+        return true;
+    }
+    const auto found = RecoveryBindings.find(key);
+    const auto binding = found == RecoveryBindings.end() ? nullptr : found->second.lock();
+    if (!binding || binding->connection != connection)
+        return true;
+    if (command == "recoverychecked" && request == binding->request && (input >> status) &&
+        !(input >> extra))
+    {
+        binding->parentChecksForTesting = status == 1 ? 1 : -1;
+        return true;
+    }
+    if (command == "recoveryexit" && (input >> code >> status >> request) && !(input >> extra) &&
+        (request == "-" || request == binding->request) &&
+        (code == CLD_EXITED || code == CLD_KILLED || code == CLD_DUMPED))
+    {
+        binding->exitCode = code;
+        binding->exitStatus = status;
+        if (binding->holdReceiptForTesting)
+            binding->heldReceiptForTesting = true;
+        else
+            binding->result = KitRecoveryBinding::Result::Reaped;
+    }
+    else if (command == "recoveryfailed" && !(input >> extra) && request == binding->request &&
+             binding->result == KitRecoveryBinding::Result::Requested)
+        binding->result = KitRecoveryBinding::Result::Failed;
+    return true;
+}
+} // namespace
+
+bool COOLWSD::verifyKitRecoveryBindingsForTesting(const std::shared_ptr<ChildProcess>& child)
+{
+    if (!UnitWSD::isUnitTesting() || !PrisonerPoll || !child || RecoveryHelloCaptureForTesting)
+        return false;
+    PrisonerPoll->assertCorrectThread();
+    const auto original = child->recoveryBinding();
+    if (!original)
+        return false;
+    // Exercise the actual matching maps in isolation on their owner thread. Restore the
+    // original live binding before yielding; no test tuple is ever sent to ForKit.
+    struct Restore
+    {
+        std::shared_ptr<ChildProcess> child;
+        std::shared_ptr<KitRecoveryBinding> binding;
+        decltype(RecoveryBirths) births = std::move(RecoveryBirths);
+        decltype(RecoverySubBirths) subs = std::move(RecoverySubBirths);
+        decltype(RecoveryForKits) forks = std::move(RecoveryForKits);
+        decltype(RecoveryKits) kits = std::move(RecoveryKits);
+        decltype(RecoveryBindings) bindings = std::move(RecoveryBindings);
+        ~Restore()
+        {
+            RecoveryHelloCaptureForTesting = nullptr;
+            child->replaceRecoveryBirthForTesting(binding);
+            RecoveryBirths = std::move(births);
+            RecoverySubBirths = std::move(subs);
+            RecoveryForKits = std::move(forks);
+            RecoveryKits = std::move(kits);
+            RecoveryBindings = std::move(bindings);
+        }
+    } restore{ child, original };
+    unsigned hellos = 0;
+    RecoveryHelloCaptureForTesting = &hellos;
+    const auto connection = original->connection;
+    const auto key = RecoveryKey{ child->getPid(), child->getJailId() };
+    const auto birth =
+        "recoverybirth " + connection->nonce + " " + std::to_string(key.first) + " " + key.second;
+    const auto clear = [&]
+    {
+        child->replaceRecoveryBirthForTesting({});
+        RecoveryBirths.clear();
+        RecoveryKits.clear();
+        RecoveryBindings.clear();
+    };
+    clear();
+    handleRecoveryMessage(connection, birth);
+    if (child->recoveryBinding())
+        return false;
+    registerRecoveryKit(child); // Birth first.
+    if (!child->recoveryBinding() || child->recoveryBinding()->connection != connection)
+        return false;
+    clear();
+    registerRecoveryKit(child);
+    if (child->recoveryBinding())
+        return false;
+    handleRecoveryMessage(connection, birth); // Handshake first.
+    if (!child->recoveryBinding())
+        return false;
+    const auto matched = child->recoveryBinding();
+    auto replacement = std::make_shared<KitRecoveryConnection>();
+    replacement->config = connection->config;
+    replacement->pid = connection->pid;
+    replacement->authenticated = true;
+    replacement->owner = original->originalForKit;
+    handleRecoveryMessage(replacement, "recoverybirth " + replacement->nonce + " " +
+                                           std::to_string(key.first) + " " + key.second);
+    if (child->recoveryBinding() != matched)
+        return false;
+
+    clear();
+    RecoveryBirths.emplace(
+        key, PendingRecoveryBirth{ connection, RecoveryClock::now() - std::chrono::seconds(1) });
+    registerRecoveryKit(child);
+    if (child->recoveryBinding())
+        return false; // Expired birth cannot bind a later handshake.
+    clear();
+    for (int i = 0; i < 256; ++i)
+        RecoveryKits.emplace(
+            RecoveryKey{ i, "capacity" },
+            PendingRecoveryKit{ child, RecoveryClock::now() + std::chrono::seconds(5) });
+    registerRecoveryKit(child);
+    handleRecoveryMessage(connection, birth);
+    if (child->recoveryBinding() || RecoveryKits.size() != 256)
+        return false;
+
+    // Subforkit peer credentials alone are insufficient. Match only the original
+    // authenticated main connection's PID/configuration birth, in either order.
+    RecoveryForKits.clear();
+    RecoverySubBirths.clear();
+    auto parent = std::make_shared<KitRecoveryConnection>();
+    auto sub = std::make_shared<KitRecoveryConnection>();
+    sub->pid = 123456;
+    sub->config = "recovery-fixture";
+    const RecoveryKey subKey{ sub->pid, sub->config };
+    RecoveryForKits.emplace(
+        subKey, PendingRecoveryBirth{ sub, RecoveryClock::now() + std::chrono::seconds(5) });
+    matchRecoveryForKit(subKey);
+    if (sub->authenticated)
+        return false;
+    RecoverySubBirths.emplace(
+        subKey, PendingRecoveryBirth{ parent, RecoveryClock::now() + std::chrono::seconds(5) });
+    matchRecoveryForKit(subKey);
+    if (sub->authenticated)
+        return false; // A birth from an unauthenticated parent cannot establish ownership.
+    parent->authenticated = true;
+    parent->config = "not-the-main-forkit";
+    matchRecoveryForKit(subKey);
+    if (sub->authenticated)
+        return false;
+    parent->config.clear();
+    matchRecoveryForKit(subKey);
+    if (!sub->authenticated || !sub->connected || hellos != 1)
+        return false;
+    auto later = std::make_shared<KitRecoveryConnection>();
+    later->pid = sub->pid;
+    later->config = sub->config;
+    RecoveryForKits.emplace(
+        subKey, PendingRecoveryBirth{ later, RecoveryClock::now() + std::chrono::seconds(5) });
+    matchRecoveryForKit(subKey);
+    if (later->authenticated)
+        return false; // The consumed original birth cannot authenticate a replacement.
+    RecoveryForKits.clear();
+    RecoverySubBirths.emplace(
+        subKey, PendingRecoveryBirth{ parent, RecoveryClock::now() + std::chrono::seconds(5) });
+    RecoveryForKits.emplace(
+        subKey, PendingRecoveryBirth{ later, RecoveryClock::now() + std::chrono::seconds(5) });
+    matchRecoveryForKit(subKey);
+    return later->authenticated && later->connected && hellos == 2;
+}
+
+void COOLWSD::verifyKitRecoveryParentForTesting(const std::shared_ptr<KitRecoveryBinding>& binding)
+{
+    if (!UnitWSD::isUnitTesting() || !PrisonerPoll || !binding)
+        return;
+    PrisonerPoll->addCallback(
+        [binding]
+        {
+            const auto connection = binding->connection;
+            const auto handler = connection->handler.lock();
+            if (!handler || !connection->authenticated || !connection->connected)
+                return;
+            handler->sendTextMessage("recoveryverify " + connection->nonce + " " +
+                                     binding->request + " " + std::to_string(binding->pid) + " " +
+                                     binding->jail);
+        });
+}
+void COOLWSD::requestKitRecovery(const std::shared_ptr<KitRecoveryBinding>& binding)
+{
+    if (!UnitWSD::isUnitTesting() || !binding || !PrisonerPoll)
+        return;
+    PrisonerPoll->addCallback(
+        [binding]
+        {
+            if (binding->result == KitRecoveryBinding::Result::Reaped ||
+                binding->result == KitRecoveryBinding::Result::Requested)
+                return;
+            const auto connection = binding->connection;
+            const auto handler = connection->handler.lock();
+            if (!handler || !connection->authenticated || !connection->connected ||
+                binding->result != KitRecoveryBinding::Result::Ready)
+            {
+                binding->result = KitRecoveryBinding::Result::Failed;
+                return;
+            }
+            binding->result = KitRecoveryBinding::Result::Requested;
+            ++binding->requestAttemptsForTesting;
+            try
+            {
+                if (handler->sendTextMessage(
+                        std::string(binding->failSignalForTesting ? "recoverystopfail "
+                                                                  : "recoverystop ") +
+                        connection->nonce + " " + binding->request + " " +
+                        std::to_string(binding->pid) + " " + binding->jail) < 0)
+                    binding->result = KitRecoveryBinding::Result::Failed;
+            }
+            catch (const std::exception&)
+            {
+                binding->result = KitRecoveryBinding::Result::Failed;
+            }
+        });
+}
+#endif
+
 void ForKitProcWSHandler::handleMessage(const std::vector<char> &data)
 {
     LOG_TRC("ForKitProcWSHandler: handling incoming [" << COOLProtocol::getAbbreviatedMessage(data.data(), data.size()) << "].");
     const std::string firstLine = COOLProtocol::getFirstLine(data.data(), data.size());
+#if ENABLE_DEBUG && defined(__linux__) && !DOCS_SHARE_PROCESS
+    if (handleRecoveryMessage(recovery, std::string(data.data(), data.size())))
+        return;
+#endif
     const StringVector tokens = StringVector::tokenize(firstLine.data(), firstLine.size());
 
     if (tokens.startsWith(0, "segfaultcount"))
@@ -3546,6 +3941,9 @@ private:
                     LOG_ASSERT_MSG(socket->getInBuffer().empty(), "Unexpected data in prisoner socket");
                     socket->getInBuffer().clear();
                     PrisonerPoll->setForKitProcess(COOLWSD::ForKitProc);
+#if ENABLE_DEBUG && defined(__linux__) && !DOCS_SHARE_PROCESS
+                    registerRecoveryForKit(COOLWSD::ForKitProc, configId);
+#endif
                 }
                 else
                 {
@@ -3559,6 +3957,9 @@ private:
                                 << "; dropping duplicate");
                         return;
                     }
+#if ENABLE_DEBUG && defined(__linux__) && !DOCS_SHARE_PROCESS
+                    registerRecoveryForKit(it->second, configId);
+#endif
                     OutstandingSubForKitSpawns.erase(configId);
                     LastSubForKitSpawnRequestTimes.erase(configId);
                     LOG_ASSERT_MSG(socket->getInBuffer().empty(), "Unexpected data in prisoner socket");
@@ -3696,6 +4097,9 @@ private:
             (void)scriptControlCompatible;
 #endif
 
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+            registerRecoveryKit(child);
+#endif
             if (!Util::isMobileApp())
                 UNITWSD_CALL(newChild(child));
 

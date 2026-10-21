@@ -452,8 +452,103 @@ std::string DocumentBroker::agentScriptForTesting(std::string_view action, std::
 {
     ASSERT_CORRECT_THREAD();
 #if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
-    if (!UnitWSD::isUnitTesting() || _agentRetirements.empty())
+    if (!UnitWSD::isUnitTesting())
         return {};
+    if (action == "recoveryPolicyForTesting")
+        return verifyAgentRecoveryPolicyForTesting();
+    if (_agentRetirements.empty())
+        return {};
+    if (action == "recoveryPublication")
+        return _agentRecoveryPublicationUnresolved ? "unresolved" : "settled";
+    if (action == "recoveryHostQuiescedForTesting")
+    {
+        // The controlled host fixture has drained its actual queued write before this call.
+        // This is harness teardown, not a product reconciliation or a new protocol command.
+        if (!_agentRecoveryPublicationUnresolved || _agentScript)
+            return "invalid";
+        _agentHardRecovery = std::make_unique<AgentHardRecovery>();
+        auto& recovery = *_agentHardRecovery;
+        recovery.child = _childProcess;
+        recovery.binding = _childProcess->recoveryBinding();
+        recovery.identity.generation = _childProcess->scriptGeneration();
+        recovery.terminal = true;
+        recovery.phase = AgentHardRecovery::Phase::ExitPending;
+        recovery.observationDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        _childProcess->requestTermination();
+        return "closing";
+    }
+    if (action == "recoveryRequests")
+    {
+        const auto binding = _childProcess->recoveryBinding();
+        return binding ? std::to_string(binding->requestAttemptsForTesting.load()) : "missing";
+    }
+    if (action == "recoverySignalFailure")
+    {
+        const auto binding = _childProcess->recoveryBinding();
+        if (!binding)
+            return "missing";
+        binding->failSignalForTesting = true;
+        return "armed";
+    }
+    if (action == "recoveryForKitLost")
+    {
+        const auto binding = _childProcess->recoveryBinding();
+        if (!binding)
+            return "missing";
+        binding->connection->connected = false; // Same observation as the original handler's EOF.
+        return "lost";
+    }
+    if (action == "recoveryTerminal")
+        return _agentHardRecovery && _agentHardRecovery->terminal ? "terminal" : "pending";
+    if (action == "recoveryRequestExitForTesting")
+    {
+        if (!_agentHardRecovery || !_agentHardRecovery->terminal)
+            return "pending";
+        _agentHardRecovery->binding->connection->connected = true;
+        _childProcess->requestTermination(); // Known unwind; real parent reap still required.
+        return "closing";
+    }
+    if (action == "recoveryHoldReceipt")
+    {
+        if (const auto binding = _childProcess->recoveryBinding())
+            binding->holdReceiptForTesting = true;
+        return "held";
+    }
+    if (action == "recoveryReleaseReceipt")
+    {
+        const auto binding = _childProcess->recoveryBinding();
+        if (!binding || !binding->heldReceiptForTesting)
+            return "missing";
+        binding->holdReceiptForTesting = false;
+        binding->result = KitRecoveryBinding::Result::Reaped;
+        return "released"; // Uses a real receipt intercepted above, never a synthetic exit.
+    }
+    if (action == "recoveryDisconnect")
+    {
+        disconnectedFromKit(true);
+        closeDocument("test-disconnect");
+        terminateChild("test-disconnect");
+        stop("test-disconnect");
+        return agentRecoveryFenced() && !_stop && _childProcess->getPid() > 0 ? "retained" : "lost";
+    }
+    if (action == "recovery")
+    {
+#if ENABLE_DEBUG
+        if (!_agentHardRecovery)
+            return "idle";
+        switch (_agentHardRecovery->phase)
+        {
+            case AgentHardRecovery::Phase::Grace:
+                return "grace";
+            case AgentHardRecovery::Phase::ExitPending:
+                return "exitpending";
+            case AgentHardRecovery::Phase::ExitConfirmed:
+                return "exitconfirmed";
+            case AgentHardRecovery::Phase::FailedFenced:
+                return "failedfenced";
+        }
+#endif
+    }
     if (action == "dropReserved")
         _agentScriptDropReplyForTesting = ScriptCancellation::ReplyStatus::Reserved;
     else if (action == "dropStopApplied")
@@ -497,6 +592,206 @@ std::string DocumentBroker::agentScriptForTesting(std::string_view action, std::
     return {};
 }
 #endif
+
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+namespace
+{
+std::atomic<unsigned> AgentRecoverySlots{ 0 };
+bool hardRecoveryConfigured()
+{
+    // No production override: restart containment exists only in the controlled harness.
+    return UnitWSD::isUnitTesting() &&
+           ConfigUtil::getBool("agent_script.hard_recovery_enabled", false);
+}
+} // namespace
+void DocumentBroker::recordAgentPublicationResult(bool settled)
+{
+    // A failed client response can leave a host write queued. Timestamp/hash reads cannot
+    // establish that it will never arrive. Once uncertain, only external quiescence can settle it.
+    if (settled || !UnitWSD::isUnitTesting())
+        return;
+    _agentRecoveryPublicationUnresolved = true;
+    if (hardRecoveryConfigured() && _agentRecoverySlot)
+    {
+        _agentRecoveryFence = true;
+        for (const auto& entry : _sessions)
+            entry.second->sendTextFrame(
+                "agentrecovery: state=recoveryFailedPublication humanviews=interrupted "
+                "unsaved=may_be_lost replay=never");
+    }
+}
+bool DocumentBroker::reserveAgentRecovery()
+{
+    if (!hardRecoveryConfigured())
+        return true;
+    if (_agentRecoveryPublicationUnresolved)
+        return false;
+    const auto binding = _childProcess ? _childProcess->recoveryBinding() : nullptr;
+    if (!binding || !binding->connection->authenticated || !binding->connection->connected ||
+        binding->result != KitRecoveryBinding::Result::Ready)
+        return false;
+    if (_agentRecoverySlot)
+        return true;
+    unsigned count = AgentRecoverySlots.load();
+    do
+    {
+        if (count >= 64)
+            return false;
+    } while (!AgentRecoverySlots.compare_exchange_weak(count, count + 1));
+    _agentRecoverySlot = std::shared_ptr<void>(this, [](void*) { --AgentRecoverySlots; });
+    return true;
+}
+std::string DocumentBroker::verifyAgentRecoveryPolicyForTesting()
+{
+    ASSERT_CORRECT_THREAD();
+    if (!UnitWSD::isUnitTesting() || !hardRecoveryConfigured() || _agentRecoverySlot ||
+        !_agentRetirements.empty() || _agentRecoveryFence)
+        return "invalid";
+    const auto binding = _childProcess ? _childProcess->recoveryBinding() : nullptr;
+    if (!binding || !binding->connection->authenticated || !binding->connection->connected ||
+        binding->result != KitRecoveryBinding::Result::Ready)
+        return "pending";
+
+    // Reserve the remaining capacity only for this synchronous fixture. Other brokers
+    // still see the real atomic limit; release precisely the slots acquired here.
+    {
+        unsigned previous = AgentRecoverySlots.load();
+        do
+        {
+            if (previous > 64)
+                return "invalid-count";
+        } while (!AgentRecoverySlots.compare_exchange_weak(previous, 64));
+        struct Release
+        {
+            unsigned count;
+            ~Release() { AgentRecoverySlots.fetch_sub(count); }
+        } release{ 64 - previous };
+        if (reserveAgentRecovery() || _agentRecoverySlot || _agentRecoveryFence)
+            return "quota-bypassed";
+        recordAgentPublicationResult(false);
+        if (!_agentRecoveryPublicationUnresolved || _agentRecoveryFence || _agentRecoverySlot)
+            return "unregistered-retained";
+    }
+    if (reserveAgentRecovery() || _agentRecoveryFence || _agentRecoverySlot)
+        return "uncertain-admitted";
+    return "passed";
+}
+void DocumentBroker::agentRecoveryState(std::string_view state)
+{
+    if (!_agentHardRecovery)
+        return;
+    // The original script identity remains available even after its transport disconnects.
+    for (const auto& entry : _sessions)
+        entry.second->sendTextFrame(
+            "agentrecovery: generation=" + _agentHardRecovery->identity.generation + " execution=" +
+            _agentHardRecovery->identity.execution + " state=" + std::string(state) +
+            " humanviews=interrupted unsaved=may_be_lost replay=never");
+}
+void DocumentBroker::beginAgentRecovery()
+{
+    if (!_agentRecoverySlot || !_agentScript || !_agentScript->dispatched)
+        return;
+    auto recovery = std::make_unique<AgentHardRecovery>();
+    recovery->child = _childProcess;
+    recovery->binding = _childProcess->recoveryBinding();
+    recovery->identity = _agentScript->identity;
+    recovery->unwindDeadline = _agentScript->deadline;
+    recovery->publicationUncertain = _agentRecoveryPublicationUnresolved ||
+                                     (_uploadRequest && !_uploadRequest->isComplete()) ||
+                                     isAsyncUploading();
+    _agentHardRecovery = std::move(recovery);
+    // Set before sending the execution frame or returning to the poll.
+    _agentRecoveryFence = true;
+    _pendingUrpResponse.clear();
+    _pendingUrpResponseTime.reset();
+}
+#endif
+
+void DocumentBroker::pollAgentRecovery()
+{
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (!_agentHardRecovery)
+        return;
+    auto& recovery = *_agentHardRecovery;
+    const auto now = std::chrono::steady_clock::now();
+    const auto fail = [&](std::string_view reason)
+    {
+        if (recovery.phase != AgentHardRecovery::Phase::FailedFenced)
+            agentRecoveryState(reason);
+        recovery.phase = AgentHardRecovery::Phase::FailedFenced;
+    };
+    const auto binding = recovery.binding;
+    if (!binding || recovery.child != _childProcess ||
+        recovery.identity.generation != recovery.child->scriptGeneration())
+    {
+        fail("recoveryFailedIdentity");
+        return;
+    }
+    if (binding->result == KitRecoveryBinding::Result::Reaped)
+    {
+        if (!recovery.exitReported)
+        {
+            recovery.exitReported = true;
+            recovery.child->acknowledgeRecoveryExit();
+            agentRecoveryState("oldGenerationTerminated");
+            recovery.phase = AgentHardRecovery::Phase::ExitConfirmed;
+            recovery.observationDeadline = now + std::chrono::seconds(30);
+        }
+        // A submitted upload may still reach storage. Do not reopen while it is outstanding.
+        if (recovery.publicationUncertain || (_uploadRequest && !_uploadRequest->isComplete()) ||
+            isAsyncUploading())
+        {
+            if (now >= recovery.observationDeadline)
+                fail("recoveryFailedStorage");
+            return;
+        }
+        agentRecoveryState("recoverySettled");
+        for (const auto& entry : _sessions)
+            entry.second->shutdownGoingAway("hard recovery: unsaved changes may be lost");
+        _closeReason = "agent-hard-recovery";
+        _stop = true; // Ordinary close/save paths remain fenced until the poll ends.
+        return;
+    }
+    if (!binding->connection->connected)
+    {
+        fail("recoveryFailedForKitLost");
+        return;
+    }
+    if (binding->result == KitRecoveryBinding::Result::Failed)
+    {
+        fail("recoveryFailedRequest");
+        return;
+    }
+    if (recovery.phase == AgentHardRecovery::Phase::FailedFenced)
+        return;
+    if (recovery.phase == AgentHardRecovery::Phase::Grace)
+    {
+        if (recovery.terminal && _agentScript && _agentScript->failed)
+        {
+            // Known unwind with a failed control channel: ask for ordinary exit, retain fence.
+            recovery.child->requestTermination();
+            recovery.phase = AgentHardRecovery::Phase::ExitPending;
+            recovery.observationDeadline = now + std::chrono::seconds(10);
+            return;
+        }
+        if (now < recovery.unwindDeadline)
+            return;
+        if (recovery.terminal)
+        {
+            failAgentScript();
+            return; // Next poll requests graceful exit after the known unwind.
+        }
+        failAgentScript();
+        agentRecoveryState("hardRecoveryRequested");
+        recovery.requested = true;
+        recovery.phase = AgentHardRecovery::Phase::ExitPending;
+        recovery.observationDeadline = now + std::chrono::seconds(10);
+        COOLWSD::requestKitRecovery(binding);
+    }
+    else if (now >= recovery.observationDeadline)
+        fail("recoveryFailedExitUnconfirmed");
+#endif
+}
 
 bool DocumentBroker::hasAgentScript() const
 {
@@ -558,6 +853,12 @@ void DocumentBroker::failAgentScript()
     if (!_agentScript || _agentScript->failed)
         return;
     _agentScript->failed = true;
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (_agentHardRecovery)
+        _agentHardRecovery->unwindDeadline =
+            std::min(_agentHardRecovery->unwindDeadline,
+                     std::chrono::steady_clock::now() + std::chrono::seconds(5));
+#endif
     _agentScript->source.clear();
     if (const auto child = _agentScript->child.lock())
         child->closeScriptControl(); // EOF cancels the retained token, without proving unwind.
@@ -591,6 +892,11 @@ bool DocumentBroker::handleAgentScript(const std::shared_ptr<ClientSession>& ses
             return true;
         _agentScript->stopRequested = true;
         _agentScript->stopDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        if (_agentHardRecovery)
+            _agentHardRecovery->unwindDeadline =
+                std::min(_agentHardRecovery->unwindDeadline, _agentScript->stopDeadline);
+#endif
         if (ScriptCancellation::sendStop(_childProcess->scriptControlFD(),
                                          _agentScript->identity) !=
             ScriptCancellation::Delivery::Sent)
@@ -622,6 +928,10 @@ bool DocumentBroker::handleAgentScript(const std::shared_ptr<ClientSession>& ses
         return reject("unavailable");
     if (agentRenewalBusy())
         return reject("busy");
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (agentRecoveryFenced() || (hardRecoveryConfigured() && !reserveAgentRecovery()))
+        return reject("recoverypending");
+#endif
     auto execution = std::make_unique<AgentScript>();
     execution->identity = { registration.scriptGeneration, registration.epoch,
                             registration.renderId,         fields[2],
@@ -722,6 +1032,13 @@ void DocumentBroker::pollAgentScript()
         }
         if (_agentScript->terminal && _agentScript->stopResolved)
         {
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+            if (_agentHardRecovery && _agentHardRecovery->phase == AgentHardRecovery::Phase::Grace)
+            {
+                _agentHardRecovery.reset();
+                _agentRecoveryFence = _agentRecoveryPublicationUnresolved;
+            }
+#endif
             _agentScript.reset();
             return;
         }
@@ -756,6 +1073,9 @@ void DocumentBroker::pollAgentScript()
         _agentScript->dispatched = true; // A failed write has an unknown delivery outcome.
         _agentScript->deadline =
             now + std::chrono::milliseconds(_agentScript->timeout) + std::chrono::seconds(5);
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        beginAgentRecovery();
+#endif
         std::string frame = "child-" + _agentScript->identity.renderSession +
                             " agentscriptexecute " + scriptIdentityText(_agentScript->identity) +
                             " timeout=" + std::to_string(_agentScript->timeout) + '\n' +
@@ -790,10 +1110,27 @@ bool DocumentBroker::handleAgentScriptResult(const std::string& message,
     // A closed cancellation channel may still deliver its terminal engine result. It does not
     // restore authority or make the registration reusable after uncertain execution.
     const auto owner = _agentScript->transport.lock();
-    if (agentScriptAuthority(owner, false))
+    bool publishTerminal = true;
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    publishTerminal =
+        !_agentHardRecovery || _agentHardRecovery->phase == AgentHardRecovery::Phase::Grace;
+#endif
+    if (publishTerminal && agentScriptAuthority(owner, false))
         owner->sendTextFrame("agentscriptresult: " + scriptIdentityText(_agentScript->identity) +
                              '\n' + message.substr(prefix.size()));
     _agentScript->terminal = true;
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (_agentHardRecovery)
+    {
+        _agentHardRecovery->terminal = true;
+        if (_agentHardRecovery->phase == AgentHardRecovery::Phase::Grace && !_agentScript->failed &&
+            (!_agentScript->stopRequested || _agentScript->stopResolved))
+        {
+            _agentHardRecovery.reset();
+            _agentRecoveryFence = _agentRecoveryPublicationUnresolved;
+        }
+    }
+#endif
     if (!_agentScript->failed && (!_agentScript->stopRequested || _agentScript->stopResolved))
         _agentScript.reset();
     return true;
@@ -804,6 +1141,8 @@ bool DocumentBroker::handleAgentScriptResult(const std::string& message,
 
 bool DocumentBroker::agentRenewalBusy() const
 {
+    if (agentRecoveryFenced())
+        return true;
 #if !MOBILEAPP
     if (_checkFileInfo)
         return true;
@@ -1107,6 +1446,8 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
 #else
     if (Util::isKitInProcess() || !_childProcess)
         return reject();
+    if (agentRecoveryFenced())
+        return reject();
     if (message == "agentcapabilities")
     {
         std::string capabilities = "agentcapabilities:retirement=1 renewal=1";
@@ -1119,6 +1460,10 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
             capabilities += std::string(" scriptcontrol=2 scriptcallbacks=") +
                             (_childProcess->supportsRawSourceCallbacks() ? "1" : "0") +
                             " generation=" + _childProcess->scriptGeneration();
+#endif
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        if (hardRecoveryConfigured())
+            capabilities += " hardrecovery=test-only humanviews=interrupted unsaved=may_be_lost";
 #endif
         session->sendTextFrame(capabilities);
         return true;
@@ -1160,6 +1505,10 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
         if (transport && transport != session)
             return reject();
 
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        if (!reserveAgentRecovery())
+            return reject();
+#endif
         auto record = std::make_unique<AgentRetirementRecord>(session->getAuthorization());
         record->epoch = fields[0];
         record->viewId = view;
@@ -1786,7 +2135,14 @@ void DocumentBroker::pollThread()
         };
 
         pollAgentScript();
-        if (hasAgentScript())
+        pollAgentRecovery();
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        if (_agentHardRecovery &&
+            _agentHardRecovery->phase == AgentHardRecovery::Phase::FailedFenced)
+            pollTimeout = std::chrono::seconds(1);
+        else
+#endif
+            if (hasAgentScript())
             pollTimeout =
                 std::min<std::chrono::microseconds>(pollTimeout, std::chrono::milliseconds(50));
         expireAgentRenewal();
@@ -1800,6 +2156,13 @@ void DocumentBroker::pollThread()
             capPollTimeout(_lockCtx->nextRefresh());
 
         _poll->poll(pollTimeout);
+
+        if (agentRecoveryFenced())
+        {
+            if (_stop)
+                break;
+            continue; // Keep callbacks alive; bypass autosave, idle unload and close deadlines.
+        }
 
         // Consolidate updates across multiple processed events.
         processBatchUpdates();
@@ -2398,6 +2761,7 @@ void DocumentBroker::pollThread()
 #endif
 
     clearCaches();
+    _agentRecoveryFence = false; // Only after no-save teardown; cleanup may now remove the broker.
 
     LOG_INF("Finished docBroker polling thread for docKey [" << _docKey << ']');
 }
@@ -2471,6 +2835,9 @@ void DocumentBroker::joinThread()
 
 void DocumentBroker::stop(const std::string_view reason)
 {
+    if (agentRecoveryFenced())
+        return;
+
     if (_closeReason.empty() || _closeReason == reason)
     {
         LOG_DBG("Stopping DocumentBroker for docKey [" << _docKey << "] with reason: " << reason);
@@ -4695,6 +5062,9 @@ void DocumentBroker::clearSaveResponseTracking(const bool rejectResponse)
 void DocumentBroker::handleSaveResponse(const std::shared_ptr<ClientSession>& session,
                                         const Poco::JSON::Object::Ptr& json)
 {
+    if (agentRecoveryFenced())
+        return;
+
     ASSERT_CORRECT_THREAD();
 
     // Validate before consuming the response slot. An incomplete native message cannot
@@ -5152,6 +5522,9 @@ void DocumentBroker::uploadToStorageInternal(const std::shared_ptr<ClientSession
                                              const std::string& saveAsFilename, const bool isRename,
                                              const bool isExport, const bool force)
 {
+    if (agentRecoveryFenced())
+        return;
+
     ASSERT_CORRECT_THREAD();
     LOG_ASSERT_MSG(session, "Must have a valid ClientSession");
 
@@ -5293,6 +5666,19 @@ void DocumentBroker::uploadToStorageInternal(const std::shared_ptr<ClientSession
                 // [[fallthrough]]
         }
 
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        recordAgentPublicationResult(asyncUp.result().isDefiniteFailure());
+#endif
+        if (agentRecoveryFenced())
+        {
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+            if (_agentHardRecovery)
+                _agentHardRecovery->publicationUncertain =
+                    _agentRecoveryPublicationUnresolved || !asyncUp.result().isDefiniteFailure();
+#endif
+            abandonAgentSaveAttempt("hard recovery fenced failed publication");
+            return;
+        }
         LOG_WRN("Failed to upload [" << _docKey << "] asynchronously. "
                                      << DocumentState::name(_docState.activity()));
         _storageManager.setLastUploadResult(false);
@@ -5547,6 +5933,26 @@ void DocumentBroker::handleUploadToStorageSuccessful(const StorageBase::UploadRe
 
 void DocumentBroker::handleUploadToStorageResponse(const StorageBase::UploadResult& uploadResult)
 {
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    recordAgentPublicationResult(uploadResult.getResult() ==
+                                     StorageBase::UploadResult::Result::OK ||
+                                 uploadResult.isDefiniteFailure());
+#endif
+
+    if (agentRecoveryFenced())
+    {
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        if (_agentHardRecovery)
+            _agentHardRecovery->publicationUncertain =
+                _agentRecoveryPublicationUnresolved ||
+                (uploadResult.getResult() != StorageBase::UploadResult::Result::OK &&
+                 !uploadResult.isDefiniteFailure());
+#endif
+        // Completion alone does not settle an uncertain remote write. Never launch another.
+        abandonAgentSaveAttempt("hard recovery fenced publication");
+        return;
+    }
+
     assert(_uploadRequest && "Expected to have a valid UploadRequest instance");
 
     const auto uploadSession = _uploadRequest->session();
@@ -6068,6 +6474,9 @@ bool DocumentBroker::isBackgroundSaveWorking(bool canBackground) const
 bool DocumentBroker::autoSave(const bool force, const bool dontSaveIfUnmodified,
                               const bool finalWrite)
 {
+    if (agentRecoveryFenced())
+        return false;
+
     ASSERT_CORRECT_THREAD();
 
     // If we aren't saving already.
@@ -6354,6 +6763,9 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
                                  const std::string& extendedData, bool allowBackground,
                                  const std::shared_ptr<ClientSession>& uploadSession)
 {
+    if (agentRecoveryFenced())
+        return false;
+
     ASSERT_CORRECT_THREAD();
 
     LOG_ASSERT_MSG(session, "Got null ClientSession");
@@ -6513,6 +6925,9 @@ bool DocumentBroker::isDocumentSettingsLive(
 std::size_t DocumentBroker::addSession(const std::shared_ptr<ClientSession>& session,
                                        std::unique_ptr<WopiStorage::WOPIFileInfo> wopiFileInfo)
 {
+    if (agentRecoveryFenced())
+        throw std::runtime_error("Document recovery remains unresolved");
+
     ASSERT_CORRECT_THREAD();
 
     const std::string id = session->getId();
@@ -6757,6 +7172,14 @@ void DocumentBroker::rememberViewPosition(const ClientSession& session)
 
 std::size_t DocumentBroker::removeSession(const std::shared_ptr<ClientSession>& session)
 {
+    if (agentRecoveryFenced())
+    {
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        failAgentScript();
+#endif
+        return _sessions.size();
+    }
+
     ASSERT_CORRECT_THREAD();
     if (session)
         fenceAgentRetirement(session->getId());
@@ -7122,6 +7545,9 @@ void DocumentBroker::disconnectSessionInternal(const std::shared_ptr<ClientSessi
 
 void DocumentBroker::finalRemoveSession(const std::shared_ptr<ClientSession>& session)
 {
+    if (agentRecoveryFenced())
+        return;
+
     ASSERT_CORRECT_THREAD();
 
     LOG_ASSERT_MSG(session, "Got null ClientSession");
@@ -7172,7 +7598,7 @@ std::shared_ptr<ClientSession> DocumentBroker::createNewClientSession(
 
     try
     {
-        if (isMarkedToDestroy() || _docState.isCloseRequested())
+        if (agentRecoveryFenced() || isMarkedToDestroy() || _docState.isCloseRequested())
         {
             LOG_WRN("DocBroker [" << getDocKey()
                                   << "] is unloading. Rejecting client request to load session ["
@@ -8802,6 +9228,9 @@ std::string DocumentBroker::applyViewSetting(const std::string& message, const s
 bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& session,
                                     const std::string& message, bool binary)
 {
+    if (agentRecoveryFenced())
+        return false;
+
     ASSERT_CORRECT_THREAD();
     LOG_ASSERT_MSG(session, "Must have a valid ClientSession");
 
@@ -8997,6 +9426,9 @@ bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& sessio
 
 bool DocumentBroker::forwardToClient(const std::shared_ptr<Message>& payload)
 {
+    if (agentRecoveryFenced())
+        return false;
+
     ASSERT_CORRECT_THREAD();
 
     const std::string& prefix = payload->forwardToken();
@@ -9099,6 +9531,9 @@ void DocumentBroker::shutdownClients(const std::string_view closeReason)
 
 void DocumentBroker::terminateChild(const std::string_view closeReason)
 {
+    if (agentRecoveryFenced())
+        return;
+
     ASSERT_CORRECT_THREAD();
 
     LOG_INF("Terminating doc [" << _docKey << "] with reason: " << closeReason);
@@ -9117,6 +9552,9 @@ void DocumentBroker::terminateChild(const std::string_view closeReason)
 
 void DocumentBroker::closeDocument(const std::string& reason)
 {
+    if (agentRecoveryFenced())
+        return;
+
     ASSERT_CORRECT_THREAD();
 
 #if !MOBILEAPP
@@ -9153,6 +9591,16 @@ void DocumentBroker::disconnectedFromKit(bool unexpected)
 {
     ASSERT_CORRECT_THREAD();
 
+    if (agentRecoveryFenced())
+    {
+        _docState.setKitDisconnected(DocumentState::KitDisconnected::Unexpected);
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        failAgentScript();
+#endif
+        clearSaveResponseTracking(true);
+        abandonAgentSaveAttempt("Kit disconnected during recovery");
+        return; // Socket EOF is not process exit; keep polling for the original parent receipt.
+    }
     // Always set the kit disconnected flag.
     _docState.setKitDisconnected(unexpected ? DocumentState::KitDisconnected::Unexpected
                                             : DocumentState::KitDisconnected::Normal);
@@ -9820,6 +10268,9 @@ std::string DocumentBroker::getAbsoluteMediaPath(std::string localPath)
 
 void DocumentBroker::onUrpMessage(const char* data, size_t len)
 {
+    if (agentRecoveryFenced())
+        return;
+
     if (_retirementNegotiated && !_agentRetirements.empty())
     {
         const auto phase = _agentRetirements.back()->phase;

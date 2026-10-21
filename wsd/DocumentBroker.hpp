@@ -66,6 +66,7 @@ class CheckFileInfo;
 class DocumentBroker;
 class LockContext;
 class PresetsInstallTask;
+struct KitRecoveryBinding;
 class TileCache;
 class Message;
 class SlideLayerCacheMap;
@@ -701,6 +702,8 @@ public:
                                     std::string_view bearerToken, const std::string& epoch,
                                     const std::string& requestId);
     bool hasAgentScript() const;
+    bool agentRecoveryFenced() const { return _agentRecoveryFence.load(); }
+    void pollAgentRecovery();
     bool handleAgentScript(const std::shared_ptr<ClientSession>& session,
                            const std::string& message);
     void pollAgentScript();
@@ -2280,6 +2283,36 @@ private:
                               bool requireChannel = true) const;
     void agentScriptState(std::string_view state);
     void failAgentScript();
+#endif
+    std::atomic<bool> _agentRecoveryFence{ false };
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    struct AgentHardRecovery
+    {
+        enum class Phase
+        {
+            Grace,
+            ExitPending,
+            ExitConfirmed,
+            FailedFenced
+        };
+        Phase phase = Phase::Grace;
+        std::shared_ptr<ChildProcess> child;
+        std::shared_ptr<KitRecoveryBinding> binding;
+        ScriptCancellation::Identity identity;
+        std::chrono::steady_clock::time_point unwindDeadline, observationDeadline;
+        bool terminal = false;
+        bool requested = false;
+        bool exitReported = false;
+        bool publicationUncertain = false;
+    };
+    std::unique_ptr<AgentHardRecovery> _agentHardRecovery;
+    std::shared_ptr<void> _agentRecoverySlot;
+    bool _agentRecoveryPublicationUnresolved = false;
+    void recordAgentPublicationResult(bool settled);
+    bool reserveAgentRecovery();
+    std::string verifyAgentRecoveryPolicyForTesting();
+    void beginAgentRecovery();
+    void agentRecoveryState(std::string_view state);
 #endif
     std::vector<std::unique_ptr<AgentRetirementRecord>> _agentRetirements;
     bool _retirementNegotiated = false;

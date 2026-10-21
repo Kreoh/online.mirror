@@ -2126,3 +2126,68 @@ The independent reader is joined on Kit disconnect and shutdown. URP-enabled Kit
 background fork before thread suspension. Descriptor partial delivery is a failure and is
 never retried with the same ancillary descriptors. Unsupported platforms advertise no
 controlled-execution capability. Source review alone is not runtime validation.
+
+
+Test-only blocked native-call recovery
+-------------------------------------
+
+Debug isolated Linux unit processes may set the unit configuration override
+agent_script.hard_recovery_enabled=true. It defaults false and has no production
+configuration entry. ENABLE_DEBUG and UnitWSD::isUnitTesting() are mandatory.
+Production enablement remains unavailable until an external startup/ingress hold
+after WSD termination can independently reconcile old Kits and outstanding writes.
+
+Enabled agent capabilities include hardrecovery=test-only humanviews=interrupted
+unsaved=may_be_lost. No external recovery command is added. Dispatched execution
+enters Grace with a retained broker/document-key fence, blocked saves/publication,
+raw URP and editing input. Terminal completion can release a healthy Grace.
+The absolute unwind deadline is the earliest of dispatch timeout plus 5 seconds,
+Stop plus 5 seconds, or control failure plus 5 seconds. StopApplied is not unwind.
+
+The original authenticated ForKit connection reports PID+jail births. Subforkit
+eligibility also requires a PID+configuration birth on the authenticated original
+main ForKit connection. A fresh connection nonce identifies each instance; no
+current-configuration lookup is used for recovery. Pending birth matching expires
+after 5 seconds and has a 256-entry bound. The initial Kit birth is emitted after
+the ForKit hello from its retained childJails entry; inherited recovery state is
+cleared on subforkit creation. At most 256 live bindings and 64 recovery broker
+slots are retained. Exhaustion refuses recovery-enabled admission.
+
+Internal recoveryhello, recoverybirth, recoverysub, recoverystop, recoveryfailed
+and recoveryexit frames are limited to 512 bytes. Each stop carries the original
+connection nonce, request nonce, PID and jail ID. The owning parent checks its
+unreaped child map on its single reap/command thread before signalling. It retains
+at most 64 outstanding requests and caches at most 256 actual reap receipts for
+60 seconds. A duplicate request never sends another signal. Unknown or expired
+identity does not establish exit.
+
+Only a matching waitid receipt produces agentrecovery state=oldGenerationTerminated.
+hardRecoveryRequested reports the fence and disruptive request. Exit observation
+is bounded to 10 seconds; storage observation to 30 seconds. Failed observation
+reports recoveryFailed... and retains the fence, broker and original process
+binding. Socket EOF and signal delivery do not prove termination. Late exact
+evidence may settle the same record. recoverySettled permits no-save disposal
+only when the old process is reaped and no outstanding or uncertain publication
+can reach storage. Fresh load then uses a new generation. There is no script replay.
+
+Every recovery notice includes humanviews=interrupted unsaved=may_be_lost replay=never.
+All views on the affected document can lose unsaved changes. ForKit removes the
+old jail after reap; this route makes no quarantine or rollback guarantee.
+Independent documents remain outside the affected broker fence.
+
+An ambiguous upload result is sticky for the retained broker, including a result
+received before controlled execution admission. A broker that already owns a
+reserved recovery slot immediately fences that document and refuses execution
+and fresh load. Ordinary unregistered brokers record the uncertainty and refuse
+future recovery admission, but acquire no recovery retention fence. Exhausted
+quota similarly refuses admission without retaining another broker. Later timestamp reads,
+successful writes or child reap cannot prove that an older host write will never
+arrive, so they do not clear this uncertainty. This increment has no product
+reconciliation command: such a document cannot reopen within the retained WSD
+lifetime without independently established external storage quiescence.
+
+Debug unit fixtures additionally exercise internal recoverystopfail and
+recoveryverify frames on the original authenticated ForKit connection. They are
+unavailable to browser protocol callers. C++ unit-only lifecycle seams inject
+connection observation failure and drain a controlled host queue for teardown;
+they do not provide a production reconciliation route.

@@ -9,6 +9,7 @@
 #include <test/helpers.hpp>
 #include <test/lokassert.hpp>
 #include <wsd/ClientSession.hpp>
+#include <wsd/COOLWSD.hpp>
 #include <wsd/DocumentBroker.hpp>
 #include <wsd/Process.hpp>
 #include <Poco/Util/LayeredConfiguration.h>
@@ -139,6 +140,9 @@ class AgentScriptControlTests final : public WopiTestServer
     std::atomic<bool> _otherLoaded{ false };
     std::shared_ptr<ClientSession> _browser;
     std::atomic<bool> _browserLoaded{ false };
+    std::atomic<bool> _freshLoad{ false }, _freshLoaded{ false };
+    std::atomic<bool> _hostResponded{ false }, _hostCommitted{ false };
+    std::string _hostBefore, _hostAfter, _hostBeforeRevision, _hostAfterRevision;
 
     void sourceCommand(const std::string& command)
     {
@@ -150,6 +154,64 @@ class AgentScriptControlTests final : public WopiTestServer
             });
     }
 
+    void assertSameDocumentLoadRefused()
+    {
+        initWebsocket("/wopi/files/0?access_token=script-test-token&access_token_ttl=" +
+                      std::to_string(_expiry));
+        const auto refused = getWs()->getWebSocket();
+        WSD_CMD("load url=" + getWopiSrc());
+        LOK_ASSERT(response("error: cmd=load").find("docunloading") != std::string::npos);
+        LOK_ASSERT(refused);
+    }
+    void freshDocumentAfterSettlement(const std::string& oldGeneration,
+                                      const std::shared_ptr<DocumentBroker>& oldBroker)
+    {
+        await(
+            [&]
+            {
+                const auto brokers = COOLWSD::getBrokersTestOnly();
+                return std::find(brokers.begin(), brokers.end(), oldBroker) == brokers.end();
+            });
+        _freshLoad = true;
+        initWebsocket("/wopi/files/0?access_token=script-test-token&agentview=1&access_token_ttl=" +
+                      std::to_string(_expiry));
+        _renderSocket = getWs()->getWebSocket();
+        WSD_CMD("load url=" + getWopiSrc());
+        await([this] { return _freshLoaded.load(); });
+        initWebsocket("/wopi/files/0?access_token=script-test-token&access_token_ttl=" +
+                      std::to_string(_expiry));
+        _socket = getWs()->getWebSocket();
+        registerTransport();
+        LOK_ASSERT(_generation != oldGeneration);
+        LOK_ASSERT(execute(1, "42;").find("\"ok\":42") != std::string::npos);
+    }
+    void respondHeldHost()
+    {
+        socketPoll()->addCallback(
+            [this]
+            {
+                std::lock_guard lock(_httpMutex);
+                LOK_ASSERT(_heldHttp);
+                if (_mode == 28)
+                {
+                    std::istringstream body(_heldBody);
+                    WopiTestServer::handleWopiUpload(_heldRequest, body, _heldHttp);
+                    _hostAfter = getFileContent();
+                    _hostAfterRevision = Util::getIso8601FracformatTime(getFileLastModifiedTime());
+                    _hostCommitted = true;
+                }
+                else
+                {
+                    http::Response reply(_mode == 29 ? http::StatusCode::BadRequest
+                                                     : http::StatusCode::ServiceUnavailable);
+                    if (_mode == 27)
+                        reply.set("Retry-After", "60");
+                    _heldHttp->sendAndShutdown(reply);
+                }
+                _heldHttp.reset();
+                _hostResponded = true;
+            });
+    }
     void await(const std::function<bool()>& predicate)
     {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
@@ -187,7 +249,13 @@ class AgentScriptControlTests final : public WopiTestServer
         const auto capabilities = response("agentcapabilities:");
         LOK_ASSERT(capabilities.find("scriptcontrol=2 scriptcallbacks=1 generation=") !=
                    std::string::npos);
-        _generation = capabilities.substr(capabilities.find("generation=") + 11);
+        _generation = capabilities.substr(capabilities.find("generation=") + 11, 32);
+        if (_mode >= 23)
+            LOK_ASSERT(capabilities.find(
+                           "hardrecovery=test-only humanviews=interrupted unsaved=may_be_lost") !=
+                       std::string::npos);
+        else
+            LOK_ASSERT(capabilities.find("hardrecovery=") == std::string::npos);
         LOK_ASSERT_EQUAL(std::size_t(32), _generation.size());
         send("agentregister epoch=script-test viewid=" + std::to_string(_render->getKitViewId()));
         response("agentregistered:");
@@ -199,7 +267,7 @@ class AgentScriptControlTests final : public WopiTestServer
     }
     std::string response(const std::string& prefix)
     {
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         while (std::chrono::steady_clock::now() < deadline)
         {
             {
@@ -785,6 +853,258 @@ class AgentScriptControlTests final : public WopiTestServer
             response("unitretirement source-drained");
             LOK_ASSERT(browserSocket);
         }
+        else if (_mode >= 27 && _mode <= 29)
+        {
+            _hostBefore = getFileContent();
+            _hostBeforeRevision = Util::getIso8601FracformatTime(getFileLastModifiedTime());
+            LOK_ASSERT(broker(
+                           [this](DocumentBroker& document)
+                           {
+                               return document.startAgentUploadForTesting(_render) ? "started"
+                                                                                   : "blocked";
+                           }) == "started");
+            await([this] { return _httpHeld.load(); });
+            LOK_ASSERT_EQUAL(std::size_t(1), getCountPutFile());
+            LOK_ASSERT(getFileContent() == _hostBefore);
+            expectRejected(request(1, "42;"), "busy");
+            respondHeldHost();
+            await([this] { return _hostResponded.load(); });
+            if (_mode == 27)
+            {
+                await([this] { return state("recoveryPublication") == "unresolved"; });
+                // The 503 reached the client, but the host still owns the actual write body.
+                LOK_ASSERT(getFileContent() == _hostBefore);
+                expectRejected(request(1, "42;"), "busy");
+                assertSameDocumentLoadRefused();
+                LOK_ASSERT_EQUAL(std::string("retained"), state("recoveryDisconnect"));
+                const auto cfiBefore = getCountCheckFileInfo();
+                socketPoll()->addCallback(
+                    [this]
+                    {
+                        std::lock_guard lock(_httpMutex);
+                        setFileContent(_heldBody); // The retained host write finally lands.
+                        _hostAfter = getFileContent();
+                        _hostAfterRevision =
+                            Util::getIso8601FracformatTime(getFileLastModifiedTime());
+                        _hostCommitted = true;
+                    });
+                await([this] { return _hostCommitted.load(); });
+                LOK_ASSERT(!_heldBody.empty() && _hostAfter == _heldBody);
+                LOK_ASSERT(_hostAfterRevision != _hostBeforeRevision);
+                LOK_ASSERT_EQUAL(std::size_t(1), getCountPutFile());
+                LOK_ASSERT_EQUAL(cfiBefore, getCountCheckFileInfo());
+                LOK_ASSERT_EQUAL(std::string("unresolved"), state("recoveryPublication"));
+                assertSameDocumentLoadRefused(); // A new read/revision cannot clear uncertainty.
+                LOK_ASSERT_EQUAL(std::string("closing"), state("recoveryHostQuiescedForTesting"));
+                bool settled = false;
+                for (unsigned i = 0; i < 16 && !settled; ++i)
+                    settled = response("agentrecovery:").find("state=recoverySettled ") !=
+                              std::string::npos;
+                LOK_ASSERT(settled); // Harness teardown still waits for an actual parent reap.
+            }
+            else
+            {
+                await([this] { return _uploadCompleted.load(); });
+                LOK_ASSERT_EQUAL(std::string("settled"), state("recoveryPublication"));
+                LOK_ASSERT_EQUAL(std::size_t(1), getCountPutFile());
+                if (_mode == 28)
+                {
+                    LOK_ASSERT(getFileContent() == _heldBody && _hostCommitted);
+                    LOK_ASSERT(_hostAfterRevision != _hostBeforeRevision);
+                }
+                else
+                {
+                    LOK_ASSERT(getFileContent() == _hostBefore);
+                    LOK_ASSERT(Util::getIso8601FracformatTime(getFileLastModifiedTime()) ==
+                               _hostBeforeRevision);
+                }
+                // Neither a delayed success nor a definite rejection leaves a publication fence.
+                LOK_ASSERT(!broker([](DocumentBroker& document)
+                                   { return document.agentRecoveryFenced() ? "fenced" : ""; })
+                                .size());
+            }
+        }
+        else if (_mode >= 23)
+        {
+            // The controlled harness owns both WSD/ForKit and storage. Production enablement
+            // is compiled out; this fixture does not certify an external restart contract.
+            if (_mode == 26)
+            {
+                send(request(1, "while (true) {}"));
+                const auto tuple = identity(waitState("reservationPending"));
+                waitState("dispatched");
+                auto checked = std::make_shared<std::promise<void>>();
+                auto checkedFuture = checked->get_future();
+                std::shared_ptr<ChildProcess> child;
+                broker(
+                    [&child](DocumentBroker& document)
+                    {
+                        child = document.agentScriptChildForTesting();
+                        return std::string();
+                    });
+                const auto binding = child->recoveryBinding();
+                LOK_ASSERT(binding && binding->originalForKit);
+                COOLWSD::runInPrisonerPollTestOnly(
+                    [binding, child, checked]
+                    {
+                        LOK_ASSERT(COOLWSD::verifyKitRecoveryBindingsForTesting(child));
+                        const auto handler = binding->originalForKit->recoveryHandler();
+                        const auto inject = [&](const std::string& message)
+                        {
+                            handler->handleMessage(
+                                std::vector<char>(message.begin(), message.end()));
+                            LOK_ASSERT(binding->result == KitRecoveryBinding::Result::Ready);
+                        };
+                        inject("recoveryexit " + std::string(32, '0') + " " +
+                               std::to_string(binding->pid) + " " + binding->jail + " 1 0 -");
+                        inject("recoveryexit " + binding->connection->nonce + " " +
+                               std::to_string(binding->pid) + " " + binding->jail + " 1 0 " +
+                               std::string(32, '0'));
+                        inject("recoveryexit " + binding->connection->nonce + " " +
+                               std::to_string(binding->pid) + " " + std::string(16, '0') +
+                               " 1 0 -");
+                        inject("recoverybirth " + binding->connection->nonce + " " +
+                               std::to_string(binding->pid) + " " + binding->jail);
+                        checked->set_value();
+                    });
+                LOK_ASSERT(checkedFuture.wait_for(std::chrono::seconds(10)) ==
+                           std::future_status::ready);
+                COOLWSD::verifyKitRecoveryParentForTesting(binding);
+                await([binding] { return binding->parentChecksForTesting.load() != 0; });
+                LOK_ASSERT_EQUAL(1, binding->parentChecksForTesting.load());
+                send("agentstop " + tuple);
+                response("agentscriptresult:");
+                await([this] { return state("recovery") == "idle"; });
+                LOK_ASSERT(execute(2, "42;").find("\"ok\":42") != std::string::npos);
+            }
+            else
+            {
+                initWebsocket("/wopi/files/0?access_token=script-test-token&access_token_ttl=" +
+                              std::to_string(_expiry));
+                const auto browserSocket = getWs()->getWebSocket();
+                WSD_CMD("load url=" + getWopiSrc());
+                await([this] { return _browserLoaded.load(); });
+                const auto firstRender = _render;
+                const auto firstSocket = _socket;
+                const auto firstGeneration = _generation;
+                std::shared_ptr<http::WebSocketSession> secondRenderSocket, secondSocket;
+                std::string secondGeneration;
+                if (_mode == 23)
+                {
+                    initWebsocket("/wopi/files/"
+                                  "1?access_token=script-test-token&agentview=1&access_token_ttl=" +
+                                  std::to_string(_expiry));
+                    secondRenderSocket = getWs()->getWebSocket();
+                    WSD_CMD("load url=" + getWopiSrc());
+                    await([this] { return _otherLoaded.load(); });
+                    _render = _otherRender;
+                    initWebsocket("/wopi/files/1?access_token=script-test-token&access_token_ttl=" +
+                                  std::to_string(_expiry));
+                    _socket = getWs()->getWebSocket();
+                    registerTransport();
+                    secondSocket = _socket;
+                    secondGeneration = _generation;
+                    LOK_ASSERT(secondGeneration != firstGeneration);
+                    LOK_ASSERT(execute(1, "$internal.createProxy(uno.idl.com.sun.star.util."
+                                          "XStringEscape, 'survivor', "
+                                          "'function(method,args,state) { state.calls++; return "
+                                          "args[0]; }', {calls:0})"
+                                          ".escapeString('second'); 41;")
+                                   .find("\"ok\":41") != std::string::npos);
+                    _render = firstRender;
+                    _socket = firstSocket;
+                    _generation = firstGeneration;
+                }
+                sourceCommand(_mode >= 30 ? "hard-block-short" : "hard-block");
+                response("unitretirement hard-ready");
+                if (_mode == 25)
+                    LOK_ASSERT_EQUAL(std::string("held"), state("recoveryHoldReceipt"));
+                if (_mode == 30)
+                    LOK_ASSERT_EQUAL(std::string("armed"), state("recoverySignalFailure"));
+                send(request(1, "console.log('hard-recovery-block'); 42;", 30000));
+                const auto tuple = identity(waitState("reservationPending"));
+                waitState("dispatched");
+                response("unitretirement hard-entered");
+                LOK_ASSERT_EQUAL(std::string("grace"), state("recovery"));
+                assertSameDocumentLoadRefused();
+                LOK_ASSERT_EQUAL(std::string("blocked"), state("save"));
+                LOK_ASSERT_EQUAL(std::string("blocked"), state("upload"));
+                if (_mode == 24)
+                    LOK_ASSERT_EQUAL(std::string("retained"), state("recoveryDisconnect"));
+                else if (_mode == 31)
+                    LOK_ASSERT_EQUAL(std::string("lost"), state("recoveryForKitLost"));
+                else
+                    send("agentstop " + tuple);
+
+                const auto recoveryState = [this](std::string_view expected)
+                {
+                    for (unsigned i = 0; i < 16; ++i)
+                    {
+                        const auto reply = response("agentrecovery:");
+                        if (reply.find(" state=" + std::string(expected) + " ") !=
+                            std::string::npos)
+                        {
+                            LOK_ASSERT(
+                                reply.find(
+                                    "humanviews=interrupted unsaved=may_be_lost replay=never") !=
+                                std::string::npos);
+                            return;
+                        }
+                    }
+                    LOK_ASSERT_MESSAGE("Expected exact recovery outcome", false);
+                };
+                if (_mode != 31)
+                    recoveryState("hardRecoveryRequested");
+                if (_mode >= 30)
+                {
+                    recoveryState(_mode == 30 ? "recoveryFailedRequest"
+                                              : "recoveryFailedForKitLost");
+                    LOK_ASSERT_EQUAL(std::string("failedfenced"), state("recovery"));
+                    LOK_ASSERT_EQUAL(_mode == 30 ? std::string("1") : std::string("0"),
+                                     state("recoveryRequests"));
+                    assertSameDocumentLoadRefused();
+                    await([this] { return state("recoveryTerminal") == "terminal"; });
+                    LOK_ASSERT_EQUAL(
+                        _mode == 30 ? std::string("1") : std::string("0"),
+                        state("recoveryRequests")); // No replacement or repeated request.
+                    LOK_ASSERT_EQUAL(std::string("closing"),
+                                     state("recoveryRequestExitForTesting"));
+                }
+                if (_mode == 25)
+                {
+                    recoveryState("recoveryFailedExitUnconfirmed");
+                    LOK_ASSERT_EQUAL(std::string("failedfenced"), state("recovery"));
+                    assertSameDocumentLoadRefused();
+                    LOK_ASSERT_EQUAL(std::string("blocked"), state("save"));
+                    LOK_ASSERT_EQUAL(std::string("blocked"), state("upload"));
+                    LOK_ASSERT(
+                        broker([](DocumentBroker& document)
+                               { return document.agentRecoveryFenced() ? "fenced" : "lost"; }) ==
+                        "fenced");
+                    LOK_ASSERT_EQUAL(std::string("released"), state("recoveryReleaseReceipt"));
+                }
+                const auto browserNotice = helpers::getResponseString(
+                    browserSocket, "agentrecovery:", getTestname(), std::chrono::seconds(10));
+                LOK_ASSERT(
+                    browserNotice.find("humanviews=interrupted unsaved=may_be_lost replay=never") !=
+                    std::string::npos);
+                const auto oldBroker = firstRender->getDocumentBroker();
+                recoveryState("oldGenerationTerminated");
+                recoveryState("recoverySettled");
+                LOK_ASSERT(browserSocket);
+                LOK_ASSERT_EQUAL(_mode == 23 ? 1U : 0U, _terminalCount.load());
+                if (_mode == 23)
+                {
+                    _render = _otherRender;
+                    _socket = secondSocket;
+                    _generation = secondGeneration;
+                    LOK_ASSERT(execute(2, "$internal.proxyState('survivor').state.calls + 41;")
+                                   .find("\"ok\":42") != std::string::npos);
+                    LOK_ASSERT(secondRenderSocket);
+                    freshDocumentAfterSettlement(firstGeneration, oldBroker);
+                }
+            }
+        }
         passTest("Controlled execution integration and generation fencing");
     }
 
@@ -794,12 +1114,13 @@ public:
         , _mode(mode)
     {
         setTimeout(std::chrono::seconds(120));
-        if (_mode == 22)
+        if (_mode >= 22)
             setHasKitHooks("unit-agent-control-kit.so");
     }
     void configure(Poco::Util::LayeredConfiguration& config) override
     {
         config.setBool("security.enable_websocket_urp", true);
+        config.setBool("agent_script.hard_recovery_enabled", _mode >= 23);
         if (_mode == 0)
             verifyDescriptorHandOff();
     }
@@ -842,7 +1163,7 @@ public:
     bool handleWopiUpload(const Poco::Net::HTTPRequest& request, std::istream& message,
                           const std::shared_ptr<StreamSocket>& socket) override
     {
-        if (_mode == 18)
+        if (_mode == 18 || (_mode >= 27 && _mode <= 29))
         {
             std::lock_guard lock(_httpMutex);
             LOK_ASSERT(!_heldHttp);
@@ -857,6 +1178,11 @@ public:
     }
     void onDocumentUploaded(bool success) override
     {
+        if (_mode == 28 || _mode == 29)
+        {
+            LOK_ASSERT(success == (_mode == 28));
+            _uploadCompleted = true;
+        }
         if (_mode == 18)
         {
             LOK_ASSERT(success);
@@ -876,11 +1202,19 @@ public:
             else
             {
                 _render = session;
-                _phase = 2;
+                if (_freshLoad)
+                    _freshLoaded = true;
+                else
+                    _phase = 2;
             }
         }
-        else if (_mode == 22)
+        else if (_mode >= 22)
         {
+            if (_mode == 32)
+            {
+                _render = session;
+                _phase = 2;
+            }
             _browser = session;
             _browserLoaded = true;
         }
@@ -895,7 +1229,7 @@ public:
     }
     bool filterChildMessage(const std::vector<char>& payload) override
     {
-        if (std::string_view(payload.data(), payload.size()).starts_with("unitretirement source-"))
+        if (std::string_view(payload.data(), payload.size()).starts_with("unitretirement "))
         {
             std::lock_guard lock(_responsesMutex);
             _responses.emplace_back(payload.begin(), payload.end());
@@ -924,7 +1258,8 @@ public:
         if (data.starts_with("agentscriptstate:") || data.starts_with("agentscriptresult:") ||
             data.starts_with("error: cmd=agentscript") || data.starts_with("agentcapabilities:") ||
             data.starts_with("agentregistered:") || data.starts_with("agentrenewed:") ||
-            data.starts_with("agentretired:"))
+            data.starts_with("agentretired:") || data.starts_with("agentrecovery:") ||
+            data.starts_with("error: cmd=load"))
         {
             std::lock_guard lock(_responsesMutex);
             _responses.emplace_back(data);
@@ -936,9 +1271,9 @@ public:
         if (_phase == 0)
         {
             _phase = 1;
-            initWebsocket(
-                "/wopi/files/0?access_token=script-test-token&agentview=1&access_token_ttl=" +
-                std::to_string(_expiry));
+            initWebsocket(std::string("/wopi/files/0?access_token=script-test-token&") +
+                          (_mode == 32 ? "" : "agentview=1&") +
+                          "access_token_ttl=" + std::to_string(_expiry));
             _renderSocket = getWs()->getWebSocket();
             _renderSocket->markSensitive();
             WSD_CMD("load url=" + getWopiSrc());
@@ -946,6 +1281,22 @@ public:
         else if (_phase == 2)
         {
             _phase = 3;
+            if (_mode == 32)
+            {
+                // An ordinary browser broker has no registered recovery policy owner.
+                std::string result;
+                await(
+                    [this, &result]
+                    {
+                        result = state("recoveryPolicyForTesting");
+                        return result != "pending";
+                    });
+                LOK_ASSERT_EQUAL(std::string("passed"), result);
+                passTest(
+                    "Unregistered publication and exhausted recovery quota do not retain brokers");
+                _phase = 4;
+                return;
+            }
             initWebsocket("/wopi/files/0?access_token=script-test-token&access_token_ttl=" +
                           std::to_string(_expiry));
             _socket = getWs()->getWebSocket();
@@ -975,7 +1326,12 @@ UnitBase** unit_create_wsd_multi()
             new AgentScriptControlTests(16), new AgentScriptControlTests(17),
             new AgentScriptControlTests(18), new AgentScriptControlTests(19),
             new AgentScriptControlTests(20), new AgentScriptControlTests(21),
-            new AgentScriptControlTests(22), nullptr
+            new AgentScriptControlTests(22), new AgentScriptControlTests(23),
+            new AgentScriptControlTests(24), new AgentScriptControlTests(25),
+            new AgentScriptControlTests(26), new AgentScriptControlTests(27),
+            new AgentScriptControlTests(28), new AgentScriptControlTests(29),
+            new AgentScriptControlTests(30), new AgentScriptControlTests(31),
+            new AgentScriptControlTests(32), nullptr
     };
 #else
     return new UnitBase* [] { nullptr };

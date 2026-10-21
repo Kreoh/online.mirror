@@ -20,6 +20,7 @@
 #include <common/ScriptCancellation.hpp>
 #include <common/FileUtil.hpp>
 #include <common/Unit.hpp>
+#include <common/Util.hpp>
 #include <net/WebSocketHandler.hpp>
 
 #include <algorithm>
@@ -30,6 +31,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -41,6 +43,41 @@
 
 class ChildProcess;
 class DocumentBroker;
+class ForKitProcess;
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+// Test-only recovery identities. The prisoner poll owns connection maps and writes replies;
+// the broker reads the atomics. A configuration name never identifies a process instance.
+struct KitRecoveryConnection
+{
+    const std::string nonce = Util::rng::getHexString(32);
+    std::string config;
+    int pid = -1;
+    std::atomic<bool> authenticated{ false }, connected{ true };
+    std::weak_ptr<WebSocketHandler> handler;
+    std::weak_ptr<ForKitProcess> owner;
+};
+struct KitRecoveryBinding
+{
+    enum class Result
+    {
+        Ready,
+        Requested,
+        Reaped,
+        Failed
+    };
+    std::shared_ptr<KitRecoveryConnection> connection;
+    std::shared_ptr<ForKitProcess> originalForKit;
+    int pid = -1;
+    std::string jail;
+    const std::string request = Util::rng::getHexString(32);
+    std::atomic<Result> result{ Result::Ready };
+    std::atomic<int> exitCode{ 0 }, exitStatus{ 0 };
+    std::atomic<bool> holdReceiptForTesting{ false }, heldReceiptForTesting{ false };
+    std::atomic<bool> failSignalForTesting{ false };
+    std::atomic<unsigned> requestAttemptsForTesting{ 0 };
+    std::atomic<int> parentChecksForTesting{ 0 };
+};
+#endif
 
 // A WSProcess object in the WSD process represents a descendant process, either the direct child
 // process ForKit or a grandchild Kit process, with which the WSD process communicates through a
@@ -141,6 +178,10 @@ public:
     }
 
     pid_t getPid() const { return _pid; }
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    // Called only after an identity-matched parent reap receipt. Never sends a signal.
+    void acknowledgeRecoveryExit() { _pid = -1; }
+#endif
 
     /// Send a text payload to the child-process WS.
     bool sendTextFrame(const std::string_view data, bool flush = false)
@@ -239,6 +280,22 @@ public:
     }
 
     ChildProcess(ChildProcess&& other) = delete;
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    std::shared_ptr<KitRecoveryBinding> recoveryBinding() const
+    {
+        return std::atomic_load(&_recoveryBinding);
+    }
+    void replaceRecoveryBirthForTesting(const std::shared_ptr<KitRecoveryBinding>& binding)
+    {
+        if (UnitWSD::isUnitTesting())
+            std::atomic_store(&_recoveryBinding, binding);
+    }
+    void bindRecoveryBirth(const std::shared_ptr<KitRecoveryBinding>& binding)
+    {
+        std::shared_ptr<KitRecoveryBinding> empty;
+        std::atomic_compare_exchange_strong(&_recoveryBinding, &empty, binding);
+    }
+#endif
 #if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
     void negotiateScriptControl(int descriptor, std::string generation)
     {
@@ -495,6 +552,9 @@ private:
         _urpToKitFD = -1;
     }
 
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    std::shared_ptr<KitRecoveryBinding> _recoveryBinding;
+#endif
     const std::string _jailId;
     const std::string _configId;
     std::weak_ptr<DocumentBroker> _docBroker;
@@ -528,6 +588,15 @@ public:
     }
 
     virtual void handleMessage(const std::vector<char>& data) override;
+#if ENABLE_DEBUG && defined(__linux__) && !DOCS_SHARE_PROCESS
+    std::shared_ptr<KitRecoveryConnection> recovery = std::make_shared<KitRecoveryConnection>();
+    ~ForKitProcWSHandler() override { recovery->connected.store(false); }
+    void onDisconnect() override
+    {
+        recovery->connected.store(false);
+        WebSocketHandler::onDisconnect();
+    }
+#endif
 };
 
 class ForKitProcess final : public WSProcess
@@ -539,6 +608,12 @@ public:
     {
         socket->setHandler(getWSHandler());
     }
+#if ENABLE_DEBUG && defined(__linux__) && !DOCS_SHARE_PROCESS
+    std::shared_ptr<ForKitProcWSHandler> recoveryHandler() const
+    {
+        return std::static_pointer_cast<ForKitProcWSHandler>(getWSHandler());
+    }
+#endif
 };
 
 #endif

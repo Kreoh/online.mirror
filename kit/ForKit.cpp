@@ -50,12 +50,15 @@
 #include <sys/wait.h>
 #include <sysexits.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <limits>
+#include <sstream>
 #include <thread>
 #include <utility>
 
@@ -140,6 +143,25 @@ class ServerWSHandler;
 // access synchronization
 std::shared_ptr<ServerWSHandler> WSHandler;
 
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+std::string RecoveryNonce;
+using RecoveryKey = std::pair<int, std::string>;
+struct RecoveryExit
+{
+    std::chrono::steady_clock::time_point at;
+    int code;
+    int status;
+};
+std::map<RecoveryKey, RecoveryExit> RecoveryExits;
+std::map<RecoveryKey, std::string> RecoveryRequests;
+std::vector<std::string>* RecoveryCaptureForTesting = nullptr;
+bool recoveryCommand(const std::string& message);
+bool verifyRecoveryHistoryForTesting(int pid, const std::string& jail);
+void recoveryBirth(int pid, const std::string& jail);
+void recoverySubBirth(int pid, const std::string& config);
+void recoveryReaped(int pid, const std::string& jail, int code, int status);
+#endif
+
 class ServerWSHandler final : public WebSocketHandler
 {
     std::string _socketName;
@@ -159,6 +181,10 @@ protected:
         if (!Util::isMobileApp() && UnitKit::get().filterKitMessage(this, message))
             return;
 
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        if (message.starts_with("recovery") && recoveryCommand(message))
+            return;
+#endif
         StringVector tokens = StringVector::tokenize(message);
 
         LOG_DBG(_socketName << ": recv [" <<
@@ -241,6 +267,206 @@ protected:
         SigUtil::setTerminationFlag();
     }
 };
+
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+void recoverySend(const std::string& message)
+{
+    if (RecoveryCaptureForTesting)
+    {
+        RecoveryCaptureForTesting->push_back(message);
+        return;
+    }
+    if (WSHandler && !RecoveryNonce.empty() && message.size() <= 512)
+        WSHandler->sendTextMessage(message);
+}
+void recoveryBirth(int pid, const std::string& jail)
+{
+    recoverySend("recoverybirth " + RecoveryNonce + " " + std::to_string(pid) + " " + jail);
+}
+void recoverySubBirth(int pid, const std::string& config)
+{
+    recoverySend("recoverysub " + RecoveryNonce + " " + std::to_string(pid) + " " +
+                 Uri::encode(config));
+}
+void recoveryReaped(int pid, const std::string& jail, int code, int status)
+{
+    const auto now = std::chrono::steady_clock::now();
+    for (auto it = RecoveryExits.begin(); it != RecoveryExits.end();)
+        if (now - it->second.at > std::chrono::seconds(60))
+            it = RecoveryExits.erase(it);
+        else
+            ++it;
+    if (RecoveryExits.size() >= 256)
+    {
+        auto oldest = std::min_element(RecoveryExits.begin(), RecoveryExits.end(),
+                                       [](const auto& a, const auto& b)
+                                       { return a.second.at < b.second.at; });
+        RecoveryExits.erase(oldest);
+    }
+    RecoveryExits[{ pid, jail }] = { now, code, status };
+    const auto pending = RecoveryRequests.find({ pid, jail });
+    const std::string request = pending == RecoveryRequests.end() ? "-" : pending->second;
+    recoverySend("recoveryexit " + RecoveryNonce + " " + std::to_string(pid) + " " + jail + " " +
+                 std::to_string(code) + " " + std::to_string(status) + " " + request);
+    RecoveryRequests.erase({ pid, jail });
+}
+bool recoveryCommand(const std::string& message)
+{
+    // This route cannot be enabled in a production process.
+    if (!UnitKit::isUnitTesting() || message.size() > 512)
+        return true;
+    std::istringstream input(message);
+    std::string command, nonce, request, jail, extra;
+    int pid = -1;
+    input >> command >> nonce;
+    const auto validNonce = [](const std::string& value)
+    {
+        return value.size() == 32 &&
+               value.find_first_not_of("0123456789abcdef") == std::string::npos;
+    };
+    if (!validNonce(nonce))
+        return true;
+    if (command == "recoveryhello")
+    {
+        if ((input >> extra) || !RecoveryNonce.empty())
+            return true;
+        RecoveryNonce = nonce;
+        // childJails is also the bounded source of births created before connection.
+        unsigned count = 0;
+        for (const auto& child : childJails)
+            if (++count <= 256)
+                recoveryBirth(child.first, Poco::Path(child.second).getFileName());
+        count = 0;
+        for (const auto& child : subForKitPids)
+            if (++count <= 256)
+                recoverySubBirth(child.first, child.second);
+        return true;
+    }
+    if ((command != "recoverystop" && command != "recoverystopfail" &&
+         command != "recoveryverify") ||
+        nonce != RecoveryNonce || !(input >> request >> pid >> jail) || (input >> extra) ||
+        !validNonce(request) || pid <= 1 || jail.size() != 16 ||
+        jail.find_first_not_of(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") !=
+            std::string::npos)
+        return true;
+    const RecoveryKey key{ pid, jail };
+    const auto receipt = RecoveryExits.find(key);
+    if (receipt != RecoveryExits.end() &&
+        std::chrono::steady_clock::now() - receipt->second.at <= std::chrono::seconds(60))
+    {
+        recoverySend("recoveryexit " + nonce + " " + std::to_string(pid) + " " + jail + " " +
+                     std::to_string(receipt->second.code) + " " +
+                     std::to_string(receipt->second.status) + " " + request);
+        return true;
+    }
+    const auto fail = [&]
+    {
+        recoverySend("recoveryfailed " + nonce + " " + request + " " + std::to_string(pid) + " " +
+                     jail);
+    };
+    const auto child = childJails.find(pid);
+    if (child == childJails.end() || Poco::Path(child->second).getFileName() != jail)
+    {
+        fail(); // Unknown or expired history never proves exit.
+        return true;
+    }
+    if (command == "recoveryverify")
+    {
+        const bool passed = verifyRecoveryHistoryForTesting(pid, jail);
+        recoverySend("recoverychecked " + nonce + " " + request + " " + std::to_string(pid) + " " +
+                     jail + " " + (passed ? "1" : "0"));
+        return true;
+    }
+    const auto pending = RecoveryRequests.find(key);
+    if (pending != RecoveryRequests.end())
+    {
+        if (pending->second != request)
+            fail();
+        return true; // At most one signal per owned child.
+    }
+    if (RecoveryRequests.size() >= 64)
+    {
+        fail();
+        return true;
+    }
+    RecoveryRequests.emplace(key, request);
+    if (command == "recoverystopfail")
+    {
+        fail(); // Controlled fault injection after the real ownership checks, before any signal.
+        return true;
+    }
+#if CODE_COVERAGE || VALGRIND_COOLFORKIT
+    constexpr int signal = SIGTERM;
+#else
+    constexpr int signal = SIGKILL;
+#endif
+    // The owning parent checks and signals on its single reap/command thread.
+    // Delivery is never reported as termination; only waitid supplies that evidence.
+    if (::kill(pid, signal) != 0)
+        fail();
+    return true;
+}
+bool verifyRecoveryHistoryForTesting(int pid, const std::string& jail)
+{
+    if (!UnitKit::isUnitTesting() || RecoveryCaptureForTesting)
+        return false;
+    constexpr int stalePid = std::numeric_limits<int>::max();
+    const std::string oldJail(16, 'a'), newJail(16, 'b'), request(32, 'c');
+    if (childJails.contains(stalePid))
+        return false;
+    std::vector<std::string> replies;
+    struct Restore
+    {
+        decltype(RecoveryExits) exits = std::move(RecoveryExits);
+        decltype(RecoveryRequests) requests = std::move(RecoveryRequests);
+        ~Restore()
+        {
+            RecoveryCaptureForTesting = nullptr;
+            childJails.erase(std::numeric_limits<int>::max());
+            RecoveryExits = std::move(exits);
+            RecoveryRequests = std::move(requests);
+        }
+    } restore;
+    RecoveryCaptureForTesting = &replies;
+    const auto stop = [&](int target, const std::string& targetJail)
+    {
+        return "recoverystopfail " + RecoveryNonce + " " + request + " " + std::to_string(target) +
+               " " + targetJail;
+    };
+    // A cached natural exit is answered from waitid history, without a signal.
+    RecoveryExits[{ stalePid, oldJail }] = { std::chrono::steady_clock::now(), CLD_EXITED, 0 };
+    recoveryCommand(stop(stalePid, oldJail));
+    if (replies.size() != 1 || !replies.back().starts_with("recoveryexit "))
+        return false;
+    replies.clear();
+    RecoveryExits[{ stalePid, oldJail }].at -= std::chrono::seconds(61);
+    childJails.emplace(stalePid, "/fixture/" + newJail);
+    recoveryCommand(stop(stalePid, oldJail));
+    if (replies.size() != 1 || !replies.back().starts_with("recoveryfailed ") ||
+        !RecoveryRequests.empty())
+        return false; // Expired receipt plus reused PID must never target the new jail.
+    replies.clear();
+    for (int i = 0; i < 64; ++i)
+        RecoveryRequests.emplace(RecoveryKey{ i, "capacity" }, request);
+    recoveryCommand(stop(pid, jail));
+    if (replies.size() != 1 || RecoveryRequests.size() != 64)
+        return false;
+    RecoveryRequests.clear();
+    replies.clear();
+    recoveryCommand(stop(pid, jail)); // Explicit signal-failure seam, after ownership checks.
+    if (replies.size() != 1 || RecoveryRequests.size() != 1)
+        return false;
+    recoveryCommand(stop(pid, jail));
+    if (replies.size() != 1 || RecoveryRequests.size() != 1)
+        return false; // Duplicate does not issue another signal/request.
+    RecoveryExits.clear();
+    for (int i = 0; i < 257; ++i)
+        recoveryReaped(stalePid - i, oldJail, CLD_EXITED, 0);
+    return RecoveryExits.size() == 256;
+}
+
+#endif
 
 #if HAVE_LIBCAP
 bool haveCapability(cap_value_t capability)
@@ -399,6 +625,11 @@ void cleanupChildren(const std::string& childRoot)
             }
 
             LOG_INF("Child " << exitedChildPid << " has exited, will remove its jail [" << it->second << "].");
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+            if (UnitKit::isUnitTesting())
+                recoveryReaped(exitedChildPid, Poco::Path(it->second).getFileName(), info.si_code,
+                               status);
+#endif
             cleanupJailPaths.emplace_back(it->second);
             childJails.erase(it);
             if (childJails.empty() && !SigUtil::getTerminationFlag())
@@ -615,6 +846,10 @@ int createCOKit(const std::string& childRoot, const std::string& sysTemplate,
             {
                 LOG_INF("Forked kit [" << pid << ']');
                 childJails[pid] = childRoot + jailId;
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+                if (UnitKit::isUnitTesting() && childJails.size() <= 256)
+                    recoveryBirth(pid, jailId);
+#endif
             }
         };
 
@@ -649,6 +884,11 @@ int createSubForKit(const std::string& subForKitIdent, const std::string& childR
         parentPid = getppid();
 
         ForKitIdent = subForKitIdent;
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        RecoveryNonce.clear();
+        RecoveryRequests.clear();
+        RecoveryExits.clear();
+#endif
 
         // reset this global counter for this new subForKit
         ForkCounter = 0;
@@ -702,6 +942,10 @@ int createSubForKit(const std::string& subForKitIdent, const std::string& childR
         {
             LOG_INF("Forked subForKit [" << pid << ']');
             subForKitPids[pid] = subForKitIdent;
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+            if (UnitKit::isUnitTesting() && subForKitPids.size() <= 256)
+                recoverySubBirth(pid, subForKitIdent);
+#endif
         }
     };
 

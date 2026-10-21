@@ -43,6 +43,7 @@
 class WSProcess;
 class ForKitProcess;
 class ChildProcess;
+struct KitRecoveryBinding;
 class ClipboardCache;
 class DocumentBroker;
 class FileServerRequestHandler;
@@ -215,6 +216,12 @@ public:
     static bool createForKit();
 
     /// Sends a message to ForKit through PrisonerPoll. An empty configId is the primordial forkit.
+#if ENABLE_DEBUG && defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    static void requestKitRecovery(const std::shared_ptr<KitRecoveryBinding>& binding);
+    static void
+    verifyKitRecoveryParentForTesting(const std::shared_ptr<KitRecoveryBinding>& binding);
+    static bool verifyKitRecoveryBindingsForTesting(const std::shared_ptr<ChildProcess>& child);
+#endif
     static bool sendMessageToForKit(const std::string& message, const std::string& configId=std::string());
 
     /// Sends a message to the primordial ForKit, holding it until ForKit has connected back if it

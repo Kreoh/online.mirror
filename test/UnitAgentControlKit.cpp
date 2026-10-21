@@ -52,6 +52,8 @@ class UnitKitAgentRetirement final : public UnitKit
     bool _sourceSave = false, _sourceExport = false, _sourceSaveReported = false;
     unsigned _backgroundForks = 0;
     int _sourceView = -1;
+    bool _hardRecoveryBlock = false;
+    std::chrono::seconds _hardBlockDuration{ 60 };
 
     void setRelease(bool value)
     {
@@ -72,7 +74,14 @@ public:
             return false;
         _handler = handler;
         const std::string command = message.substr(position + 15);
-        if (command.starts_with("source="))
+        if (command == "hard-block" || command == "hard-block-short")
+        {
+            _hardRecoveryBlock = true;
+            _hardBlockDuration =
+                command == "hard-block-short" ? std::chrono::seconds(8) : std::chrono::seconds(60);
+            _handler->sendTextMessage("unitretirement hard-ready", true);
+        }
+        else if (command.starts_with("source="))
         {
             const auto found = _sessions.find(command.substr(7));
             LOK_ASSERT(found != _sessions.end());
@@ -182,6 +191,14 @@ public:
     }
     bool onFilterSendWebSocketMessage(std::string_view data, WSOpCode, bool, int&) override
     {
+        if (_hardRecoveryBlock && data.find("hard-recovery-block") != std::string_view::npos)
+        {
+            // Obstruct an actual synchronous native callback stack, leaving the independent
+            // cancellation reader live. The test harness observes the parent reap receipt.
+            _handler->sendTextMessage("unitretirement hard-entered", true);
+            std::unique_lock lock(_mutex);
+            _condition.wait_for(lock, _hardBlockDuration, [] { return false; });
+        }
         if (!_sourceArmed)
             return false;
         if (data.find("downloadas:") != std::string_view::npos &&
