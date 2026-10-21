@@ -43,6 +43,7 @@
 #include <common/Util.hpp>
 #include <net/HttpServer.hpp>
 #include <net/Socket.hpp>
+#include <net/WebSocketHandler.hpp>
 #include <wsd/COOLWSD.hpp>
 #include <wsd/CacheUtil.hpp>
 #include <wsd/ClientSession.hpp>
@@ -458,6 +459,13 @@ std::string DocumentBroker::agentScriptForTesting(std::string_view action, std::
         return verifyAgentRecoveryPolicyForTesting();
     if (_agentRetirements.empty())
         return {};
+    if (action == "consoleCount")
+        return _agentScript ? std::to_string(_agentScript->consoleCount) : "idle";
+    if (action == "consoleBytes")
+        return _agentScript ? std::to_string(_agentScript->consoleBytes) : "idle";
+    if (action == "consoleDeadline")
+        return _agentScript ? std::to_string(_agentScript->deadline.time_since_epoch().count())
+                            : "idle";
     if (action == "recoveryPublication")
         return _agentRecoveryPublicationUnresolved ? "unresolved" : "settled";
     if (action == "recoveryHostQuiescedForTesting")
@@ -1093,6 +1101,112 @@ void DocumentBroker::pollAgentScript()
             failAgentScript();
         }
     }
+#endif
+}
+
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+namespace
+{
+// Reject NUL, overlong encodings, surrogate scalars and values beyond Unicode.
+bool validAgentConsoleText(std::string_view text)
+{
+    for (std::size_t i = 0; i < text.size();)
+    {
+        const auto first = static_cast<unsigned char>(text[i++]);
+        if (first == 0)
+            return false;
+        if (first < 0x80)
+            continue;
+        const unsigned length = first >= 0xC2 && first <= 0xDF   ? 2
+                                : first >= 0xE0 && first <= 0xEF ? 3
+                                : first >= 0xF0 && first <= 0xF4 ? 4
+                                                                 : 0;
+        if (!length || length - 1 > text.size() - i)
+            return false;
+        unsigned scalar = first & ((1U << (7 - length)) - 1);
+        for (unsigned n = 1; n < length; ++n)
+        {
+            const auto next = static_cast<unsigned char>(text[i++]);
+            if ((next & 0xC0) != 0x80)
+                return false;
+            scalar = (scalar << 6) | (next & 0x3F);
+        }
+        if (scalar < (length == 2   ? 0x80U
+                      : length == 3 ? 0x800U
+                                    : 0x10000U) ||
+            scalar > 0x10FFFF || (scalar >= 0xD800 && scalar <= 0xDFFF))
+            return false;
+    }
+    return true;
+}
+} // namespace
+#endif
+
+bool DocumentBroker::handleAgentScriptConsole(const std::string& message,
+                                              const std::shared_ptr<ChildProcess>& child)
+{
+    ASSERT_CORRECT_THREAD();
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (!_agentScript || !_agentScript->dispatched || _agentScript->terminal ||
+        _agentScript->failed || child != _childProcess || child != _agentScript->child.lock() ||
+        message.size() > 4096)
+        return false;
+#if ENABLE_DEBUG
+    if (_agentHardRecovery && _agentHardRecovery->phase != AgentHardRecovery::Phase::Grace)
+        return false;
+#endif
+    const auto transport = _agentScript->transport.lock();
+    if (!agentScriptAuthority(transport))
+        return false;
+    const auto newline = message.find('\n');
+    if (newline == std::string::npos || newline > 1024)
+        return false;
+    const std::string prefix =
+        "agentscriptconsolekit: " + scriptIdentityText(_agentScript->identity) + " output=";
+    if (!message.starts_with(prefix))
+        return false;
+    const auto levelAt = message.find(" level=", prefix.size());
+    if (levelAt == std::string::npos || levelAt >= newline)
+        return false;
+    unsigned ordinal = 0;
+    const auto number = std::string_view(message).substr(prefix.size(), levelAt - prefix.size());
+    const auto parsed = std::from_chars(number.data(), number.data() + number.size(), ordinal);
+    if (parsed.ec != std::errc() || parsed.ptr != number.data() + number.size() ||
+        std::to_string(ordinal) != number || ordinal <= _agentScript->consoleOrdinal ||
+        ordinal > 64)
+        return false;
+    const auto level = std::string_view(message).substr(levelAt + 7, newline - levelAt - 7);
+    if (level != "debug" && level != "error" && level != "info" && level != "log" &&
+        level != "trace" && level != "warn")
+        return false;
+    if (!validAgentConsoleText(std::string_view(message).substr(newline + 1)) ||
+        _agentScript->consoleCount >= 64 || message.size() > 65536 - _agentScript->consoleBytes)
+        return false;
+    _agentScript->consoleOrdinal = ordinal;
+    ++_agentScript->consoleCount;
+    _agentScript->consoleBytes += message.size();
+    try
+    {
+        const auto protocol = std::dynamic_pointer_cast<WebSocketHandler>(transport->getProtocol());
+        const auto socket = protocol ? protocol->getSocket().lock() : nullptr;
+        if (!socket || !socket->isOpen())
+            return false;
+        ASSERT_CORRECT_SOCKET_THREAD(socket);
+        const auto queued = socket->getOutBuffer().size();
+        const std::string frame =
+            "agentscriptconsole:" + message.substr(sizeof("agentscriptconsolekit:") - 1);
+        if (queued > 65536 || frame.size() + 14 > 65536 - queued)
+            return false;
+        return protocol->sendTextMessage(frame, false) >= static_cast<int>(frame.size());
+    }
+    catch (...)
+    {
+        return false;
+    }
+#else
+    (void)message;
+    (void)child;
+    return false;
 #endif
 }
 

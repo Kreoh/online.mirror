@@ -480,6 +480,49 @@ public:
         jsuno::drainProxyOwners();
         CPPUNIT_ASSERT_EQUAL(std::size_t(0), jsuno::proxyOwnerRegistrySize());
     }
+    void testSourceConsoleScopes()
+    {
+        auto owner = jsuno::createSourceProxyOwner();
+        auto lifetime = std::make_shared<int>(1);
+        std::weak_ptr<int> weak = lifetime;
+        unsigned created = 0, invoked = 0, nested = 0;
+        jsuno::executeOwned(
+            owner, execution(),
+            u"$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'logger', "
+            "'function(method,args,state) { console.log(args[0]); return args[0]; }', {}); "
+            "console.log('created');"_ustr,
+            u"<console>"_ustr, 1, [&, lifetime](auto const&, auto const&) { ++created; });
+        lifetime.reset();
+        CPPUNIT_ASSERT(weak.expired()); // Retained source registrations must not retain the hook.
+        cpo::uno::Reference<css::util::XStringEscape> adapter(
+            jsuno::takeOwnedProxy(owner, u"logger"_ustr), cpo::uno::UNO_QUERY_THROW);
+        fails([&] { adapter->escapeString(u"inactive"_ustr); });
+        auto budget = execution();
+        jsuno::executeOwned(
+            owner, budget, u"console.log('outer');"_ustr, u"<console>"_ustr, 1,
+            [&](auto const&, OUString const& message)
+            {
+                ++invoked;
+                if (message != u"outer")
+                    return;
+                // The console hook runs outside owner locks and may synchronously re-enter.
+                fails(
+                    [&]
+                    {
+                        jsuno::executeOwned(
+                            owner, budget, u"console.log('nested'); throw 'failure';"_ustr,
+                            u"<console>"_ustr, 1, [&](auto const&, auto const&) { ++nested; });
+                    });
+                CPPUNIT_ASSERT_EQUAL(u"handler"_ustr, adapter->escapeString(u"handler"_ustr));
+            });
+        CPPUNIT_ASSERT_EQUAL(1U, created);
+        CPPUNIT_ASSERT_EQUAL(2U, invoked); // Outer and source handler use the current hook.
+        CPPUNIT_ASSERT_EQUAL(1U, nested);
+        fails([&] { adapter->escapeString(u"after"_ustr); });
+        jsuno::revokeProxyOwner(owner);
+        fails([&] { adapter->escapeString(u"revoked"_ustr); });
+        CPPUNIT_ASSERT_EQUAL(2U, invoked);
+    }
     void testSourceStateAndAdapterIdentity()
     {
         auto owner = jsuno::createSourceProxyOwner();
@@ -785,6 +828,7 @@ public:
     }
     CPPUNIT_TEST_SUITE(OwnedProxy);
     CPPUNIT_TEST(testEmptyRegistryLifecycle);
+    CPPUNIT_TEST(testSourceConsoleScopes);
     CPPUNIT_TEST(testSourceStateAndAdapterIdentity);
     CPPUNIT_TEST(testSourceStateFailureAndLimits);
     CPPUNIT_TEST(testSourceExactTokenAndRetirement);

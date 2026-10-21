@@ -10,6 +10,7 @@
  */
 
 #include <config.h>
+#include <common/Message.hpp>
 
 #include <common/Unit.hpp>
 #include <common/JsonUtil.hpp>
@@ -80,6 +81,27 @@ public:
             _hardBlockDuration =
                 command == "hard-block-short" ? std::chrono::seconds(8) : std::chrono::seconds(60);
             _handler->sendTextMessage("unitretirement hard-ready", true);
+        }
+        else if (command == "console-pressure")
+        {
+            const auto document = KitSocketPoll::getMainPoll()->getDocument();
+            const auto socket = handler->getSocket().lock();
+            LOK_ASSERT(document && socket);
+            ASSERT_CORRECT_SOCKET_THREAD(socket);
+            {
+                auto saved = std::move(socket->getOutBuffer());
+                socket->getOutBuffer() = Buffer();
+                struct Restore
+                {
+                    Buffer& buffer;
+                    Buffer saved;
+                    ~Restore() { buffer = std::move(saved); }
+                } restore{ socket->getOutBuffer(), std::move(saved) };
+                socket->getOutBuffer().append(std::string(65536, 'x'));
+                LOK_ASSERT(
+                    !document->postMessage("agentscriptconsolekit: pressure", WSOpCode::Text));
+            }
+            handler->sendTextMessage("unitretirement console-pressure-checked", true);
         }
         else if (command.starts_with("source="))
         {
@@ -189,8 +211,14 @@ public:
         ++_backgroundForks;
         LOK_ASSERT(!_sourceArmed);
     }
-    bool onFilterSendWebSocketMessage(std::string_view data, WSOpCode, bool, int&) override
+    bool onFilterSendWebSocketMessage(std::string_view data, WSOpCode, bool flush, int&) override
     {
+        if (data.starts_with("agentscriptconsolekit:"))
+        {
+            LOK_ASSERT(!flush);
+            LOK_ASSERT(data.size() <= 4096);
+            LOK_ASSERT(Message::isAgentScriptControl(data));
+        }
         if (_hardRecoveryBlock && data.find("hard-recovery-block") != std::string_view::npos)
         {
             // Obstruct an actual synchronous native callback stack, leaving the independent

@@ -165,6 +165,7 @@ struct OwnedState
     jsuno::ProxyLimits limits;
     std::shared_ptr<jsuno::ProxyTarget> target;
     std::shared_ptr<jsuno::ProxyExecution> active;
+    std::function<void(OUString const&, OUString const&)> consoleHook;
     unsigned depth = 0;
     std::atomic<std::size_t> liveAdapters{ 0 };
     std::uint64_t nextCall = 0;
@@ -3443,11 +3444,13 @@ cpo::uno::Any invokeSourceProxy(std::shared_ptr<OwnedRegistration> const& regist
     if (!owner)
         throw cpo::uno::RuntimeException(u"Source proxy owner revoked"_ustr);
     auto source = registration->source;
+    std::function<void(OUString const&, OUString const&)> consoleHook;
     {
         std::lock_guard lock(owner->mutex);
         checkSourceAdmission(*owner, *source);
         if (source->invoking || owner->depth >= owner->limits.nesting)
             throw cpo::uno::RuntimeException(u"Source proxy re-entry or depth limit"_ustr);
+        consoleHook = owner->consoleHook;
         source->invoking = true;
         ++owner->depth;
     }
@@ -3485,7 +3488,7 @@ cpo::uno::Any invokeSourceProxy(std::shared_ptr<OwnedRegistration> const& regist
     try
     {
         executeImpl(
-            {}, u"<source-proxy>"_ustr, 1, [](auto const&, auto const&) {}, {}, nullptr,
+            {}, u"<source-proxy>"_ustr, 1, std::move(consoleHook), {}, nullptr,
             std::chrono::milliseconds::zero(), owner->active->cancelled.get(), owner->document,
             owner->controller, owner,
             [&](JSContext* ctx)
@@ -4897,6 +4900,8 @@ OUString jsuno::executeOwned(std::shared_ptr<ProxyOwner> const& owner,
     if (!consoleHook)
         consoleHook = [](OUString const&, OUString const&) {};
     auto const state = owner->state;
+    std::function<void(OUString const&, OUString const&)> previousConsole;
+    auto admittedConsole = consoleHook;
     {
         std::lock_guard lock(state->mutex);
         if (state->revoked
@@ -4913,16 +4918,19 @@ OUString jsuno::executeOwned(std::shared_ptr<ProxyOwner> const& owner,
             state->bound = true;
             state->view = KitHelper::getCurrentView();
         }
+        previousConsole.swap(state->consoleHook);
+        state->consoleHook.swap(admittedConsole);
         state->active = execution;
         ++state->depth;
     }
     auto const previous = executingOwner;
     executingOwner = state.get();
     comphelper::ScopeGuard close(
-        [state, previous]
+        [state, previous, previousConsole = std::move(previousConsole)]() mutable
         {
             executingOwner = previous;
             std::lock_guard lock(state->mutex);
+            state->consoleHook.swap(previousConsole);
             if (--state->depth == 0)
                 state->active.reset();
         });

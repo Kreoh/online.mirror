@@ -4149,6 +4149,9 @@ private:
             _associatedWithDoc = true;
             if (std::string_view(data.data(), data.size()).starts_with("agentscriptresultkit:"))
                 docBroker->handleAgentScriptResult(std::string(data.data(), data.size()), child);
+            else if (std::string_view(data.data(), data.size())
+                         .starts_with("agentscriptconsolekit"))
+                docBroker->handleAgentScriptConsole(std::string(data.data(), data.size()), child);
             else
                 docBroker->handleInput(message);
         }

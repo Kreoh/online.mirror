@@ -2191,3 +2191,44 @@ recoveryverify frames on the original authenticated ForKit connection. They are
 unavailable to browser protocol callers. C++ unit-only lifecycle seams inject
 connection observation failure and drain a controlled host queue for teardown;
 they do not provide a production reconciliation route.
+
+
+Execution-scoped controlled console
+-----------------------------------
+
+Kit sends an unprefixed frame with this exact header order and one ASCII space
+between fields, followed by LF and a UTF-8 body:
+
+agentscriptconsolekit: generation=<generation> epoch=<epoch> execution=<execution> admission=<admission> viewid=<view> renderid=<render> output=<ordinal> level=<level>
+
+The broker forwards the same fields under agentscriptconsole: only to the
+currently authorised controlled transport. The complete identity must match its
+active dispatched execution and original child object. Failed, retired,
+post-terminal and stale generations are discarded. Output cannot establish
+completion or modify deadlines. Raw result and terminal formats are unchanged.
+
+Ordinal is canonical decimal 1 through 64. Level is exactly debug, error, info,
+log, trace or warn. Extra fields and malformed UTF-8, including NUL, overlong
+encodings and surrogate scalars, are rejected. An empty body is valid.
+
+Headers are at most 1024 bytes excluding LF. Application frames are at most 4096
+bytes and each execution has at most 64 callback attempts and 65536 charged frame
+bytes. The Kit increments the ordinal for each attempt, including discarded
+output, and charges valid-sized frames before enqueue. Top-level and admitted
+source handlers share the same counters. The broker independently enforces
+increasing ordinals, frame count and charged bytes; ordinal gaps are valid.
+Counters reset only for a new execution. Frames are dropped whole, never retried.
+
+Both socket owners reject console enqueue when queued bytes plus frame bytes
+plus 14 bytes of framing overhead would exceed 65536. Delivery uses existing
+buffered sends without forced flush, acknowledgement waits or a new output queue.
+Console may be delayed while the engine owns its thread and may be discarded
+if received after terminal processing. Stop and terminal flush behaviour is
+unchanged. Source-handler hooks belong to the current synchronous admission,
+are restored on all exits and are not retained by source registrations.
+
+The ordinary human consolemsg path and generic document progress indicators
+remain unchanged. Generic indicators and old tuple-free console messages must
+not be attributed to the latest execution. All agentscript-prefixed frames stay
+sensitive, including malformed frames. No backend consumption capability is
+advertised by this increment; backend support requires its separate acceptance.

@@ -5103,6 +5103,44 @@ bool ChildSession::getPresentationInfo()
     return true;
 }
 
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+namespace
+{
+// Reject NUL, overlong encodings, surrogate scalars and values beyond Unicode.
+bool validAgentConsoleText(std::string_view text)
+{
+    for (std::size_t i = 0; i < text.size();)
+    {
+        const auto first = static_cast<unsigned char>(text[i++]);
+        if (first == 0)
+            return false;
+        if (first < 0x80)
+            continue;
+        const unsigned length = first >= 0xC2 && first <= 0xDF   ? 2
+                                : first >= 0xE0 && first <= 0xEF ? 3
+                                : first >= 0xF0 && first <= 0xF4 ? 4
+                                                                 : 0;
+        if (!length || length - 1 > text.size() - i)
+            return false;
+        unsigned scalar = first & ((1U << (7 - length)) - 1);
+        for (unsigned n = 1; n < length; ++n)
+        {
+            const auto next = static_cast<unsigned char>(text[i++]);
+            if ((next & 0xC0) != 0x80)
+                return false;
+            scalar = (scalar << 6) | (next & 0x3F);
+        }
+        if (scalar < (length == 2   ? 0x80U
+                      : length == 3 ? 0x800U
+                                    : 0x10000U) ||
+            scalar > 0x10FFFF || (scalar >= 0xD800 && scalar <= 0xDFFF))
+            return false;
+    }
+    return true;
+}
+} // namespace
+#endif
+
 bool ChildSession::executeControlledScript(const std::string& message)
 {
 #if !defined(__linux__) || MOBILEAPP || DOCS_SHARE_PROCESS
@@ -5195,13 +5233,45 @@ bool ChildSession::executeControlledScript(const std::string& message)
                 {
                     const std::weak_ptr<ChildSession> owner =
                         _docManager->findSessionByViewId(_viewId);
-                    const auto console =
-                        [owner](void*, std::string_view level, std::string_view text)
+                    struct ConsoleOutput
                     {
-                        if (const auto session = owner.lock();
-                            session && !session->agentRetirementFenced())
-                            session->sendTextFrame("agentscriptconsole: " + std::string(level) +
-                                                   '\n' + std::string(text));
+                        unsigned attempts = 0;
+                        std::size_t bytes = 0;
+                    };
+                    const auto output = std::make_shared<ConsoleOutput>();
+                    const auto console = [owner, identityText, output](
+                                             void*, std::string_view level, std::string_view text)
+                    {
+                        // Output is optional and shares one budget with synchronous source handlers.
+                        if (output->attempts == 64)
+                            return;
+                        const auto ordinal = ++output->attempts;
+                        if (level != "debug" && level != "error" && level != "info" &&
+                            level != "log" && level != "trace" && level != "warn")
+                            return;
+                        if (text.size() > 4096 || !validAgentConsoleText(text))
+                            return;
+                        try
+                        {
+                            const std::string header = "agentscriptconsolekit: " + identityText +
+                                                       " output=" + std::to_string(ordinal) +
+                                                       " level=" + std::string(level);
+                            if (header.size() > 1024 || header.size() + 1 > 4096 - text.size())
+                                return;
+                            const auto size = header.size() + 1 + text.size();
+                            if (size > 65536 - output->bytes)
+                                return;
+                            output->bytes += size; // Dropped writes consume their budget too.
+                            if (const auto session = owner.lock();
+                                session && !session->agentRetirementFenced() &&
+                                session->_docManager)
+                                session->_docManager->postMessage(header + '\n' + std::string(text),
+                                                                  WSOpCode::Text);
+                        }
+                        catch (...)
+                        {
+                            // Console delivery cannot fail an admitted execution.
+                        }
                     };
                     const auto callbacks = engineInfo->get("RawSourceCallbacks");
                     const bool connected = callbacks.isInteger() && callbacks.convert<int>() == 1;

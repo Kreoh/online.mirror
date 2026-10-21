@@ -937,6 +937,19 @@ Document::~Document()
 /// Post the message - in the unipoll world we're in the right thread anyway
 bool Document::postMessage(const std::string_view data, const WSOpCode code) const
 {
+    if (data.starts_with("agentscriptconsolekit:"))
+    {
+        if (_isBgSaveProcess || !_websocketHandler || code != WSOpCode::Text || data.size() > 4096)
+            return false;
+        const auto socket = _websocketHandler->getSocket().lock();
+        if (!socket || !socket->isOpen())
+            return false;
+        ASSERT_CORRECT_SOCKET_THREAD(socket);
+        const auto queued = socket->getOutBuffer().size();
+        if (queued > 65536 || data.size() + 14 > 65536 - queued)
+            return false;
+        return _websocketHandler->sendMessage(data.data(), data.size(), code, false) > 0;
+    }
     if (Message::isAgentScriptControl(data))
     {
         if (_isBgSaveProcess || !_websocketHandler)

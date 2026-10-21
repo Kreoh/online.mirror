@@ -131,6 +131,8 @@ class AgentScriptControlTests final : public WopiTestServer
     std::string _heldTerminal;
     std::shared_ptr<ChildProcess> _heldChild;
     std::atomic<bool> _holdTerminal{ false };
+    std::atomic<bool> _holdConsole{ false };
+    std::vector<std::string> _heldConsole;
     std::mutex _httpMutex;
     std::shared_ptr<StreamSocket> _heldHttp;
     Poco::Net::HTTPRequest _heldRequest;
@@ -250,7 +252,7 @@ class AgentScriptControlTests final : public WopiTestServer
         LOK_ASSERT(capabilities.find("scriptcontrol=2 scriptcallbacks=1 generation=") !=
                    std::string::npos);
         _generation = capabilities.substr(capabilities.find("generation=") + 11, 32);
-        if (_mode >= 23)
+        if (_mode >= 23 && _mode <= 32)
             LOK_ASSERT(capabilities.find(
                            "hardrecovery=test-only humanviews=interrupted unsaved=may_be_lost") !=
                        std::string::npos);
@@ -372,9 +374,241 @@ class AgentScriptControlTests final : public WopiTestServer
                        "execution_replay_rejected");
         LOK_ASSERT_EQUAL(std::string("34"), state("watermark"));
     }
+    void consoleRegression()
+    {
+        initWebsocket("/wopi/files/0?access_token=script-test-token&access_token_ttl=" +
+                      std::to_string(_expiry));
+        const auto browserSocket = getWs()->getWebSocket();
+        WSD_CMD("load url=" + getWopiSrc());
+        await([this] { return _browserLoaded.load(); });
+        _holdConsole = true;
+        _holdTerminal = true;
+        const auto start = [&](int sequence, const std::string& source)
+        {
+            {
+                std::lock_guard lock(_heldMutex);
+                _heldTerminal.clear();
+                _heldConsole.clear();
+            }
+            send(request(sequence, source));
+            waitState("reservationPending");
+            waitState("dispatched");
+            await(
+                [this]
+                {
+                    std::lock_guard lock(_heldMutex);
+                    return !_heldTerminal.empty();
+                });
+        };
+        const auto finish = [&]
+        {
+            broker(
+                [this](DocumentBroker& document)
+                {
+                    std::lock_guard lock(_heldMutex);
+                    LOK_ASSERT(document.handleAgentScriptResult(_heldTerminal, _heldChild));
+                    return std::string();
+                });
+            response("agentscriptresult:");
+        };
+        const auto ordinal = [](std::string frame, unsigned value)
+        {
+            const auto begin = frame.find(" output=") + 8;
+            frame.replace(begin, frame.find(" level=", begin) - begin, std::to_string(value));
+            return frame;
+        };
+        start(1, "console.log('first'); console.warn('second'); 42;");
+        std::vector<std::string> frames;
+        {
+            std::lock_guard lock(_heldMutex);
+            frames = _heldConsole;
+        }
+        LOK_ASSERT_EQUAL(std::size_t(2), frames.size());
+        const auto child = _heldChild;
+        const auto inject = [&](const std::string& frame)
+        {
+            return broker(
+                [&](DocumentBroker& document)
+                { return document.handleAgentScriptConsole(frame, child) ? "sent" : "dropped"; });
+        };
+        const auto deadline = state("consoleDeadline");
+        for (const auto field :
+             { "generation=", "epoch=", "execution=", "admission=", "viewid=", "renderid=" })
+        {
+            auto bad = frames[0];
+            bad.insert(bad.find(field) + std::strlen(field), "x");
+            LOK_ASSERT_EQUAL(std::string("dropped"), inject(bad));
+        }
+        for (const auto badBody : { std::string("\xC0\x80", 2), std::string("\xED\xA0\x80", 3),
+                                    std::string("\xF4\x90\x80\x80", 4), std::string(1, '\0') })
+            LOK_ASSERT_EQUAL(std::string("dropped"),
+                             inject(frames[0].substr(0, frames[0].find('\n') + 1) + badBody));
+        auto invalidLevel = frames[0];
+        invalidLevel.replace(invalidLevel.find("level=log"), 9, "level=unknown");
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(invalidLevel));
+        auto extra = frames[0];
+        extra.insert(extra.find('\n'), " extra=1");
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(extra));
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(frames[0] + std::string(4096, 'x')));
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(ordinal(frames[0], 65)));
+        auto leadingZero = frames[0];
+        leadingZero.insert(leadingZero.find(" output=") + 8, "0");
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(leadingZero));
+        auto longHeader = frames[0];
+        longHeader.insert(longHeader.find('\n'), std::string(1024, 'x'));
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(longHeader));
+        broker(
+            [&](DocumentBroker& document)
+            {
+                LOK_ASSERT(!document.handleAgentScriptConsole(frames[0], nullptr));
+                std::shared_ptr<ChildProcess> replacement;
+                LOK_ASSERT(document.swapAgentChildForTesting(replacement));
+                struct RestoreChild
+                {
+                    DocumentBroker& document;
+                    std::shared_ptr<ChildProcess>& replacement;
+                    bool active = true;
+                    ~RestoreChild()
+                    {
+                        if (active)
+                            document.swapAgentChildForTesting(replacement);
+                    }
+                } restore{ document, replacement };
+                LOK_ASSERT(!document.handleAgentScriptConsole(frames[0], child));
+                LOK_ASSERT(document.swapAgentChildForTesting(replacement));
+                restore.active = false;
+                LOK_ASSERT(!document.handleAgentScriptConsole(frames[0], replacement));
+                return std::string();
+            });
+        LOK_ASSERT_EQUAL(std::string("sent"), inject(frames[0]));
+        LOK_ASSERT(response("agentscriptconsole:").ends_with("\nfirst"));
+        LOK_ASSERT(helpers::getResponseString(_socket, "agentscriptconsole:", getTestname())
+                       .ends_with("\nfirst"));
+        LOK_ASSERT(helpers::getResponseString(browserSocket, "agentscriptconsole:", getTestname(),
+                                              std::chrono::milliseconds(100))
+                       .empty());
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(frames[0]));
+        LOK_ASSERT_EQUAL(std::string("sent"), inject(ordinal(frames[1], 4))); // Gaps are permitted.
+        response("agentscriptconsole:");
+        broker(
+            [&](DocumentBroker& document)
+            {
+                const auto protocol =
+                    std::dynamic_pointer_cast<WebSocketHandler>(_transport->getProtocol());
+                LOK_ASSERT(protocol);
+                const auto socket = protocol->getSocket().lock();
+                LOK_ASSERT(socket);
+                ASSERT_CORRECT_SOCKET_THREAD(socket);
+                auto saved = std::move(socket->getOutBuffer());
+                socket->getOutBuffer() = Buffer();
+                struct Restore
+                {
+                    Buffer& buffer;
+                    Buffer saved;
+                    ~Restore() { buffer = std::move(saved); }
+                } restore{ socket->getOutBuffer(), std::move(saved) };
+                socket->getOutBuffer().append(std::string(65536, 'x'));
+                LOK_ASSERT(!document.handleAgentScriptConsole(ordinal(frames[1], 5), child));
+                return std::string();
+            });
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(ordinal(frames[1], 5)));
+        auto empty = ordinal(frames[0], 8);
+        empty.resize(empty.find('\n') + 1);
+        LOK_ASSERT_EQUAL(std::string("sent"), inject(empty));
+        LOK_ASSERT(response("agentscriptconsole:").ends_with("\n"));
+        LOK_ASSERT_EQUAL(deadline, state("consoleDeadline"));
+        finish();
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(ordinal(frames[1], 6))); // Post-terminal.
+        start(2, "console.log('fresh'); 42;");
+        LOK_ASSERT_EQUAL(std::string("dropped"),
+                         inject(ordinal(frames[1], 6))); // Previous execution.
+        std::string fresh;
+        {
+            std::lock_guard lock(_heldMutex);
+            LOK_ASSERT_EQUAL(std::size_t(1), _heldConsole.size());
+            fresh = _heldConsole[0];
+        }
+        LOK_ASSERT(fresh.find(" output=1 level=log\nfresh") != std::string::npos);
+        LOK_ASSERT_EQUAL(std::string("sent"), inject(fresh));
+        response("agentscriptconsole:");
+        finish();
+        start(3, "for (let i=0; i<100; ++i) console.log('bounded'); 42;");
+        {
+            std::lock_guard lock(_heldMutex);
+            LOK_ASSERT_EQUAL(std::size_t(64), _heldConsole.size());
+            frames = _heldConsole;
+        }
+        for (const auto& frame : frames)
+            LOK_ASSERT_EQUAL(std::string("sent"), inject(frame));
+        LOK_ASSERT_EQUAL(std::string("64"), state("consoleCount"));
+        LOK_ASSERT_EQUAL(std::string("dropped"), inject(ordinal(frames[0], 65)));
+        finish();
+        start(4, "for (let i=0; i<100; ++i) console.log('x'.repeat(3500)); 42;");
+        {
+            std::lock_guard lock(_heldMutex);
+            std::size_t bytes = 0;
+            for (const auto& frame : _heldConsole)
+            {
+                LOK_ASSERT(frame.size() <= 4096);
+                bytes += frame.size();
+            }
+            LOK_ASSERT(!_heldConsole.empty() && _heldConsole.size() < 64 && bytes <= 65536);
+            frames = _heldConsole;
+        }
+        for (unsigned i = 1; i <= 64; ++i)
+            inject(ordinal(frames[0], i)); // Broker enforces bytes independently of Kit.
+        LOK_ASSERT_EQUAL(std::to_string(65536 / frames[0].size()), state("consoleCount"));
+        LOK_ASSERT(std::stoul(state("consoleBytes")) <= 65536);
+        finish();
+        start(5, "console.log('x'.repeat(4096)); console.log('after-drop'); 42;");
+        {
+            std::lock_guard lock(_heldMutex);
+            LOK_ASSERT_EQUAL(std::size_t(1), _heldConsole.size());
+            LOK_ASSERT(_heldConsole[0].find(" output=2 ") != std::string::npos);
+        }
+        finish();
+        broker(
+            [this](DocumentBroker& document)
+            {
+                LOK_ASSERT(
+                    document.forwardToChild(_render, "unitretirement console-pressure", false));
+                return std::string();
+            });
+        response("unitretirement console-pressure-checked");
+        _holdConsole = false;
+        _holdTerminal = false;
+        send(request(6, "for(;;) console.log('drop-without-blocking-stop');"));
+        const auto tuple = identity(waitState("reservationPending"));
+        waitState("dispatched");
+        send("agentstop " + tuple);
+        const auto stopped = response("agentscriptresult:");
+        LOK_ASSERT(stopped.find("\"err\"") != std::string::npos ||
+                   stopped.find("prestart_cancelled") != std::string::npos);
+        await([this] { return state("state") == "idle"; });
+        LOK_ASSERT(execute(7, "42;").find("\"ok\":42") != std::string::npos);
+        _holdConsole = true;
+        _holdTerminal = true;
+        start(8, "console.log('retired'); 42;");
+        {
+            std::lock_guard lock(_heldMutex);
+            frames = _heldConsole;
+        }
+        LOK_ASSERT_EQUAL(std::size_t(1), frames.size());
+        broker(
+            [this, &frames, &child](DocumentBroker& document)
+            {
+                document.fenceAgentRetirement(_render->getId());
+                LOK_ASSERT(!document.handleAgentScriptConsole(frames[0], child));
+                return std::string();
+            });
+    }
     void run()
     {
-        if (_mode == 0)
+        if (_mode == 33)
+        {
+            consoleRegression();
+        }
+        else if (_mode == 0)
         {
             expectRejected(request(2, "1"), "execution_sequence_gap");
             const auto valid = request(1, "1");
@@ -610,7 +844,8 @@ class AgentScriptControlTests final : public WopiTestServer
         else if (_mode == 13)
         {
             _holdTerminal = true;
-            send(request(1, "42;", 1000));
+            _holdConsole = true;
+            send(request(1, "console.log('failed-generation'); 42;", 1000));
             waitState("reservationPending");
             waitState("executionUnresolved");
             LOK_ASSERT_EQUAL(0U, _terminalCount.load());
@@ -620,6 +855,8 @@ class AgentScriptControlTests final : public WopiTestServer
                 {
                     std::lock_guard lock(_heldMutex);
                     LOK_ASSERT(!_heldTerminal.empty());
+                    LOK_ASSERT_EQUAL(std::size_t(1), _heldConsole.size());
+                    LOK_ASSERT(!document.handleAgentScriptConsole(_heldConsole[0], _heldChild));
                     LOK_ASSERT(document.handleAgentScriptResult(_heldTerminal, _heldChild));
                     return std::string();
                 });
@@ -1120,7 +1357,7 @@ public:
     void configure(Poco::Util::LayeredConfiguration& config) override
     {
         config.setBool("security.enable_websocket_urp", true);
-        config.setBool("agent_script.hard_recovery_enabled", _mode >= 23);
+        config.setBool("agent_script.hard_recovery_enabled", _mode >= 23 && _mode <= 32);
         if (_mode == 0)
             verifyDescriptorHandOff();
     }
@@ -1235,6 +1472,13 @@ public:
             _responses.emplace_back(payload.begin(), payload.end());
             return true;
         }
+        if (_holdConsole &&
+            std::string_view(payload.data(), payload.size()).starts_with("agentscriptconsolekit:"))
+        {
+            std::lock_guard held(_heldMutex);
+            _heldConsole.emplace_back(payload.begin(), payload.end());
+            return true;
+        }
         if (!_holdTerminal ||
             !std::string_view(payload.data(), payload.size()).starts_with("agentscriptresultkit:"))
             return false;
@@ -1259,7 +1503,7 @@ public:
             data.starts_with("error: cmd=agentscript") || data.starts_with("agentcapabilities:") ||
             data.starts_with("agentregistered:") || data.starts_with("agentrenewed:") ||
             data.starts_with("agentretired:") || data.starts_with("agentrecovery:") ||
-            data.starts_with("error: cmd=load"))
+            data.starts_with("error: cmd=load") || data.starts_with("agentscriptconsole:"))
         {
             std::lock_guard lock(_responsesMutex);
             _responses.emplace_back(data);
@@ -1331,7 +1575,7 @@ UnitBase** unit_create_wsd_multi()
             new AgentScriptControlTests(26), new AgentScriptControlTests(27),
             new AgentScriptControlTests(28), new AgentScriptControlTests(29),
             new AgentScriptControlTests(30), new AgentScriptControlTests(31),
-            new AgentScriptControlTests(32), nullptr
+            new AgentScriptControlTests(32), new AgentScriptControlTests(33), nullptr
     };
 #else
     return new UnitBase* [] { nullptr };

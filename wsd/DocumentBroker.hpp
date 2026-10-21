@@ -707,6 +707,8 @@ public:
     bool handleAgentScript(const std::shared_ptr<ClientSession>& session,
                            const std::string& message);
     void pollAgentScript();
+    bool handleAgentScriptConsole(const std::string& message,
+                                  const std::shared_ptr<ChildProcess>& child);
     bool handleAgentScriptResult(const std::string& message,
                                  const std::shared_ptr<ChildProcess>& child);
     bool handleAgentRenewal(const std::shared_ptr<ClientSession>& session,
@@ -2267,6 +2269,9 @@ private:
         bool stopResolved = false;
         bool terminal = false;
         bool failed = false;
+        unsigned consoleOrdinal = 0;
+        unsigned consoleCount = 0;
+        std::size_t consoleBytes = 0;
         std::chrono::steady_clock::time_point deadline;
         std::chrono::steady_clock::time_point stopDeadline;
     };
