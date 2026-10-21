@@ -738,12 +738,12 @@ public:
     {
         auto owner = jsuno::createSourceProxyOwner();
         CPPUNIT_ASSERT_EQUAL(u"[7,[0],[\"out\"]]"_ustr, run(owner, execution(), uR"(
-            const proxy = $internal.createProxy(uno.idl.com.sun.star.script.XInvocation, 'out',
-                'function(method,args,state) { args[2].val=[0]; '
-                + 'args[3].val=[new uno.Any(uno.type.string,"out")]; '
+            const proxy = $internal.createProxy(uno.idl.com.sun.star.script.provider.XScript, 'out',
+                'function(method,args,state) { args[1].val=[0]; '
+                + 'args[2].val=[new uno.Any(uno.type.string,"out")]; '
                 + 'return new uno.Any(uno.type.long,7); }', {});
             const indices = {}, values = {};
-            const result = proxy.invoke('typed', [], indices, values);
+            const result = proxy.invoke([], indices, values);
             [result, indices.val, values.val];
         )"_ustr));
         CPPUNIT_ASSERT_EQUAL(u"[\"detected\",\"updated\",7,true]"_ustr, run(owner, execution(), uR"(
