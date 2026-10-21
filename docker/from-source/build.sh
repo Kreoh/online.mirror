@@ -168,9 +168,25 @@ python3 "$SRCDIR/debrand.py" validate-po "$BUILDDIR/online" || exit 1
 bash "$SRCDIR/check-builder.sh" "$BUILDDIR/online/configure.ac" || exit 1
 ( cd online && ./autogen.sh ) || exit 1
 
+configure_release()
+{
+( cd online && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-tests --with-lokit-path="$BUILDDIR"/online/engine/include --with-lo-builddir="$BUILDDIR"/online/engine --with-lo-path=/opt/online-office --without-app-branding --with-app-name='Online Office' --with-app-package-name=org.onlineoffice.app --without-vendor --with-info-url=about:blank $ONLINE_EXTRA_BUILD_OPTIONS)
+}
+
 ##### engine #####
 
 ( cd online/engine && ./autogen.sh --with-distro=OnlineLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
+
+# Prepare Online's bundled configure dependencies before checking its real consumers.
+( cd online/engine && make \
+    StaticLibrary_PocoFoundation StaticLibrary_PocoXML StaticLibrary_PocoJSON \
+    StaticLibrary_PocoUtil StaticLibrary_PocoNet StaticLibrary_PocoZip \
+    StaticLibrary_PocoCrypto StaticLibrary_PocoNetSSL \
+    StaticLibrary_libpng StaticLibrary_zstd ExternalProject_openssl ) || exit 1
+configure_release || exit 1
+( cd online/engine && make \
+    ONLINE.SRCDIR="$BUILDDIR/online" ONLINE.BUILDDIR="$BUILDDIR/online" \
+    StaticLibrary_forkit StaticLibrary_wsd ) || exit 1
 
 # Run native JavaScript regression tests only on the Jenkins builder.
 if [[ "${ONLINE_OFFICE_RUN_JSUNO:-}" == "1" ]]; then
@@ -194,10 +210,6 @@ cp -a online/engine/instdir "$INSTDIR"/opt/online-office
 ##### coolwsd & cool #####
 
 # build
-configure_release()
-{
-( cd online && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-tests --with-lokit-path="$BUILDDIR"/online/engine/include --with-lo-builddir="$BUILDDIR"/online/engine --with-lo-path=/opt/online-office --without-app-branding --with-app-name='Online Office' --with-app-package-name=org.onlineoffice.app --without-vendor --with-info-url=about:blank $ONLINE_EXTRA_BUILD_OPTIONS)
-}
 # The existing recipe removes and recreates systemplate after its stamp is removed.
 # Cached stamps from builders without cpio may describe incomplete templates.
 prepare_systemplate()
