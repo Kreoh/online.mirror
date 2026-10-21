@@ -736,7 +736,8 @@ void ClientSession::checkAIRequestTimeout(std::chrono::steady_clock::time_point 
 bool ClientSession::_handleInput(const char *buffer, int length)
 {
     if ((!_protocol || !_protocol->isSensitive()) &&
-        !std::string_view(buffer, length).starts_with("agentrenew"))
+        !std::string_view(buffer, length).starts_with("agentrenew") &&
+        !Message::isAgentScriptControl(std::string_view(buffer, length)))
         LOG_TRC("handling incoming [" << getAbbreviatedMessage(buffer, length) << ']');
     const std::string firstLine = getFirstLine(buffer, length);
     const StringVector tokens = StringVector::tokenize(firstLine.data(), firstLine.size());
@@ -752,6 +753,19 @@ bool ClientSession::_handleInput(const char *buffer, int length)
     {
         sendTextFrameAndLogError("error: cmd=empty kind=unknown");
         return false;
+    }
+
+    if (Message::isAgentScriptControl(std::string_view(buffer, length)))
+    {
+        try
+        {
+            return docBroker->handleAgentScript(client_from_this(), std::string(buffer, length));
+        }
+        catch (...)
+        {
+            LOG_ERR("Controlled execution request failed");
+            return false;
+        }
     }
 
     // Renewal credentials must never enter application handlers or trace dumps.
@@ -3177,8 +3191,12 @@ void ClientSession::writeQueuedMessages(std::size_t capacity)
     }
     catch (const std::exception& ex)
     {
-        LOG_ERR("Failed to send message " << (item ? item->abbr() : "<empty-item>")
-                                          << " to client: " << ex.what());
+        if (item && Message::isAgentScriptControl(
+                        std::string_view(item->data().data(), item->data().size())))
+            LOG_ERR("Controlled execution frame delivery failed, bytes=" << item->size());
+        else
+            LOG_ERR("Failed to send message " << (item ? item->abbr() : "<empty-item>")
+                                              << " to client: " << ex.what());
     }
 
     LOG_TRC("performed write, wrote " << wrote << " bytes");

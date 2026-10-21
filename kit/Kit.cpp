@@ -183,6 +183,18 @@ int getCurrentThreadCount()
 COKit* loKitPtr = nullptr;
 
 static bool EnableWebsocketURP = false;
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+static std::shared_ptr<ScriptCancellation> ScriptControl;
+static std::string ScriptControlGeneration;
+std::shared_ptr<ScriptCancellation> getScriptCancellation() { return ScriptControl; }
+const std::string& getScriptControlGeneration() { return ScriptControlGeneration; }
+void stopScriptCancellation()
+{
+    if (ScriptControl)
+        ScriptControl->stop();
+    ScriptControl.reset();
+}
+#endif
 #if !MOBILEAPP
 static int URPStartCount = 0;
 #endif
@@ -924,6 +936,13 @@ Document::~Document()
 /// Post the message - in the unipoll world we're in the right thread anyway
 bool Document::postMessage(const std::string_view data, const WSOpCode code) const
 {
+    if (Message::isAgentScriptControl(data))
+    {
+        if (_isBgSaveProcess || !_websocketHandler)
+            return false;
+        LOG_TRC("Posting controlled execution frame, bytes=" << data.size());
+        return _websocketHandler->sendMessage(data.data(), data.size(), code, true) > 0;
+    }
     if (_isBgSaveProcess)
     {
         auto socket = _saveProcessParent.lock();
@@ -1205,8 +1224,11 @@ bool Document::sendFrame(const std::string_view data, WSOpCode opCode) const
     }
     catch (const Exception& exc)
     {
-        LOG_ERR("Document::sendFrame: Exception: " << exc.displayText() <<
-                (exc.nested() ? "( " + exc.nested()->displayText() + ')' : ""));
+        if (Message::isAgentScriptControl(data))
+            LOG_ERR("Controlled execution frame delivery failed, bytes=" << data.size());
+        else
+            LOG_ERR("Document::sendFrame: Exception: " << exc.displayText() <<
+                    (exc.nested() ? "( " + exc.nested()->displayText() + ')' : ""));
     }
 
     return false;
@@ -1731,6 +1753,10 @@ bool Document::forkToSave(const std::function<void()>& childSave, int viewId,
         LOG_TRC("Skipping background save for bg save disabled process");
         return false;
     }
+
+    // The independent reader and URP channels cannot be inherited across a background fork.
+    if (isURPEnabled())
+        return false;
 
     ThreadDropper threadGuard;
     if (!threadGuard.dropThreads(this))
@@ -2679,6 +2705,18 @@ bool Document::forwardToChild(const std::string_view prefix, const std::vector<c
             std::shared_ptr<ChildSession> session = it->second;
 
             const std::string command(data, size);
+            if (Message::isAgentScriptControl(command))
+            {
+                try
+                {
+                    return session->executeControlledScript(command);
+                }
+                catch (...)
+                {
+                    LOG_ERR("Controlled execution dispatch failed");
+                    return false;
+                }
+            }
             if (command.starts_with("agentregister epoch="))
             {
                 const std::string epoch = command.substr(sizeof("agentregister epoch=") - 1);
@@ -2745,7 +2783,7 @@ bool Document::forwardToChild(const std::string_view prefix, const std::vector<c
         }
 
         std::string abbrMessage;
-        if (Anonymizer::enabled())
+        if (Anonymizer::enabled() || Message::isAgentScriptControl(std::string_view(data, size)))
         {
             abbrMessage = "...";
         }
@@ -3054,7 +3092,11 @@ void Document::drainQueue()
 
             const KitQueue::Payload input = _queue->pop();
 
-            LOG_TRC("Kit handling queue message: " << COOLProtocol::getAbbreviatedMessage(input));
+            if (Message::isAgentScriptControl(std::string_view(input.data(), input.size())))
+                LOG_TRC("Kit handling controlled execution frame, bytes=" << input.size());
+            else
+                LOG_TRC(
+                    "Kit handling queue message: " << COOLProtocol::getAbbreviatedMessage(input));
 
             const StringVector tokens = StringVector::tokenize(input.data(), input.size());
 
@@ -3090,7 +3132,11 @@ void Document::drainQueue()
             }
             else
             {
-                LOG_ERR("Unexpected request: [" << COOLProtocol::getAbbreviatedMessage(input) << "].");
+                if (Message::isAgentScriptControl(std::string_view(input.data(), input.size())))
+                    LOG_ERR("Unexpected controlled execution frame, bytes=" << input.size());
+                else
+                    LOG_ERR("Unexpected request: [" << COOLProtocol::getAbbreviatedMessage(input)
+                                                    << "].");
             }
         }
 
@@ -3474,6 +3520,9 @@ void KitSocketPoll::quarantineAgentRetirement() {}
 
 KitSocketPoll::~KitSocketPoll()
 {
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    stopScriptCancellation();
+#endif
     quarantineAgentRetirement();
     mainPoll = nullptr;
 }
@@ -4885,8 +4934,36 @@ void lokit_main(
             }
         }
 
-        if (!mainKit->insertNewUnixSocket(MasterLocation, pathAndQuery, websocketHandler,
-                                          &shareFDs))
+        int scriptSender = -1;
+#if defined(__linux__) && !DOCS_SHARE_PROCESS
+        if (!Util::isKitInProcess() && isURPEnabled() && shareFDs.size() == 3 &&
+            pathAndQuery.find("&rawview=1") != std::string::npos)
+        {
+            try
+            {
+                ScriptControl = std::make_shared<ScriptCancellation>();
+                ScriptControlGeneration = Util::toLower(Util::rng::getHexString(32));
+                scriptSender = ScriptControl->takeSender();
+                shareFDs.push_back(scriptSender);
+                pathAndQuery += "&scriptcontrol=2&scriptgeneration=" + ScriptControlGeneration;
+                websocketHandler->markSensitive();
+            }
+            catch (const std::exception&)
+            {
+                if (scriptSender >= 0)
+                    ::close(scriptSender);
+                scriptSender = -1;
+                ScriptControl.reset();
+                LOG_ERR("Controlled execution channel creation failed");
+                Util::forcedExit(EX_SOFTWARE);
+            }
+        }
+#endif
+        const bool connected =
+            mainKit->insertNewUnixSocket(MasterLocation, pathAndQuery, websocketHandler, &shareFDs);
+        if (scriptSender >= 0)
+            ::close(scriptSender);
+        if (!connected)
         {
             LOG_SFL("Failed to connect to WSD. Will exit.");
             Util::forcedExit(EX_SOFTWARE);

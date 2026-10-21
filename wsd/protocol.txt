@@ -2031,3 +2031,82 @@ them.
 
     GET.  Returns the avatar bytes for the user, fetched by the server from the URL the integrator
     supplied in WOPI's UserExtraInfo.avatar so the client never sees integrator-internal URLs.
+
+Controlled agent script execution (dedicated Linux Kit)
+------------------------------------------------------
+
+agentcapabilities adds:
+    scriptcontrol=2 scriptcallbacks=0 generation=<32 lowercase hexadecimal characters>
+
+These fields require a checked four-descriptor hand-off and exact-view engine support.
+The descriptor order is smaps, URP input, URP output, private cancellation channel.
+The capability does not grant authority: each command requires the exact active registered
+transport, retained render view, current bearer authority and child generation. Registration
+without renewal proof remains usable for finite execution. Backend operation admission is a
+separate requirement. This native interface is not yet the production chat Stop integration.
+
+Client to broker, exact field order and single spaces:
+    agentscript generation=<g> epoch=<e> execution=<sequence> timeout=<milliseconds>\n<source>
+    agentstop generation=<g> epoch=<e> execution=<sequence> admission=<a> viewid=<v> renderid=<r>
+
+The source is at most 1048576 bytes and contains no NUL. Timeout is a canonical decimal
+integer from 1 to 30000. Execution is a canonical positive signed 64-bit decimal sequence.
+The first sequence is 1 and each new execution must be the retained watermark plus 1.
+The broker consumes it before Reserve, including when Reserve delivery subsequently fails.
+A replay at or below the watermark returns:
+    error: cmd=agentscript kind=execution_replay_rejected
+A gap returns execution_sequence_gap. Invalid syntax, identity, unavailable authority and
+busy admission return fixed diagnostics. No source or credential is echoed in diagnostics.
+The watermark survives completion, lost terminal receipts and credential renewal. It is
+never reset to retry a mutation. Lost outcome requires caller retirement, not an automatic
+fresh-sequence retry. Only one execution may be outstanding in a broker.
+
+The broker derives admission, view and render identity. It sends Reserve on the private
+SOCK_SEQPACKET channel, waits for the exact Reserved reply and rechecks ownership and
+known save/upload barriers before sending:
+    child-<r> agentscriptexecute generation=<g> epoch=<e> execution=<sequence> admission=<a> viewid=<v> renderid=<r> timeout=<milliseconds>\n<source>
+
+Kit claims the exact reservation once and passes its shared cancellation token to the existing
+executeScriptWithView ABI. Every claimed path completes the reservation, including exceptions,
+pre-start cancellation and failed terminal delivery. Duplicate dispatch cannot claim it again.
+
+Broker to exact owner transport:
+    agentscriptstate: generation=<g> epoch=<e> execution=<sequence> admission=<a> viewid=<v> renderid=<r> state=<state>
+    agentscriptresult: generation=<g> epoch=<e> execution=<sequence> admission=<a> viewid=<v> renderid=<r>\n<JSON>
+
+States are reservationPending, dispatched, stopRequested, stopApplied, stopUnknown and
+executionUnresolved. stopApplied proves the reader set the retained atomic token. A terminal
+result independently proves the controlled call returned. Receipt ordering does not establish
+cancellation causality, interruption time, rollback or absence of partial writes.
+
+Terminal JSON preserves optional raw ok or err values. Undefined has neither. Returned
+execution has state=returned and invoked=true. Pre-start token cancellation has
+state=prestart_cancelled and invoked=false. Rejected view or retirement has state=rejected
+and invoked=false. A native exception has state=failed and no inferred invocation flag.
+Kit sends the same tuple with the agentscriptresultkit: prefix. Broker routing checks the
+actual sending child instance and retained full tuple before delivering any result.
+
+A stop before Reserved is sent after Reserve on the same ordered descriptor. Dispatch then
+waits for the stop reply so Kit can claim and complete the cancelled reservation without
+invoking JavaScript. If terminal arrives before an outstanding stop acknowledgement, the
+broker retains the fence until that acknowledgement resolves. Handshake deadlines are five
+seconds; the terminal observation allowance is the execution budget plus five seconds.
+Deadline failure closes the cancellation channel and retains an unresolved execution until
+retirement. A late authenticated terminal can still report return without reopening authority.
+Channel closure cancels every reservation on that channel. It never proves native unwind.
+
+Known native save, upload, renewal, retirement and generation barriers are enforced. The
+native broker cannot independently prove an opaque URP invocation has finished. Trusted
+backend operation fencing remains required. Arbitrary blocked UNO calls, SolarMutex waits
+and process recovery require separate evidence and cannot be declared cancelled by timeout.
+
+scriptcallbacks=0 means proxy creation and retrieval fail explicitly in this controlled route.
+No borrowed proxy callback pointer is installed. Existing hooked legacy execution keeps its
+behaviour. Console frames use weak session ownership and the agentscriptconsole: family.
+An engine-owned callback lifetime and execution-scoped response bridge remain required for
+full callback support. These restrictions do not establish safety of existing global proxies.
+
+The independent reader is joined on Kit disconnect and shutdown. URP-enabled Kits refuse
+background fork before thread suspension. Descriptor partial delivery is a failure and is
+never retried with the same ancillary descriptors. Unsupported platforms advertise no
+controlled-execution capability. Source review alone is not runtime validation.

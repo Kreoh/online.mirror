@@ -86,8 +86,23 @@ public:
         return COOLProtocol::getTokenInteger(_tokens, name, value);
     }
 
+    /// Controlled frames may contain source or engine errors. Malformed family members stay private.
+    static bool isAgentScriptControl(std::string_view payload)
+    {
+        if (payload.starts_with("child-") || payload.starts_with("client-"))
+        {
+            const auto separator = payload.find(' ');
+            if (separator == std::string_view::npos)
+                return false;
+            payload.remove_prefix(separator + 1);
+        }
+        return payload.starts_with("agentscript") || payload.starts_with("agentstop");
+    }
+
     /// Return the abbreviated message for logging purposes.
     std::string abbr() const {
+        if (isAgentScriptControl(std::string_view(_data.data(), _data.size())))
+            return _id + " controlled-script frame bytes=" + std::to_string(_data.size());
         return _id + ' ' + COOLProtocol::getAbbreviatedMessage(_data.data(), _data.size());
     }
     const std::string& id() const { return _id; }

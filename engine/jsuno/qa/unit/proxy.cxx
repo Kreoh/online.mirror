@@ -125,7 +125,46 @@ public:
         assertSuccessfulInvocation();
     }
 
+    void testUnavailableHook()
+    {
+        const auto execute = [](OUString const& source, bool hooked)
+        {
+            return jsuno::execute(source, u"<proxy-availability>"_ustr, 1, {},
+                                  hooked
+                                      ? std::function<void(OUString const&)>([](OUString const&) {})
+                                      : std::function<void(OUString const&)>(),
+                                  nullptr);
+        };
+        const auto rejected = [&](OUString const& source)
+        {
+            try
+            {
+                execute(source, false);
+                CPPUNIT_FAIL("expected unavailable proxy callback error");
+            }
+            catch (jsuno::Exception const& error)
+            {
+                CPPUNIT_ASSERT_EQUAL(u"Proxy callbacks are unavailable for this execution"_ustr,
+                                     error.message);
+            }
+        };
+        // Rejected creation does not reserve the ID or retain a callback adapter.
+        rejected(
+            u"$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'no-hook');"_ustr);
+        CPPUNIT_ASSERT_EQUAL(
+            u"7"_ustr,
+            execute(
+                u"$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'no-hook'); 7;"_ustr,
+                true));
+        // Rejected retrieval cannot steal an adapter created by an earlier hooked runtime.
+        rejected(u"$internal.takeProxy('no-hook');"_ustr);
+        CPPUNIT_ASSERT_EQUAL(u"8"_ustr, execute(u"$internal.takeProxy('no-hook'); 8;"_ustr, true));
+        CPPUNIT_ASSERT_EQUAL(u"9"_ustr, execute(u"4 + 5;"_ustr, false));
+        assertSuccessfulInvocation();
+    }
+
     CPPUNIT_TEST_SUITE(Proxy);
+    CPPUNIT_TEST(testUnavailableHook);
     CPPUNIT_TEST(testDelivery);
     CPPUNIT_TEST(testEventDelivery);
     CPPUNIT_TEST(testTimeout);

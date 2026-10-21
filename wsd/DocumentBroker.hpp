@@ -22,6 +22,7 @@
 #include <common/Protocol.hpp>
 #include <common/Rectangle.hpp>
 #include <common/Session.hpp>
+#include <common/ScriptCancellation.hpp>
 #include <common/SigUtil.hpp>
 #include <common/Util.hpp>
 #include <net/Socket.hpp>
@@ -699,6 +700,12 @@ public:
     void handleAgentRecoveryRequest(const std::shared_ptr<StreamSocket>& socket,
                                     std::string_view bearerToken, const std::string& epoch,
                                     const std::string& requestId);
+    bool hasAgentScript() const;
+    bool handleAgentScript(const std::shared_ptr<ClientSession>& session,
+                           const std::string& message);
+    void pollAgentScript();
+    bool handleAgentScriptResult(const std::string& message,
+                                 const std::shared_ptr<ChildProcess>& child);
     bool handleAgentRenewal(const std::shared_ptr<ClientSession>& session,
                             const std::string& message);
     bool isRegisteredAgent(const std::shared_ptr<ClientSession>& session) const;
@@ -711,6 +718,8 @@ public:
     bool handleAgentRetirementKit(const std::string& message);
     void fenceAgentRetirement(const std::string& renderId);
 #if ENABLE_DEBUG
+    std::string agentScriptForTesting(std::string_view action, std::int64_t sequence = 0);
+    std::shared_ptr<ChildProcess> agentScriptChildForTesting() const;
     /// Expires retained authority after successful registration in native unit tests only.
     bool expireAgentRegistrationForTesting(const std::string& epoch);
     bool hasAgentAuthorityBaselineForTesting(const std::string& epoch) const;
@@ -2218,6 +2227,12 @@ private:
         };
         std::optional<AuthorityBaseline> authorityBaseline;
 #endif
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        std::weak_ptr<ChildProcess> scriptChild;
+        std::weak_ptr<ClientSession> scriptRender;
+        std::string scriptGeneration;
+        std::int64_t highestConsumedExecutionSequence = 0;
+#endif
         Authorization currentAuthority;
         std::string epoch;
         std::string requestId;
@@ -2234,6 +2249,37 @@ private:
     bool agentRenewalIdentity(const AgentRetirementRecord& record,
                               const std::shared_ptr<ClientSession>& transport) const;
     void failAgentRenewal(AgentRetirementRecord& record, std::string_view reason);
+#endif
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    struct AgentScript
+    {
+        ScriptCancellation::Identity identity;
+        std::weak_ptr<ClientSession> transport;
+        std::weak_ptr<ChildProcess> child;
+        std::string source;
+        int timeout = 0;
+        bool reserved = false;
+        bool dispatched = false;
+        bool stopRequested = false;
+        bool stopResolved = false;
+        bool terminal = false;
+        bool failed = false;
+        std::chrono::steady_clock::time_point deadline;
+        std::chrono::steady_clock::time_point stopDeadline;
+    };
+    std::unique_ptr<AgentScript> _agentScript;
+#if ENABLE_DEBUG
+    bool _agentScriptHoldDispatchForTesting = false;
+    bool _agentScriptHoldRepliesForTesting = false;
+    std::optional<ScriptCancellation::ReplyStatus> _agentScriptDropReplyForTesting;
+    unsigned _agentScriptDroppedRepliesForTesting = 0;
+    unsigned _agentScriptReservationsForTesting = 0;
+    unsigned _agentScriptDispatchesForTesting = 0;
+#endif
+    bool agentScriptAuthority(const std::shared_ptr<ClientSession>& transport,
+                              bool requireChannel = true) const;
+    void agentScriptState(std::string_view state);
+    void failAgentScript();
 #endif
     std::vector<std::unique_ptr<AgentRetirementRecord>> _agentRetirements;
     bool _retirementNegotiated = false;

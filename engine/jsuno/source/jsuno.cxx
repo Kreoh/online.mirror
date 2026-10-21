@@ -317,6 +317,7 @@ struct RuntimeData
 
     // Set whenever the script touches the legacy UNO API outside a suppression scope:
     bool usedLegacyUnoApi = false;
+    bool sensitiveDiagnostics = false;
     // Scopes opened by $internal.suppressLegacyUnoApiStart and not closed again; owning them here
     // ends whatever the script leaves unbalanced together with the runtime:
     std::vector<comphelper::LegacyApiWarningSuppression> legacyApiWarningSuppressions;
@@ -1704,10 +1705,13 @@ JSValue moduleGetProperty(JSContext* ctx, JSValueConst obj, JSAtom atom, JSValue
     if (comphelper::isLegacyUnoApi(id) && !comphelper::isLegacyApiWarningSuppressed())
     {
         getRuntimeData(ctx)->usedLegacyUnoApi = true;
-        SAL_INFO(
-            "jsuno.legacyapi",
-            "legacy UNO API " << id << " at " << getRuntimeData(ctx)->source << ":"
-                << getRuntimeData(ctx)->line);
+        if (getRuntimeData(ctx)->sensitiveDiagnostics)
+            SAL_INFO("jsuno.legacyapi", "Legacy UNO API used by controlled script");
+        else
+            SAL_INFO(
+                "jsuno.legacyapi",
+                "legacy UNO API " << id << " at " << getRuntimeData(ctx)->source << ":"
+                    << getRuntimeData(ctx)->line);
     }
     cpo::uno::Reference<css::container::XHierarchicalNameAccess> mgr(
         comphelper::getProcessComponentContext()->getValueByName(
@@ -3138,6 +3142,11 @@ JSValue internalCreateProxy(JSContext* ctx, JSValueConst, [[maybe_unused]] int a
 {
     assert(argc >= 2);
     return callFromJs(ctx, [ctx, argv] {
+        if (!getRuntimeData(ctx)->proxyCallHook)
+        {
+            JS_ThrowTypeError(ctx, "Proxy callbacks are unavailable for this execution");
+            throw JsException();
+        }
         if (JS_GetClassID(argv[0]) != getRuntimeData(ctx)->interfaceClassId)
         {
             JS_ThrowTypeError(ctx,
@@ -3186,6 +3195,11 @@ JSValue internalTakeProxy(JSContext* ctx, JSValueConst, [[maybe_unused]] int arg
 {
     assert(argc >= 1);
     return callFromJs(ctx, [ctx, argv] {
+        if (!getRuntimeData(ctx)->proxyCallHook)
+        {
+            JS_ThrowTypeError(ctx, "Proxy callbacks are unavailable for this execution");
+            throw JsException();
+        }
         if (!JS_IsString(argv[0]))
         {
             JS_ThrowTypeError(ctx, "$internal.takeProxy: argument must be a string id");
@@ -3474,6 +3488,7 @@ OUString jsuno::execute(
     JS_SetMaxStackSize(rt, 4 * 1024 * 1024); // from default 256 KiB to 4 MiB
     JS_SetRuntimeOpaque(
         rt, new RuntimeData(rt, source, line, std::move(consoleHook), std::move(proxyCallHook)));
+    getRuntimeData(rt)->sensitiveDiagnostics = cancelled != nullptr;
     JS_NewClassID(rt, &getRuntimeData(rt)->pointerClassId);
     JSClassDef pointerClass{ "InternalPointer", pointerFinalizer, nullptr, nullptr, nullptr };
     [[maybe_unused]] auto e = JS_NewClass(rt, getRuntimeData(rt)->pointerClassId, &pointerClass);

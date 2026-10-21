@@ -19,6 +19,7 @@
 #include "KitQueue.hpp"
 
 #include <common/JsonUtil.hpp>
+#include <common/Message.hpp>
 #include <common/NumUtil.hpp>
 #include <common/Util.hpp>
 
@@ -435,8 +436,11 @@ KitQueue::Payload KitQueue::pop()
 
     Payload front = _queue.front();
 
-    LOG_TRC("KitQueue(" << _queue.size() << ") - pop " <<
-            COOLProtocol::getAbbreviatedMessage(front));
+    if (Message::isAgentScriptControl(std::string_view(front.data(), front.size())))
+        LOG_TRC("KitQueue(" << _queue.size() << ") controlled frame bytes=" << front.size());
+    else
+        LOG_TRC("KitQueue(" << _queue.size() << ") - pop "
+                            << COOLProtocol::getAbbreviatedMessage(front));
 
     _queue.erase(_queue.begin());
 
@@ -924,7 +928,11 @@ void KitQueue::dumpState(std::ostream& oss)
     oss << "\tIncoming Queue size: " << _queue.size() << "\n";
     size_t i = 0;
     for (const Payload &it : _queue)
-        oss << "\t\t" << i++ << ": " << COOLProtocol::getFirstLine(it) << "\n";
+        oss << "\t\t" << i++ << ": "
+            << (Message::isAgentScriptControl(std::string_view(it.data(), it.size()))
+                    ? "controlled execution frame"
+                    : COOLProtocol::getFirstLine(it))
+            << "\n";
 
     oss << "\tTile Queues count: " << _tileQueues.size() << "\n";
     for (const auto& queue : _tileQueues)

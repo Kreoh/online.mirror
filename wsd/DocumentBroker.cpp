@@ -437,6 +437,371 @@ bool DocumentBroker::agentRenewalBlocks(const std::shared_ptr<ClientSession>& se
     return false;
 }
 
+#if ENABLE_DEBUG
+std::shared_ptr<ChildProcess> DocumentBroker::agentScriptChildForTesting() const
+{
+    ASSERT_CORRECT_THREAD();
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (UnitWSD::isUnitTesting() && _agentScript)
+        return _agentScript->child.lock();
+#endif
+    return {};
+}
+
+std::string DocumentBroker::agentScriptForTesting(std::string_view action, std::int64_t sequence)
+{
+    ASSERT_CORRECT_THREAD();
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (!UnitWSD::isUnitTesting() || _agentRetirements.empty())
+        return {};
+    if (action == "dropReserved")
+        _agentScriptDropReplyForTesting = ScriptCancellation::ReplyStatus::Reserved;
+    else if (action == "dropStopApplied")
+        _agentScriptDropReplyForTesting = ScriptCancellation::ReplyStatus::StopApplied;
+    else if (action == "droppedReplies")
+        return std::to_string(_agentScriptDroppedRepliesForTesting);
+    else if (action == "reservations")
+        return std::to_string(_agentScriptReservationsForTesting);
+    else if (action == "dispatches")
+        return std::to_string(_agentScriptDispatchesForTesting);
+    else if (action == "holdReplies")
+        _agentScriptHoldRepliesForTesting = true;
+    else if (action == "releaseReplies")
+        _agentScriptHoldRepliesForTesting = false;
+    else if (action == "hold")
+        _agentScriptHoldDispatchForTesting = true;
+    else if (action == "release")
+        _agentScriptHoldDispatchForTesting = false;
+    else if (action == "seed" && !_agentScript && sequence >= 0)
+        _agentRetirements.back()->highestConsumedExecutionSequence = sequence;
+    else if (action == "failReserve" && !_agentScript && _childProcess)
+        ::shutdown(_childProcess->scriptControlFD(), SHUT_WR);
+    else if (action == "save")
+        return sendUnoSave(_agentRetirements.back()->scriptRender.lock()) ? "started" : "blocked";
+    else if (action == "upload")
+    {
+        uploadToStorageInternal(_agentRetirements.back()->scriptRender.lock(), "", "", false, false,
+                                false);
+        return _uploadRequest && !_uploadRequest->isComplete() ? "started" : "blocked";
+    }
+    else if (action == "watermark")
+        return std::to_string(_agentRetirements.back()->highestConsumedExecutionSequence);
+    else if (action == "state")
+        return !_agentScript              ? "idle"
+               : _agentScript->failed     ? "unresolved"
+               : _agentScript->terminal   ? "terminal"
+               : _agentScript->dispatched ? "dispatched"
+               : _agentScript->reserved   ? "reserved"
+                                          : "pending";
+#endif
+    return {};
+}
+#endif
+
+bool DocumentBroker::hasAgentScript() const
+{
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    return bool(_agentScript);
+#else
+    return false;
+#endif
+}
+
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+namespace
+{
+std::string scriptIdentityText(const ScriptCancellation::Identity& identity)
+{
+    return "generation=" + identity.generation + " epoch=" + identity.epoch +
+           " execution=" + identity.execution + " admission=" + std::to_string(identity.admission) +
+           " viewid=" + std::to_string(identity.view) + " renderid=" + identity.renderSession;
+}
+} // namespace
+
+bool DocumentBroker::agentScriptAuthority(const std::shared_ptr<ClientSession>& transport,
+                                          bool requireChannel) const
+{
+    if (_agentRetirements.empty() || !transport || !_childProcess || isMarkedToDestroy())
+        return false;
+    const auto& record = *_agentRetirements.back();
+    const auto render = record.scriptRender.lock();
+    const auto entry = _sessions.find(record.renderId);
+    if (record.phase != AgentRetirementRecord::Phase::Active || record.renewal ||
+        record.transport.lock() != transport || _urpTransport.lock() != transport ||
+        record.scriptChild.lock() != _childProcess ||
+        record.scriptGeneration != _childProcess->scriptGeneration() ||
+        (requireChannel && _childProcess->scriptControlFD() < 0) || transport->isCloseFrame() ||
+        !transport->isWritable() || !transport->isWebsocketUrpEnabled() ||
+        transport->getBoundAgentViewId() != record.viewId ||
+        transport->getDocumentBroker().get() != this || !render || entry == _sessions.end() ||
+        entry->second != render || !render->isLive() || !render->isWritable() ||
+        !render->isAgentRenderView() || render->getKitViewId() != record.viewId ||
+        render->getDocumentBroker().get() != this)
+        return false;
+    return record.currentAuthority.matches(transport->getAuthorization()) &&
+           record.currentAuthority.matches(render->getAuthorization()) &&
+           record.currentAuthority.getExpiryEpoch() ==
+               transport->getAuthorization().getExpiryEpoch() &&
+           record.currentAuthority.getExpiryEpoch() == render->getAuthorization().getExpiryEpoch();
+}
+
+void DocumentBroker::agentScriptState(std::string_view state)
+{
+    if (_agentScript)
+        if (const auto owner = _agentScript->transport.lock())
+            owner->sendTextFrame("agentscriptstate: " + scriptIdentityText(_agentScript->identity) +
+                                 " state=" + std::string(state));
+}
+
+void DocumentBroker::failAgentScript()
+{
+    if (!_agentScript || _agentScript->failed)
+        return;
+    _agentScript->failed = true;
+    _agentScript->source.clear();
+    if (const auto child = _agentScript->child.lock())
+        child->closeScriptControl(); // EOF cancels the retained token, without proving unwind.
+    agentScriptState("executionUnresolved");
+}
+#endif
+
+bool DocumentBroker::handleAgentScript(const std::shared_ptr<ClientSession>& session,
+                                       const std::string& message)
+{
+    ASSERT_CORRECT_THREAD();
+    const auto reject = [&](std::string_view reason)
+    {
+        session->sendTextFrame("error: cmd=agentscript kind=" + std::string(reason));
+        return false;
+    };
+#if !defined(__linux__) || MOBILEAPP || DOCS_SHARE_PROCESS
+    return reject("unsupported");
+#else
+    if (!agentScriptAuthority(session, false))
+        return reject("unavailable");
+    auto& registration = *_agentRetirements.back();
+    if (message.starts_with("agentstop"))
+    {
+        if (!_agentScript || _agentScript->transport.lock() != session ||
+            message != "agentstop " + scriptIdentityText(_agentScript->identity))
+            return reject("unknownexecution");
+        if (_agentScript->failed)
+            return reject("unresolved");
+        if (_agentScript->stopRequested)
+            return true;
+        _agentScript->stopRequested = true;
+        _agentScript->stopDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        if (ScriptCancellation::sendStop(_childProcess->scriptControlFD(),
+                                         _agentScript->identity) !=
+            ScriptCancellation::Delivery::Sent)
+        {
+            failAgentScript();
+            return false;
+        }
+        agentScriptState("stopRequested");
+        return true;
+    }
+    const auto newline = message.find('\n');
+    std::vector<std::string> fields;
+    if (newline == std::string::npos || message.size() - newline - 1 > 1024 * 1024 ||
+        message.find('\0') != std::string::npos ||
+        !retirementFields(message.substr(0, newline), "agentscript",
+                          { "generation", "epoch", "execution", "timeout" }, fields))
+        return reject("syntax");
+    std::int64_t sequence = 0, timeout = 0;
+    if (!renewalNumber(fields[2], sequence) || !renewalNumber(fields[3], timeout) ||
+        timeout > 30000 || fields[0] != registration.scriptGeneration ||
+        fields[1] != registration.epoch)
+        return reject("identity");
+    if (sequence <= registration.highestConsumedExecutionSequence)
+        return reject("execution_replay_rejected");
+    if (registration.highestConsumedExecutionSequence == std::numeric_limits<std::int64_t>::max() ||
+        sequence != registration.highestConsumedExecutionSequence + 1)
+        return reject("execution_sequence_gap");
+    if (_childProcess->scriptControlFD() < 0)
+        return reject("unavailable");
+    if (agentRenewalBusy())
+        return reject("busy");
+    auto execution = std::make_unique<AgentScript>();
+    execution->identity = { registration.scriptGeneration, registration.epoch,
+                            registration.renderId,         fields[2],
+                            registration.viewId,           0 };
+    execution->transport = session;
+    execution->child = _childProcess;
+    execution->source = message.substr(newline + 1);
+    execution->timeout = static_cast<int>(timeout);
+    execution->deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    registration.highestConsumedExecutionSequence = sequence;
+    execution->identity.admission = _childProcess->nextScriptAdmission();
+    _agentScript = std::move(execution);
+#if ENABLE_DEBUG
+    if (UnitWSD::isUnitTesting())
+        ++_agentScriptReservationsForTesting;
+#endif
+    if (!_agentScript->identity.admission ||
+        ScriptCancellation::sendReserve(_childProcess->scriptControlFD(), _agentScript->identity) !=
+            ScriptCancellation::Delivery::Sent)
+    {
+        failAgentScript();
+        return false;
+    }
+    agentScriptState("reservationPending");
+    return true;
+#endif
+}
+
+void DocumentBroker::pollAgentScript()
+{
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (!_agentScript || _agentScript->failed)
+        return;
+    if (_agentScript->child.lock() != _childProcess ||
+        !agentScriptAuthority(_agentScript->transport.lock()))
+    {
+        failAgentScript();
+        return;
+    }
+#if ENABLE_DEBUG
+    if (UnitWSD::isUnitTesting() && _agentScriptHoldRepliesForTesting)
+        return;
+#endif
+    // Bound work per poll even if a compromised peer sends unrelated replies.
+    for (unsigned count = 0; count < 128; ++count)
+    {
+        ScriptCancellation::Reply reply;
+        const auto status =
+            ScriptCancellation::receiveReply(_childProcess->scriptControlFD(), reply);
+        if (status == ScriptCancellation::Receive::Pending)
+            break;
+        if (status == ScriptCancellation::Receive::Failed ||
+            reply.identity != _agentScript->identity)
+        {
+            failAgentScript();
+            return;
+        }
+#if ENABLE_DEBUG
+        // Discard one actual, identity-checked descriptor reply without pausing deadlines.
+        if (UnitWSD::isUnitTesting() && _agentScriptDropReplyForTesting == reply.status)
+        {
+            _agentScriptDropReplyForTesting.reset();
+            ++_agentScriptDroppedRepliesForTesting;
+            continue;
+        }
+#endif
+        switch (reply.status)
+        {
+            case ScriptCancellation::ReplyStatus::Reserved:
+                if (_agentScript->reserved)
+                {
+                    failAgentScript();
+                    return;
+                }
+                _agentScript->reserved = true;
+                break;
+            case ScriptCancellation::ReplyStatus::StopApplied:
+            case ScriptCancellation::ReplyStatus::StopUnknown:
+                if (!_agentScript->stopRequested || _agentScript->stopResolved)
+                {
+                    failAgentScript();
+                    return;
+                }
+                _agentScript->stopResolved = true;
+                agentScriptState(reply.status == ScriptCancellation::ReplyStatus::StopApplied
+                                     ? "stopApplied"
+                                     : "stopUnknown");
+                if (reply.status == ScriptCancellation::ReplyStatus::StopUnknown &&
+                    !_agentScript->dispatched)
+                {
+                    failAgentScript();
+                    return;
+                }
+                break;
+            case ScriptCancellation::ReplyStatus::ReservationRejected:
+                failAgentScript();
+                return;
+        }
+        if (_agentScript->terminal && _agentScript->stopResolved)
+        {
+            _agentScript.reset();
+            return;
+        }
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if ((_agentScript->stopRequested && !_agentScript->stopResolved &&
+         now >= _agentScript->stopDeadline) ||
+        (!_agentScript->terminal && now >= _agentScript->deadline))
+    {
+        failAgentScript();
+        return;
+    }
+#if ENABLE_DEBUG
+    if (UnitWSD::isUnitTesting() && _agentScriptHoldDispatchForTesting)
+        return;
+#endif
+    if (_agentScript->reserved && !_agentScript->dispatched &&
+        (!_agentScript->stopRequested || _agentScript->stopResolved))
+    {
+        // These barriers can be raised after Reserve. Never dispatch through them.
+        if (_checkFileInfo || _lockStateUpdateRequest || !_nativeSaveBarriers.empty() ||
+            _agentSaveAttempt || _saveManager.isSaving() ||
+            (_uploadRequest && !_uploadRequest->isComplete()) || isAsyncUploading())
+        {
+            failAgentScript();
+            return;
+        }
+#if ENABLE_DEBUG
+        if (UnitWSD::isUnitTesting())
+            ++_agentScriptDispatchesForTesting;
+#endif
+        _agentScript->dispatched = true; // A failed write has an unknown delivery outcome.
+        _agentScript->deadline =
+            now + std::chrono::milliseconds(_agentScript->timeout) + std::chrono::seconds(5);
+        std::string frame = "child-" + _agentScript->identity.renderSession +
+                            " agentscriptexecute " + scriptIdentityText(_agentScript->identity) +
+                            " timeout=" + std::to_string(_agentScript->timeout) + '\n' +
+                            _agentScript->source;
+        _agentScript->source.clear();
+        try
+        {
+            if (!_childProcess->sendTextFrame(frame))
+                failAgentScript();
+            else
+                agentScriptState("dispatched");
+        }
+        catch (...)
+        {
+            failAgentScript();
+        }
+    }
+#endif
+}
+
+bool DocumentBroker::handleAgentScriptResult(const std::string& message,
+                                             const std::shared_ptr<ChildProcess>& child)
+{
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (!_agentScript || _agentScript->terminal || !_agentScript->dispatched ||
+        child != _childProcess || child != _agentScript->child.lock())
+        return false;
+    const auto prefix =
+        "agentscriptresultkit: " + scriptIdentityText(_agentScript->identity) + '\n';
+    if (!message.starts_with(prefix))
+        return false;
+    // A closed cancellation channel may still deliver its terminal engine result. It does not
+    // restore authority or make the registration reusable after uncertain execution.
+    const auto owner = _agentScript->transport.lock();
+    if (agentScriptAuthority(owner, false))
+        owner->sendTextFrame("agentscriptresult: " + scriptIdentityText(_agentScript->identity) +
+                             '\n' + message.substr(prefix.size()));
+    _agentScript->terminal = true;
+    if (!_agentScript->failed && (!_agentScript->stopRequested || _agentScript->stopResolved))
+        _agentScript.reset();
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool DocumentBroker::agentRenewalBusy() const
 {
 #if !MOBILEAPP
@@ -444,9 +809,9 @@ bool DocumentBroker::agentRenewalBusy() const
         return true;
 #endif
     // Old-authority callbacks may invalidate a session; finish them before swapping authority.
-    return _lockStateUpdateRequest || !_nativeSaveBarriers.empty() || _agentSaveAttempt ||
-           _saveManager.isSaving() || (_uploadRequest && !_uploadRequest->isComplete()) ||
-           isAsyncUploading();
+    return hasAgentScript() || _lockStateUpdateRequest || !_nativeSaveBarriers.empty() ||
+           _agentSaveAttempt || _saveManager.isSaving() ||
+           (_uploadRequest && !_uploadRequest->isComplete()) || isAsyncUploading();
 }
 
 #if !MOBILEAPP
@@ -548,6 +913,8 @@ bool DocumentBroker::handleAgentRenewal(const std::shared_ptr<ClientSession>& se
     };
     if (record.phase != AgentRetirementRecord::Phase::Active)
         return fail("retired");
+    if (hasAgentScript())
+        return fail("busy");
     if (!agentRenewalIdentity(record, session))
         return fail(record.currentAuthority.isValid() ? "unavailable" : "expired");
     const auto expiryTime = std::chrono::milliseconds(expiry);
@@ -747,6 +1114,11 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
             capabilities += " rawdocument=1";
         if (_childProcess->supportsRawView())
             capabilities += " rawview=1";
+#if defined(__linux__) && !DOCS_SHARE_PROCESS
+        if (_childProcess->scriptControlFD() >= 0 && _childProcess->supportsRawView())
+            capabilities += " scriptcontrol=2 scriptcallbacks=0 generation=" +
+                            _childProcess->scriptGeneration();
+#endif
         session->sendTextFrame(capabilities);
         return true;
     }
@@ -792,6 +1164,11 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
         record->viewId = view;
         record->renderId = render->getId();
         record->transport = session;
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        record->scriptChild = _childProcess;
+        record->scriptRender = render;
+        record->scriptGeneration = _childProcess->scriptGeneration();
+#endif
 #if !MOBILEAPP
         const auto* proof = session->getAgentAuthority();
         const auto source = agentAuthoritySource(session->getPublicUri());
@@ -855,6 +1232,13 @@ void DocumentBroker::fenceAgentRetirement(const std::string& renderId)
         return;
 #if !MOBILEAPP
     record.renewal.reset();
+#endif
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (_agentScript && _agentScript->identity.epoch == record.epoch)
+    {
+        failAgentScript();
+        _agentScript.reset();
+    }
 #endif
     record.phase = AgentRetirementRecord::Phase::Retiring;
     if (const auto transport = _urpTransport.lock())
@@ -1400,6 +1784,10 @@ void DocumentBroker::pollThread()
             }
         };
 
+        pollAgentScript();
+        if (hasAgentScript())
+            pollTimeout =
+                std::min<std::chrono::microseconds>(pollTimeout, std::chrono::milliseconds(50));
         expireAgentRenewal();
 #if !MOBILEAPP
         if (!_agentRetirements.empty() && _agentRetirements.back()->renewal &&
@@ -1785,6 +2173,9 @@ void DocumentBroker::pollThread()
 #endif
     }
 
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    failAgentScript();
+#endif
     LOG_INF("Finished polling doc ["
             << _docKey << "]. stop: " << _stop << ", continuePolling: " << _poll->continuePolling()
             << ", CloseReason: [" << _closeReason << ']'
@@ -4763,6 +5154,9 @@ void DocumentBroker::uploadToStorageInternal(const std::shared_ptr<ClientSession
     ASSERT_CORRECT_THREAD();
     LOG_ASSERT_MSG(session, "Must have a valid ClientSession");
 
+    if (hasAgentScript())
+        return;
+
     if (_uploadRequest && !_uploadRequest->isComplete())
     {
         LOG_DBG("Upload already in progress for docKey [" << _docKey << "]");
@@ -5964,9 +6358,9 @@ bool DocumentBroker::sendUnoSave(const std::shared_ptr<ClientSession>& session,
     LOG_ASSERT_MSG(session, "Got null ClientSession");
     const std::string sessionId = session->getId();
 
-    if (agentRenewalBlocks(session) || (_retirementNegotiated && !_nativeSaveBarriers.empty()) ||
-        _agentSaveAttempt || (_uploadRequest && !_uploadRequest->isComplete()) ||
-        isAsyncUploading())
+    if (hasAgentScript() || agentRenewalBlocks(session) ||
+        (_retirementNegotiated && !_nativeSaveBarriers.empty()) || _agentSaveAttempt ||
+        (_uploadRequest && !_uploadRequest->isComplete()) || isAsyncUploading())
     {
         LOG_WRN("Rejecting save while another save or upload owns docKey [" << _docKey << ']');
         return false;
@@ -6543,6 +6937,11 @@ bool DocumentBroker::detachUrpTransport(const std::shared_ptr<ClientSession>& se
     const auto registeredTransport = _urpTransport.lock();
     if (!registeredTransport || registeredTransport != session)
         return false;
+
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    if (_agentScript && _agentScript->transport.lock() == session)
+        failAgentScript();
+#endif
 
     if (_agentSaveAttempt &&
         _agentSaveAttempt->authoritySessionId() == session->getId())
@@ -7927,7 +8326,7 @@ void DocumentBroker::handleAgentSaveRequest(const std::shared_ptr<StreamSocket>&
 
     const std::shared_ptr<ClientSession> agentSession = _urpTransport.lock();
 
-    if (!agentSession || agentRenewalBlocks(agentSession) ||
+    if (!agentSession || hasAgentScript() || agentRenewalBlocks(agentSession) ||
         !agentSession->getAuthorization().matchesToken(bearerToken))
     {
         LOG_WRN("Rejecting agent save request without a matching authorised live session");
@@ -8405,7 +8804,8 @@ bool DocumentBroker::forwardToChild(const std::shared_ptr<ClientSession>& sessio
     ASSERT_CORRECT_THREAD();
     LOG_ASSERT_MSG(session, "Must have a valid ClientSession");
 
-    if (agentRenewalBlocks(session))
+    if (agentRenewalBlocks(session) || Message::isAgentScriptControl(message) ||
+        (hasAgentScript() && isRegisteredAgent(session)))
         return false;
     if (message.starts_with("agentrenew") || message.starts_with("agentregisteredkit:") ||
         message.starts_with("agentretirefencekit:") || message.starts_with("agentretiredkit:") ||

@@ -54,27 +54,37 @@ void KitWebSocketHandler::handleMessage(const std::vector<char>& data)
 
     StringVector tokens = StringVector::tokenize(message);
 
-    LOG_DBG(_socketName << ": recv [" << [&](auto& log) {
-        for (const auto& token : tokens)
-        {
-            // Don't log user-data, there are anonymized versions that get logged instead.
-            if (tokens.startsWith(token, "jail") || tokens.startsWith(token, "author") ||
-                tokens.startsWith(token, "name") || tokens.startsWith(token, "url"))
-                continue;
+    if (Message::isAgentScriptControl(message))
+        LOG_DBG(_socketName << ": controlled execution frame bytes=" << message.size());
+    else
+    {
+        LOG_DBG(_socketName << ": recv [" <<
+                [&](auto& log)
+                {
+                    for (const auto& token : tokens)
+                    {
+                        // Don't log user-data, there are anonymized versions that get logged instead.
+                        if (tokens.startsWith(token, "jail") ||
+                            tokens.startsWith(token, "author") ||
+                            tokens.startsWith(token, "name") || tokens.startsWith(token, "url"))
+                            continue;
 
-            std::string tokenStr = tokens.getParam(token);
+                        std::string tokenStr = tokens.getParam(token);
 
-            std::string::size_type pos = tokenStr.find("\"Author\":{\"type\":\"string\",\"value\":\"");
-            if (pos != std::string::npos) {
-                auto start = tokenStr.find("\"value\":\"", pos) + 9;
-                auto end = tokenStr.find('\"', start);
-                std::string value = tokenStr.substr(start, end - start);
-                tokenStr.replace(start, end - start, Anonymizer::anonymize(value));
-            }
+                        std::string::size_type pos =
+                            tokenStr.find("\"Author\":{\"type\":\"string\",\"value\":\"");
+                        if (pos != std::string::npos)
+                        {
+                            auto start = tokenStr.find("\"value\":\"", pos) + 9;
+                            auto end = tokenStr.find('\"', start);
+                            std::string value = tokenStr.substr(start, end - start);
+                            tokenStr.replace(start, end - start, Anonymizer::anonymize(value));
+                        }
 
-            log << tokenStr << ' ';
-        }
-    });
+                        log << tokenStr << ' ';
+                    }
+                });
+    }
 
     // Note: Syntax or parsing errors here are unexpected and fatal.
     if (SigUtil::getTerminationFlag())
@@ -226,6 +236,9 @@ void KitWebSocketHandler::onDisconnect()
         return;
     }
 
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    stopScriptCancellation();
+#endif
     if (!Util::isMobileApp())
     {
         //FIXME: We could try to recover.

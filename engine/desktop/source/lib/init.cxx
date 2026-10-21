@@ -328,9 +328,12 @@ static bool cok_preinit_2_called = false;
 static bool gUseCompactFonts = false;
 static bool bInitialized = false;
 
-static void SetLastExceptionMsg(const OUString& s = OUString())
+static void SetLastExceptionMsg(const OUString& s = OUString(), bool sensitive = false)
 {
-    SAL_WARN_IF(!s.isEmpty(), "kit", "kit exception '" + s + "'");
+    if (sensitive)
+        SAL_WARN_IF(!s.isEmpty(), "kit", "Controlled script exception");
+    else
+        SAL_WARN_IF(!s.isEmpty(), "kit", "kit exception '" + s + "'");
     if (gImpl)
         gImpl->maLastExceptionMsg = s;
 }
@@ -10065,7 +10068,7 @@ static COKitScriptResult executeScriptWithBindings(
     } catch (jsuno::Exception const & exception) {
         // Ship as a JSON object; the receiver (ChildSession::executeScript) recognises the leading
         // '{' and splices it in as a JSON value rather than an escaped string.
-        SetLastExceptionMsg(exception.message);
+        SetLastExceptionMsg(exception.message, bool(cancelled));
         tools::JsonWriter w;
         w.put("message", exception.message);
         w.put("name", exception.name);
@@ -10081,7 +10084,7 @@ static COKitScriptResult executeScriptWithBindings(
         }
         aScriptResult.oError = convertOStringToStdString(w.finishAndGetAsOString());
     } catch (cpo::uno::Exception const & exception) {
-        SetLastExceptionMsg(exception.Message);
+        SetLastExceptionMsg(exception.Message, bool(cancelled));
         aScriptResult.oError = convertOUStringToStdString(exception.Message);
     }
 #else

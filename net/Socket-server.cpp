@@ -657,7 +657,11 @@ bool SocketPoll::insertNewUnixSocket(
     {
         Buffer buf;
         req.writeData(buf, INT_MAX); // Write the whole request.
-        socket->sendFDs(buf.getBlock(), buf.getBlockSize(), *shareFDs);
+        if (!socket->sendFDs(buf.getBlock(), buf.getBlockSize(), *shareFDs))
+        {
+            socket->syncShutdown();
+            return false;
+        }
     }
 
     std::static_pointer_cast<ProtocolHandlerInterface>(websocketHandler)->onConnect(socket);

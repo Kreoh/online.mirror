@@ -15,6 +15,11 @@
  */
 
 #include <config.h>
+#if defined(__linux__)
+#include <fcntl.h>
+#include <sys/stat.h>
+#endif
+#include <utility>
 #include <config_version.h>
 
 #include "COOLWSD.hpp"
@@ -3509,6 +3514,9 @@ private:
             std::string configId;
             bool supportsRawDocument = false;
             bool supportsRawView = false;
+            std::string scriptControlVersion, scriptGeneration;
+            bool duplicateScriptControl = false;
+            bool seenScriptControl = false, seenScriptGeneration = false;
             std::map<std::string, std::string> admsProps;
 #if !MOBILEAPP
             LOG_TRC("Child connection with URI [" << Anonymizer::anonymizeUrl(request.getUrl())
@@ -3582,6 +3590,16 @@ private:
                     jailId = param.second;
                 else if (param.first == "configid")
                     configId = param.second;
+                else if (param.first == "scriptcontrol")
+                {
+                    duplicateScriptControl |= std::exchange(seenScriptControl, true);
+                    scriptControlVersion = param.second;
+                }
+                else if (param.first == "scriptgeneration")
+                {
+                    duplicateScriptControl |= std::exchange(seenScriptGeneration, true);
+                    scriptGeneration = param.second;
+                }
                 else if (param.first == "rawdocument")
                     supportsRawDocument = param.second == "1";
                 else if (param.first == "rawview")
@@ -3624,10 +3642,55 @@ private:
             jailId = "jail";
             socket->getInBuffer().clear();
 #endif
+            bool scriptControlCompatible = false;
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+            if (seenScriptControl || seenScriptGeneration || socket->incomingFDCount() == 4)
+            {
+                int type = 0;
+                socklen_t typeSize = sizeof(type);
+                const int descriptor = socket->getIncomingFD(SharedFDType::ScriptControl);
+                scriptControlCompatible =
+                    !duplicateScriptControl && scriptControlVersion == "2" &&
+                    scriptGeneration.size() == 32 &&
+                    scriptGeneration.find_first_not_of("0123456789abcdef") == std::string::npos &&
+                    socket->incomingFDCount() == 4 && supportsRawView && !Util::isKitInProcess() &&
+                    descriptor >= 0 &&
+                    getsockopt(descriptor, SOL_SOCKET, SO_TYPE, &type, &typeSize) == 0 &&
+                    type == SOCK_SEQPACKET;
+                for (const auto position :
+                     { SharedFDType::SMAPS, SharedFDType::URPToKit, SharedFDType::URPFromKit })
+                {
+                    const int descriptorAtPosition = socket->getIncomingFD(position);
+                    const int access = fcntl(descriptorAtPosition, F_GETFL);
+                    struct stat descriptorState{};
+                    scriptControlCompatible &=
+                        descriptorAtPosition >= 0 && access >= 0 &&
+                        fstat(descriptorAtPosition, &descriptorState) == 0 &&
+                        (position == SharedFDType::SMAPS ? S_ISREG(descriptorState.st_mode)
+                                                         : S_ISFIFO(descriptorState.st_mode)) &&
+                        (access & O_ACCMODE) ==
+                            (position == SharedFDType::URPToKit ? O_WRONLY : O_RDONLY);
+                }
+                if (!scriptControlCompatible)
+                {
+                    LOG_ERR("Invalid controlled-execution descriptor negotiation");
+                    socket->closeIncomingFDs();
+                    socket->syncShutdown();
+                    return;
+                }
+            }
+#endif
             LOG_TRC("Calling make_shared<ChildProcess>, for NewChildren?");
 
             auto child = std::make_shared<ChildProcess>(pid, jailId, configId, socket, request,
                                                        admsProps, supportsRawDocument, supportsRawView);
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+            if (scriptControlCompatible)
+                child->negotiateScriptControl(socket->takeIncomingFD(SharedFDType::ScriptControl),
+                                              std::move(scriptGeneration));
+#else
+            (void)scriptControlCompatible;
+#endif
 
             if (!Util::isMobileApp())
                 UNITWSD_CALL(newChild(child));
@@ -3635,7 +3698,7 @@ private:
             _pid = pid;
             _socketFD = socket->getFD();
 #if !MOBILEAPP
-            child->setSMapsFD(socket->getIncomingFD(SharedFDType::SMAPS));
+            child->setSMapsFD(socket->takeIncomingFD(SharedFDType::SMAPS));
 #endif
             _childProcess = child; // weak
 
@@ -3676,7 +3739,10 @@ private:
         {
             assert(child->getPid() == _pid && "Child PID changed unexpectedly");
             _associatedWithDoc = true;
-            docBroker->handleInput(message);
+            if (std::string_view(data.data(), data.size()).starts_with("agentscriptresultkit:"))
+                docBroker->handleAgentScriptResult(std::string(data.data(), data.size()), child);
+            else
+                docBroker->handleInput(message);
         }
         else if (child && child->getPid() > 0)
         {

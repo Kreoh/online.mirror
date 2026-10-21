@@ -12,6 +12,8 @@
 #pragma once
 
 #include <common/Common.hpp>
+#include <common/ScriptCancellation.hpp>
+#include <common/Message.hpp>
 #include <common/Session.hpp>
 #include <common/StateEnum.hpp>
 #include <common/ThreadPool.hpp>
@@ -658,3 +660,9 @@ void stopURP(const std::shared_ptr<COKit>& LOKit, void* pURPContext);
 void flushTraceEventRecordings();
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
+
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+std::shared_ptr<ScriptCancellation> getScriptCancellation();
+const std::string& getScriptControlGeneration();
+void stopScriptCancellation();
+#endif

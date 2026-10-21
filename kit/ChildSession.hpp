@@ -88,6 +88,7 @@ public:
     bool getStatus();
     bool getPartStatus();
     int getViewId() const { return _viewId; }
+    bool executeControlledScript(const std::string& message);
     void setViewId(const int viewId) { _viewId = viewId; }
     const std::string& getCurrentPartId() const { return _currentPartId; }
     const std::string& getViewUserId() const { return getUserId(); }
@@ -122,9 +123,11 @@ public:
     {
         if (_docManager == nullptr)
         {
-
-            LOG_TRC("No DocManager; dropping message to client-"
-                    << getId() << ": " << std::string_view(buffer, length));
+            if (Message::isAgentScriptControl(std::string_view(buffer, length)))
+                LOG_TRC("No DocManager; dropping controlled frame, bytes=" << length);
+            else
+                LOG_TRC("No DocManager; dropping message to client-"
+                        << getId() << ": " << std::string_view(buffer, length));
 
             return false;
         }

@@ -255,7 +255,7 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
       make -j "$(nproc)" coolwsd coolmount coolforkit-caps coolforkit-ns || exit 1
       prepare_systemplate || exit 1
       make systemplate "$BUILDDIR/online/jails" "$BUILDDIR/online/cache" presets-dir || exit 1
-      make -C test unit-agent-control.la unit-tiletest.la unittest || exit 1
+      make -C test unit-agent-control.la unit-agent-script-control.la unit-tiletest.la unittest || exit 1
 
       if [ "$ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION" = true ]; then
         test "$BUILDDIR" = /workspace-cache/build/builddir || {
@@ -551,6 +551,17 @@ QUEUE_LAUNCH
       # An unmatched CppUnit filter can report success without running a test.
       grep -q 'START TileCacheTests::testInvalidateMessageParsing' "$report_dir/tile-invalidation-parser.log" || exit 1
       grep -q 'END TileCacheTests::testInvalidateMessageParsing' "$report_dir/tile-invalidation-parser.log" || exit 1
+      : > "$report_dir/unit-agent-script-control.trs" || exit 1
+      (cd test && timeout --signal=TERM --kill-after=10s 2800s ./run_unit.sh \
+        --test-name unit-agent-script-control.la \
+        --log-file "$report_dir/unit-agent-script-control.log" \
+        --trs-file "$report_dir/unit-agent-script-control.trs" --fail-fast) || exit 1
+      grep -q '^:test-result: PASS' "$report_dir/unit-agent-script-control.trs" || exit 1
+      ! grep -Eq '^:test-result: (FAIL|SKIP|ERROR)' "$report_dir/unit-agent-script-control.trs" || exit 1
+      ! grep -Eq 'private-controlled-(error|source)-marker' "$report_dir/unit-agent-script-control.log" || exit 1
+      for script_case in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21; do
+        grep -Eq "AgentScriptControlTests${script_case} .*SUCCESS: exitTest:" "$report_dir/unit-agent-script-control.log" || exit 1
+      done
       : > "$report_dir/unit-agent-control.trs" || exit 1
       set +e
       # Seventeen units at 30s each, plus 90s for startup and teardown.

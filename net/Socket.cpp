@@ -1394,6 +1394,7 @@ void SocketPoll::setupPollFds(std::chrono::steady_clock::time_point now, int64_t
 
 StreamSocket::~StreamSocket()
 {
+    closeIncomingFDs();
     LOG_TRC("StreamSocket dtor called with pending write: " << _outBuffer.size()
                                                             << ", read: " << _inBuffer.size());
     if (!_doneDisconnect)
@@ -1461,7 +1462,7 @@ void StreamSocket::send(const char* data, const int len, const bool doFlush)
     }
 }
 
-void StreamSocket::sendFDs([[maybe_unused]] const char* data, [[maybe_unused]] const uint64_t len,
+bool StreamSocket::sendFDs([[maybe_unused]] const char* data, [[maybe_unused]] const uint64_t len,
                            [[maybe_unused]] const std::vector<int>& fds)
 {
 #ifndef _WIN32
@@ -1471,8 +1472,10 @@ void StreamSocket::sendFDs([[maybe_unused]] const char* data, [[maybe_unused]] c
     // so that our non-ancillary data will
     // match ancillary data.
     attemptWrites();
+    if (!_outBuffer.empty() || !data || len == 0 || len > INT_MAX || fds.empty() || fds.size() > 4)
+        return false;
 
-    msghdr msg;
+    msghdr msg{};
     iovec iov[1];
 
     iov[0].iov_base = const_cast<char*>(data);
@@ -1505,12 +1508,25 @@ void StreamSocket::sendFDs([[maybe_unused]] const char* data, [[maybe_unused]] c
     }
 #endif
 
-    //FIXME: retry on EINTR?
-    const auto wrote = sendmsg(getFD(), &msg, 0);
-    if (wrote < 0)
-        LOG_SYS("Failed to send message to unix socket");
-    else
-        LOG_TRC("Wrote " << wrote << " bytes of " << len);
+    ssize_t wrote;
+    do
+    {
+        int flags = 0;
+#ifdef MSG_NOSIGNAL
+        flags = MSG_NOSIGNAL;
+#endif
+        wrote = sendmsg(getFD(), &msg, flags);
+    } while (wrote < 0 && errno == EINTR);
+    if (wrote != static_cast<ssize_t>(len))
+    {
+        // A partial stream write may already have delivered the descriptors. Never resend them.
+        LOG_ERR("Incomplete descriptor hand-off: bytes=" << wrote << " expected=" << len);
+        return false;
+    }
+    LOG_TRC("Descriptor hand-off complete: bytes=" << wrote << " descriptors=" << fds.size());
+    return true;
+#else
+    return false;
 #endif
 }
 
@@ -1873,50 +1889,66 @@ int StreamSocket::writeOutgoingData()
     return len;
 }
 
+void StreamSocket::closeIncomingFDs()
+{
+#ifndef _WIN32
+    for (const int descriptor : _incomingFDs)
+        if (descriptor >= 0)
+            ::close(descriptor);
+#endif
+    _incomingFDs.clear();
+}
+
 int StreamSocket::readFDs([[maybe_unused]] char* buf, [[maybe_unused]] int len,
                           [[maybe_unused]] std::vector<int>& fds)
 {
 #ifdef _WIN32
     return -1;
 #else
-    // 0 is smaps FD
-    // 1 is urp FD
-    const size_t maxFds = 2;
-
-    msghdr msg;
-    iovec iov[1];
-    /// We don't expect more than maxFds FDs
-    char ctrl[CMSG_SPACE(sizeof(int)) * maxFds];
-    int ctrlLen = sizeof(ctrl);
-
-    iov[0].iov_base = buf;
-    iov[0].iov_len = len;
-
-    msg.msg_name = nullptr;
-    msg.msg_namelen = 0;
-    msg.msg_iov = &iov[0];
-    msg.msg_iovlen = 1;
-    msg.msg_control = ctrl;
-    msg.msg_controllen = ctrlLen;
-    msg.msg_flags = 0;
-
-    int ret = recvmsg(getFD(), &msg, 0);
-    if (ret > 0 && msg.msg_controllen)
+    constexpr std::size_t maxFds = 4;
+    alignas(cmsghdr) char control[CMSG_SPACE(sizeof(int) * maxFds)]{};
+    iovec io{ buf, static_cast<std::size_t>(len) };
+    msghdr message{};
+    message.msg_iov = &io;
+    message.msg_iovlen = 1;
+    message.msg_control = control;
+    message.msg_controllen = sizeof(control);
+    int flags = 0;
+#ifdef MSG_CMSG_CLOEXEC
+    flags = MSG_CMSG_CLOEXEC;
+#endif
+    const int result = recvmsg(getFD(), &message, flags);
+    if (result <= 0)
+        return result;
+    bool invalid = (message.msg_flags & (MSG_CTRUNC | MSG_TRUNC)) != 0;
+    std::vector<int> received;
+    for (auto* header = CMSG_FIRSTHDR(&message); header; header = CMSG_NXTHDR(&message, header))
     {
-        cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-        if (cmsg && cmsg->cmsg_type == SCM_RIGHTS)
+        if (header->cmsg_level != SOL_SOCKET || header->cmsg_type != SCM_RIGHTS ||
+            header->cmsg_len < CMSG_LEN(0))
         {
-            size_t fds_count = static_cast<size_t>(cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int);
-            int* fdsField = reinterpret_cast<int*>(CMSG_DATA(cmsg));
-            fds.assign(fdsField, fdsField + fds_count);
-            if (_readType == ReadType::UseRecvmsgExpectFD)
-            {
-                _readType = ReadType::NormalRead;
-            }
+            invalid = true;
+            continue;
         }
+        const auto bytes = header->cmsg_len - CMSG_LEN(0);
+        invalid |= bytes % sizeof(int) != 0;
+        const auto* descriptors = reinterpret_cast<const int*>(CMSG_DATA(header));
+        received.insert(received.end(), descriptors, descriptors + bytes / sizeof(int));
     }
-
-    return ret;
+    invalid |= received.size() > maxFds || (!received.empty() && !fds.empty());
+    if (invalid)
+    {
+        for (const int descriptor : received)
+            ::close(descriptor);
+        errno = EMSGSIZE;
+        return -1;
+    }
+    if (!received.empty())
+    {
+        fds = std::move(received);
+        _readType = ReadType::NormalRead;
+    }
+    return result;
 #endif
 }
 

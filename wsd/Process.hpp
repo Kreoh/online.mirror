@@ -17,6 +17,7 @@
 #pragma once
 
 #include <common/Common.hpp>
+#include <common/ScriptCancellation.hpp>
 #include <common/FileUtil.hpp>
 #include <common/Unit.hpp>
 #include <net/WebSocketHandler.hpp>
@@ -154,23 +155,28 @@ public:
         {
             if (_ws)
             {
-                LOG_TRC("Send to " << _name << " message: ["
-                                   << COOLProtocol::getAbbreviatedMessage(data) << ']');
-                _ws->sendMessage(data.data(), data.size(),
-                                 (binary ? WSOpCode::Binary : WSOpCode::Text), flush);
-                return true;
+                if (!_ws->isSensitive())
+                    LOG_TRC("Send to " << _name << " message: ["
+                                       << COOLProtocol::getAbbreviatedMessage(data) << ']');
+                else
+                    LOG_TRC("Send to " << _name << " bytes=" << data.size());
+                const int sent = _ws->sendMessage(data.data(), data.size(),
+                                                  (binary ? WSOpCode::Binary : WSOpCode::Text), flush);
+                return !_ws->isSensitive() || sent > 0;
             }
         }
         catch (const std::exception& exc)
         {
-            LOG_ERR("Failed to send " << _name << " [" << _pid << "] data ["
-                                      << COOLProtocol::getAbbreviatedMessage(data)
-                                      << "] due to: " << exc.what());
+            if (_ws && _ws->isSensitive())
+                LOG_ERR("Controlled child send failed, bytes=" << data.size());
+            else
+                LOG_ERR("Failed to send " << _name << " [" << _pid << "] data ["
+                                          << COOLProtocol::getAbbreviatedMessage(data)
+                                          << "] due to: " << exc.what());
             throw;
         }
 
-        LOG_WRN("No socket to " << _name << " to send ["
-                                << COOLProtocol::getAbbreviatedMessage(data) << ']');
+        LOG_WRN("No socket to " << _name << " to send bytes=" << data.size());
         return false;
     }
 
@@ -215,8 +221,7 @@ public:
     /// @param pid is the process ID of the child.
     /// @param socket is the underlying Socket to the child.
     template <typename T>
-    ChildProcess(const pid_t pid, const std::string& jailId,
-                 const std::string& configId,
+    ChildProcess(const pid_t pid, const std::string& jailId, const std::string& configId,
                  const std::shared_ptr<StreamSocket>& socket, const T& request,
                  std::map<std::string, std::string>& jailProps, bool supportsRawDocument = false,
                  bool supportsRawView = false)
@@ -227,12 +232,40 @@ public:
         , _jailProps(jailProps)
         , _supportsRawDocument(supportsRawDocument)
         , _supportsRawView(supportsRawView)
-        , _urpFromKitFD(socket->getIncomingFD(SharedFDType::URPFromKit))
-        , _urpToKitFD(socket->getIncomingFD(SharedFDType::URPToKit))
+        , _urpFromKitFD(socket->takeIncomingFD(SharedFDType::URPFromKit))
+        , _urpToKitFD(socket->takeIncomingFD(SharedFDType::URPToKit))
     {
     }
 
     ChildProcess(ChildProcess&& other) = delete;
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    void negotiateScriptControl(int descriptor, std::string generation)
+    {
+        closeScriptControl();
+        _scriptControlFD = descriptor;
+        _scriptGeneration = std::move(generation);
+        if (_scriptControlFD >= 0 && _ws)
+            _ws->markSensitive();
+    }
+    int scriptControlFD() const { return _scriptControlFD; }
+    const std::string& scriptGeneration() const { return _scriptGeneration; }
+    std::uint64_t nextScriptAdmission()
+    {
+        if (_scriptAdmission == std::numeric_limits<std::uint64_t>::max())
+            return 0;
+        return ++_scriptAdmission;
+    }
+    void closeScriptControl()
+    {
+        if (_scriptControlFD >= 0)
+        {
+            ::shutdown(_scriptControlFD, SHUT_RDWR);
+            ::close(_scriptControlFD);
+            _scriptControlFD = -1;
+        }
+        // Generation and admission never reset on closure or credential renewal.
+    }
+#endif
 
     bool supportsRawDocument() const { return _supportsRawDocument; }
     bool supportsRawView() const { return _supportsRawView; }
@@ -394,6 +427,9 @@ public:
 
     virtual ~ChildProcess()
     {
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+        closeScriptControl();
+#endif
         std::shared_ptr<StreamSocket> urpFromKit(_urpFromKit.lock());
         if (urpFromKit)
             urpFromKit->asyncShutdown();
@@ -468,6 +504,11 @@ private:
     const bool _supportsRawView;
     int _urpFromKitFD;
     int _urpToKitFD;
+#if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
+    int _scriptControlFD = -1;
+    std::string _scriptGeneration;
+    std::uint64_t _scriptAdmission = 0;
+#endif
     bool _urpChannelPoisoned = false;
     bool _urpInputFenced = false;
 };

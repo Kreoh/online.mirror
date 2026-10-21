@@ -15,6 +15,8 @@
  */
 
 #include <config.h>
+#include <array>
+#include <charconv>
 
 #include "ChildSession.hpp"
 
@@ -5071,6 +5073,151 @@ bool ChildSession::getPresentationInfo()
     std::string data(getLOKitDocument()->getPresentationInfo());
     sendTextFrame("presentationinfo: " + data);
     return true;
+}
+
+bool ChildSession::executeControlledScript(const std::string& message)
+{
+#if !defined(__linux__) || MOBILEAPP || DOCS_SHARE_PROCESS
+    return false;
+#else
+    const auto control = getScriptCancellation();
+    const auto newline = message.find('\n');
+    if (!control || control->failed() || newline == std::string::npos ||
+        message.size() - newline - 1 > 1024 * 1024 || message.find('\0') != std::string::npos)
+        return false;
+    const auto tokens = StringVector::tokenize(message.substr(0, newline));
+    const std::array<std::string_view, 7> names = { "generation", "epoch",  "execution",
+                                                    "admission",  "viewid", "renderid",
+                                                    "timeout" };
+    if (tokens.size() != 8 || tokens[0] != "agentscriptexecute")
+        return false;
+    std::array<std::string, 7> fields;
+    std::string canonical = "agentscriptexecute";
+    for (std::size_t i = 0; i < names.size(); ++i)
+    {
+        const std::string token(tokens[i + 1]);
+        const std::string prefix = std::string(names[i]) + '=';
+        if (!token.starts_with(prefix))
+            return false;
+        fields[i] = token.substr(prefix.size());
+        canonical += ' ' + token;
+    }
+    if (canonical != message.substr(0, newline))
+        return false;
+    const auto number = [](const std::string& value, auto& output, bool zero = false)
+    {
+        const auto parsed = std::from_chars(value.data(), value.data() + value.size(), output);
+        return parsed.ec == std::errc() && parsed.ptr == value.data() + value.size() &&
+               (zero ? output >= 0 : output > 0) && std::to_string(output) == value;
+    };
+    std::int64_t sequence = 0;
+    std::uint64_t admission = 0;
+    int view = -1, timeout = 0;
+    if (!number(fields[2], sequence) || !number(fields[3], admission) ||
+        !number(fields[4], view, true) || !number(fields[6], timeout) || timeout > 30000 ||
+        fields[0] != getScriptControlGeneration() || fields[1] != agentRetirementEpoch() ||
+        fields[1].empty() || fields[5] != getId() || view != _viewId || !_docManager)
+        return false;
+    ScriptCancellation::Identity identity{ fields[0], fields[1], fields[5],
+                                           fields[2], view,      admission };
+    const auto token = control->claim(identity);
+    if (!token)
+        return false; // Duplicate or mismatched queue frames never invoke the engine.
+    struct Complete
+    {
+        std::shared_ptr<ScriptCancellation> control;
+        const ScriptCancellation::Identity& identity;
+        bool finished = false;
+        void finish()
+        {
+            if (!finished)
+            {
+                control->complete(identity);
+                finished = true;
+            }
+        }
+        ~Complete() { finish(); }
+    } complete{ control, identity };
+    const std::string identityText = "generation=" + fields[0] + " epoch=" + fields[1] +
+                                     " execution=" + fields[2] + " admission=" + fields[3] +
+                                     " viewid=" + fields[4] + " renderid=" + fields[5];
+    std::string body;
+    {
+        try
+        {
+            if (token->load(std::memory_order_acquire))
+                body = "{\"state\":\"prestart_cancelled\",\"invoked\":false}";
+            else if (agentRetirementFenced())
+                body = "{\"state\":\"rejected\",\"invoked\":false,\"err\":\"retired\"}";
+            else
+            {
+                const auto document = getLOKitDocument();
+                const auto kit = _docManager->getLOKit();
+                Poco::JSON::Object::Ptr engineInfo;
+                const bool parsed = JsonUtil::parseJSON(kit->getVersionInfo(), engineInfo);
+                const auto binding =
+                    parsed && engineInfo ? engineInfo->get("RawViewBinding") : Poco::Dynamic::Var();
+                const auto views = document ? document->getViewIds() : std::vector<int>();
+                if (!document || !binding.isBoolean() || !binding.extract<bool>() ||
+                    std::find(views.begin(), views.end(), _viewId) == views.end())
+                    body = "{\"state\":\"rejected\",\"invoked\":false,\"err\":\"invalidview\"}";
+                else if (token->load(std::memory_order_acquire))
+                    body = "{\"state\":\"prestart_cancelled\",\"invoked\":false}";
+                else
+                {
+                    const std::weak_ptr<ChildSession> owner =
+                        _docManager->findSessionByViewId(_viewId);
+                    const auto console =
+                        [owner](void*, std::string_view level, std::string_view text)
+                    {
+                        if (const auto session = owner.lock();
+                            session && !session->agentRetirementFenced())
+                            session->sendTextFrame("agentscriptconsole: " + std::string(level) +
+                                                   '\n' + std::string(text));
+                    };
+                    // Proxy callbacks require engine-owned lifetime and execution ownership.
+                    // A null hook makes creation and retrieval fail explicitly in this interim path.
+                    const std::string source = message.substr(newline + 1);
+                    // This exact-view ABI retains the same token while acquiring SolarMutex and executing.
+                    const auto result = kit->executeScriptWithView(
+                        document.get(), _viewId, source.c_str(), "agent-control.js", 1, console,
+                        nullptr, nullptr, nullptr, std::chrono::milliseconds(timeout), token);
+                    body = "{\"state\":\"returned\",\"invoked\":true";
+                    if (result.oError)
+                        body += ",\"err\":" +
+                                (result.oError->starts_with('{')
+                                     ? *result.oError
+                                     : "\"" + JsonUtil::escapeJSONValue(*result.oError) + "\"");
+                    else if (result.oResult)
+                        body += ",\"ok\":" + *result.oResult;
+                    if (result.bUsedLegacyUnoApi)
+                        body += ",\"legacyUnoApi\":true";
+                    body += '}';
+                }
+            }
+        }
+        catch (const std::exception&)
+        {
+            // Exceptions can carry source. The engine's structured error result above is preserved.
+            body = "{\"state\":\"failed\",\"err\":\"native execution failed\"}";
+        }
+        catch (...)
+        {
+            body = "{\"state\":\"failed\",\"err\":\"native execution failed\"}";
+        }
+    }
+    complete.finish(); // Complete every claimed path before attempting terminal delivery.
+    try
+    {
+        return _docManager &&
+               _docManager->postMessage("agentscriptresultkit: " + identityText + '\n' + body,
+                                        WSOpCode::Text);
+    }
+    catch (...)
+    {
+        return false;
+    }
+#endif
 }
 
 bool ChildSession::executeScript(char const * buffer, int length, StringVector const & tokens) {

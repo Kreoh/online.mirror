@@ -47,6 +47,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <utility>
 
 #ifdef __linux__
 #define HAVE_ABSTRACT_UNIX_SOCKETS
@@ -1118,7 +1119,7 @@ public:
     }
 };
 
-STATE_ENUM(SharedFDType, SMAPS, URPToKit, URPFromKit);
+STATE_ENUM(SharedFDType, SMAPS, URPToKit, URPFromKit, ScriptControl);
 
 enum class HostType : uint8_t { LocalHost, Other };
 
@@ -1247,7 +1248,7 @@ public:
 
     /// Sends data with file descriptor as control data.
     /// Can be used only with Unix sockets.
-    void sendFDs([[maybe_unused]] const char* data, [[maybe_unused]] const uint64_t len,
+    bool sendFDs([[maybe_unused]] const char* data, [[maybe_unused]] const uint64_t len,
                  [[maybe_unused]] const std::vector<int>& fds);
 
     /// Reads data by invoking readData() and buffering.
@@ -1355,6 +1356,16 @@ public:
             return _incomingFDs[eTypeIdx];
         return -1;
     }
+
+    std::size_t incomingFDCount() const { return _incomingFDs.size(); }
+    int takeIncomingFD(SharedFDType type)
+    {
+        const auto index = static_cast<std::size_t>(type);
+        if (index >= _incomingFDs.size())
+            return -1;
+        return std::exchange(_incomingFDs[index], -1);
+    }
+    void closeIncomingFDs();
 
     bool processInputEnabled() const { return _inputProcessingEnabled; }
     void enableProcessInput(bool enable = true){ _inputProcessingEnabled = enable; }

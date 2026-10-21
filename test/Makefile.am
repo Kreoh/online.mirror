@@ -103,6 +103,7 @@ all_la_unit_tests = \
 	unit-landlock.la \
 	unit-any-input.la \
 	unit-agent-control.la \
+	unit-agent-script-control.la \
 	unit-agent-save.la \
 	unit-save.la \
 	unit-wopi-saveas.la \
@@ -359,6 +360,8 @@ unit_save_la_SOURCES = UnitSave.cpp
 unit_save_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_any_input_la_SOURCES = UnitAnyInput.cpp
 unit_any_input_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+unit_agent_script_control_la_SOURCES = AgentScriptControlTests.cpp
+unit_agent_script_control_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_agent_control_la_SOURCES = UnitAgentControl.cpp
 unit_agent_control_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 EXTRA_unit_agent_control_la_DEPENDENCIES = unit-agent-control-kit.la
