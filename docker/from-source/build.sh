@@ -171,7 +171,6 @@ bash "$SRCDIR/check-builder.sh" "$BUILDDIR/online/configure.ac" || exit 1
 ##### engine #####
 
 ( cd online/engine && ./autogen.sh --with-distro=OnlineLinux-LOKit --disable-epm --without-package-format --disable-symbols ) || exit 1
-( cd online/engine && make $ENGINE_BUILD_TARGET ) || exit 1
 
 # Run native JavaScript regression tests only on the Jenkins builder.
 if [[ "${ONLINE_OFFICE_RUN_JSUNO:-}" == "1" ]]; then
@@ -185,6 +184,8 @@ if [[ "${ONLINE_OFFICE_RUN_JSUNO:-}" == "1" ]]; then
     make CppunitTest_jsuno_execute CppunitTest_jsuno_testuno 2>&1 | tee "$report_dir/jsuno.log" || exit 1
   ) || exit 1
 fi
+
+( cd online/engine && make $ENGINE_BUILD_TARGET ) || exit 1
 
 # copy stuff
 mkdir -p "$INSTDIR"/opt/
@@ -237,11 +238,6 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
       exit "$status"
     }
     trap restore_release EXIT
-    # Keep Calc geometry and chart bindings in the existing Jenkins validation report.
-    (
-      cd online/engine || exit 1
-      make CppunitTest_sc_subsequent_export_test2 CppunitTest_desktop_lib CppunitTest_sc_tiledrendering
-    ) 2>&1 | tee "$report_dir/calc-subsequent-export-test2.log" || exit $?
     (
       cd online || exit 1
       ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
@@ -256,6 +252,12 @@ if [[ "${ONLINE_OFFICE_RUN_AGENT_CONTROL:-}" == "1" ]]; then
       prepare_systemplate || exit 1
       make systemplate "$BUILDDIR/online/jails" "$BUILDDIR/online/cache" presets-dir || exit 1
       make -C test unit-agent-control.la unit-agent-script-control.la unit-tiletest.la unittest || exit 1
+
+      # Keep Calc geometry and chart bindings in the existing Jenkins validation report.
+      (
+        cd engine || exit 1
+        make CppunitTest_sc_subsequent_export_test2 CppunitTest_desktop_lib CppunitTest_sc_tiledrendering
+      ) 2>&1 | tee "$report_dir/calc-subsequent-export-test2.log" || exit $?
 
       if [ "$ONLINE_OFFICE_EXPORT_QUEUE_VALIDATION" = true ]; then
         test "$BUILDDIR" = /workspace-cache/build/builddir || {

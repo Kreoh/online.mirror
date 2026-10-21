@@ -3493,7 +3493,7 @@ cpo::uno::Any invokeSourceProxy(std::shared_ptr<OwnedRegistration> const& regist
             owner->controller, owner,
             [&](JSContext* ctx)
             {
-                auto expression = "(" + source->source + "\n)";
+                const OString expression = "(" + source->source + "\n)";
                 ValueRef handler(ctx, JS_Eval(ctx, expression.getStr(), expression.getLength(),
                                               "<source-proxy>", JS_EVAL_TYPE_GLOBAL));
                 if (JS_IsException(handler))
@@ -3952,7 +3952,7 @@ JSValue internalCreateProxy(JSContext* ctx, JSValueConst, int argc, JSValueConst
                                            JS_GetPropertyStr(validation, constructor, "prototype"));
                         ValueRef toString(validation,
                                           JS_GetPropertyStr(validation, prototype, "toString"));
-                        auto expression = "(" + source->source + "\n)";
+                        const OString expression = "(" + source->source + "\n)";
                         ValueRef function(validation,
                                           JS_Eval(validation, expression.getStr(),
                                                   expression.getLength(), "<source-validation>",
