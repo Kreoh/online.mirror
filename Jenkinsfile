@@ -6,7 +6,7 @@ pipeline {
         }
     }
     parameters {
-        choice(name: 'BUILD_MODE', choices: ['client-only', 'image'], description: 'Export the matching Java client, or explicitly build and publish an image.')
+        choice(name: 'BUILD_MODE', choices: ['image', 'client-only'], description: 'Build and publish an image by default; select client-only to export from an existing image.')
         string(name: 'CLIENT_SOURCE_REVISION', defaultValue: '262f997a4b1fccadbe45664a8f21889af3632447', description: 'Full target source revision, independent of the pipeline revision.')
         string(name: 'CLIENT_IMAGE', defaultValue: 'ghcr.io/kreoh/online-office@sha256:bffd112aa342cfcfdeac6bab9884d787f77786cbf17b2bd230a0bb92a6c9aee6', description: 'Exact existing image for client-only export; must already be present on the Jenkins agent.')
         booleanParam(name: 'EXPORT_QUEUE_VALIDATION', defaultValue: false, description: 'Archive the exact builder and debug unit runtime for isolated queue validation. Does not authorise publication.')
