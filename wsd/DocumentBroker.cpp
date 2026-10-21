@@ -254,19 +254,6 @@ bool DocumentBroker::startAgentAuthorityRequestForTesting(
 #endif
 }
 
-bool DocumentBroker::swapAgentChildForTesting(std::shared_ptr<ChildProcess>& replacement)
-{
-    ASSERT_CORRECT_THREAD();
-    if (!UnitWSD::isUnitTesting())
-        return false;
-    if (!replacement)
-        replacement = getNewChild_Blocks(_poll, _configId, _mobileAppDocId);
-    if (!replacement || replacement == _childProcess)
-        return false;
-    _childProcess.swap(replacement);
-    return true;
-}
-
 bool DocumentBroker::startAgentUploadForTesting(const std::shared_ptr<ClientSession>& session)
 {
     ASSERT_CORRECT_THREAD();
@@ -1917,6 +1904,21 @@ public:
         SocketPoll::wakeupWorld();
     }
 };
+
+#if ENABLE_DEBUG
+bool DocumentBroker::swapAgentChildForTesting(std::shared_ptr<ChildProcess>& replacement)
+{
+    ASSERT_CORRECT_THREAD();
+    if (!UnitWSD::isUnitTesting())
+        return false;
+    if (!replacement)
+        replacement = getNewChild_Blocks(_poll, _configId, _mobileAppDocId);
+    if (!replacement || replacement == _childProcess)
+        return false;
+    _childProcess.swap(replacement);
+    return true;
+}
+#endif
 
 std::atomic<unsigned> DocumentBroker::DocBrokerId(1);
 
