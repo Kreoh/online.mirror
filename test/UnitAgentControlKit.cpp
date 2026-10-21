@@ -85,22 +85,12 @@ public:
         else if (command == "console-pressure")
         {
             const auto document = KitSocketPoll::getMainPoll()->getDocument();
-            const auto socket = handler->getSocket().lock();
-            LOK_ASSERT(document && socket);
-            ASSERT_CORRECT_SOCKET_THREAD(socket);
+            LOK_ASSERT(document);
+            LOK_ASSERT(handler->withFullOutputBufferForTesting([&]
             {
-                auto saved = std::move(socket->getOutBuffer());
-                socket->getOutBuffer() = Buffer();
-                struct Restore
-                {
-                    Buffer& buffer;
-                    Buffer saved;
-                    ~Restore() { buffer = std::move(saved); }
-                } restore{ socket->getOutBuffer(), std::move(saved) };
-                socket->getOutBuffer().append(std::string(65536, 'x'));
                 LOK_ASSERT(
                     !document->postMessage("agentscriptconsolekit: pressure", WSOpCode::Text));
-            }
+            }));
             handler->sendTextMessage("unitretirement console-pressure-checked", true);
         }
         else if (command.starts_with("source="))

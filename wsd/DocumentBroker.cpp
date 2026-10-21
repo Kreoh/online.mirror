@@ -1188,16 +1188,11 @@ bool DocumentBroker::handleAgentScriptConsole(const std::string& message,
     try
     {
         const auto protocol = std::dynamic_pointer_cast<WebSocketHandler>(transport->getProtocol());
-        const auto socket = protocol ? protocol->getSocket().lock() : nullptr;
-        if (!socket || !socket->isOpen())
+        if (!protocol)
             return false;
-        ASSERT_CORRECT_SOCKET_THREAD(socket);
-        const auto queued = socket->getOutBuffer().size();
         const std::string frame =
             "agentscriptconsole:" + message.substr(sizeof("agentscriptconsolekit:") - 1);
-        if (queued > 65536 || frame.size() + 14 > 65536 - queued)
-            return false;
-        return protocol->sendTextMessage(frame, false) >= static_cast<int>(frame.size());
+        return protocol->sendTextMessageWithQueueLimit(frame, 65536);
     }
     catch (...)
     {

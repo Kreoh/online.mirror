@@ -790,6 +790,45 @@ public:
         return sendFrame(socket, data, len, WSFrameMask::Fin | static_cast<unsigned char>(code), flush);
     }
 
+    /// Queue a text frame only when its payload and framing fit the output limit.
+    bool sendTextMessageWithQueueLimit(const std::string_view message,
+                                      const std::size_t limit) const
+    {
+        const auto socket = getSocket().lock();
+        if (!socket || !socket->isOpen())
+            return false;
+        ASSERT_CORRECT_SOCKET_THREAD(socket);
+        const auto queued = socket->getOutBuffer().size();
+        if (queued > limit || message.size() > limit - queued ||
+            14 > limit - queued - message.size())
+            return false;
+        return sendTextMessage(message, false) >= static_cast<int>(message.size());
+    }
+
+#if ENABLE_DEBUG
+    /// Exercise a full queue on the owning poll thread without exposing its socket.
+    template <typename Attempt> bool withFullOutputBufferForTesting(Attempt&& attempt)
+    {
+        if (!UnitBase::isUnitTesting())
+            return false;
+        const auto socket = getSocket().lock();
+        if (!socket || !socket->isOpen())
+            return false;
+        ASSERT_CORRECT_SOCKET_THREAD(socket);
+        auto saved = std::move(socket->getOutBuffer());
+        socket->getOutBuffer() = Buffer();
+        struct Restore
+        {
+            Buffer& buffer;
+            Buffer saved;
+            ~Restore() { buffer = std::move(saved); }
+        } restore{ socket->getOutBuffer(), std::move(saved) };
+        socket->getOutBuffer().append(std::string(65536, 'x'));
+        attempt();
+        return true;
+    }
+#endif
+
     bool processInputEnabled() const override
     {
         ASSERT_CORRECT_THREAD();

@@ -496,19 +496,10 @@ class AgentScriptControlTests final : public WopiTestServer
                 const auto protocol =
                     std::dynamic_pointer_cast<WebSocketHandler>(_transport->getProtocol());
                 LOK_ASSERT(protocol);
-                const auto socket = protocol->getSocket().lock();
-                LOK_ASSERT(socket);
-                ASSERT_CORRECT_SOCKET_THREAD(socket);
-                auto saved = std::move(socket->getOutBuffer());
-                socket->getOutBuffer() = Buffer();
-                struct Restore
+                LOK_ASSERT(protocol->withFullOutputBufferForTesting([&]
                 {
-                    Buffer& buffer;
-                    Buffer saved;
-                    ~Restore() { buffer = std::move(saved); }
-                } restore{ socket->getOutBuffer(), std::move(saved) };
-                socket->getOutBuffer().append(std::string(65536, 'x'));
-                LOK_ASSERT(!document.handleAgentScriptConsole(ordinal(frames[1], 5), child));
+                    LOK_ASSERT(!document.handleAgentScriptConsole(ordinal(frames[1], 5), child));
+                }));
                 return std::string();
             });
         LOK_ASSERT_EQUAL(std::string("dropped"), inject(ordinal(frames[1], 5)));
