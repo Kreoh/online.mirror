@@ -138,7 +138,7 @@
 #include <com/sun/star/frame/DispatchResultEvent.hpp>
 #include <com/sun/star/frame/DispatchResultState.hpp>
 #include <com/sun/star/frame/ModuleManager.hpp>
-#include <com/sun/star/uno/RuntimeException.hpp>
+#include <cpo/uno/RuntimeException.hpp>
 #include <com/sun/star/frame/XController.hpp>
 #include <com/sun/star/frame/XFrame.hpp>
 #include <com/sun/star/frame/XModel.hpp>
