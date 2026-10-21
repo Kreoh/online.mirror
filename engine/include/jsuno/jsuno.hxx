@@ -14,6 +14,9 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <memory>
+#include <cstdint>
+#include <cstddef>
 #include <vector>
 
 #include <com/sun/star/lang/XComponent.hpp>
@@ -104,6 +107,70 @@ LO_DLLPUBLIC_JSUNO OUString execute(
     std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
     cpo::uno::Reference<com::sun::star::lang::XComponent> const& document,
     cpo::uno::Reference<com::sun::star::frame::XController> const& controller);
+
+// Disabled engine infrastructure. Product callers do not use these operations yet.
+// Creation binds the engine thread; execute, adapter invocation, retrieval and collection
+// require it. Delivery, cancellation, revocation and final handle release are thread-neutral.
+// Targets must not retain an external owner handle. Nested execution must reuse the exact
+// active execution handle, including its original cancellation token and deadline.
+class ProxyOwner;
+class ProxyExecution;
+struct ProxyLimits
+{
+    std::size_t adapters = 64;
+    std::size_t pending = 16;
+    std::size_t queuedBytes = 1024 * 1024;
+    unsigned nesting = 8;
+};
+struct ProxyEvent
+{
+    std::uint64_t incarnation;
+    std::uint64_t call;
+    OUString proxyId;
+    OUString payload;
+};
+enum class ProxyAdmission
+{
+    Accepted,
+    Closed,
+    CapacityExceeded
+};
+enum class ProxyReply
+{
+    Value,
+    HandlerError
+};
+class LO_DLLPUBLIC_JSUNO ProxyTarget
+{
+public:
+    virtual ~ProxyTarget();
+    // Implementations must bound their queue, copy accepted events and be thread-neutral.
+    // Accepted reports queue admission only. Neither operation may throw.
+    virtual ProxyAdmission enqueue(ProxyEvent const& event) noexcept = 0;
+    virtual void close() noexcept = 0;
+};
+LO_DLLPUBLIC_JSUNO std::shared_ptr<ProxyOwner> createProxyOwner(std::shared_ptr<ProxyTarget> target,
+                                                                ProxyLimits limits = {});
+LO_DLLPUBLIC_JSUNO std::shared_ptr<ProxyExecution>
+createProxyExecution(std::chrono::milliseconds timeout,
+                     std::shared_ptr<std::atomic<bool>> cancelled = {});
+LO_DLLPUBLIC_JSUNO OUString executeOwned(
+    std::shared_ptr<ProxyOwner> const& owner, std::shared_ptr<ProxyExecution> const& execution,
+    OUString const& script, OUString const& source, int line,
+    std::function<void(OUString const&, OUString const&)> consoleHook = {});
+LO_DLLPUBLIC_JSUNO bool deliverOwnedProxyResult(std::shared_ptr<ProxyOwner> const& owner,
+                                                std::uint64_t incarnation, std::uint64_t call,
+                                                ProxyReply reply, OUString const& json);
+LO_DLLPUBLIC_JSUNO void cancelProxyExecution(std::shared_ptr<ProxyExecution> const& execution);
+LO_DLLPUBLIC_JSUNO void revokeProxyOwner(std::shared_ptr<ProxyOwner> const& owner) noexcept;
+// Engine-thread operations. Retrieval preserves the original adapter and removes its ID.
+LO_DLLPUBLIC_JSUNO cpo::uno::Reference<cpo::uno::XInterface>
+takeOwnedProxy(std::shared_ptr<ProxyOwner> const& owner, OUString const& id);
+// Explicitly collect after revocation and drain before engine shutdown. Never release UNO
+// references from an external handle destructor or a discarded poll callback.
+LO_DLLPUBLIC_JSUNO std::size_t collectProxyOwners();
+LO_DLLPUBLIC_JSUNO void drainProxyOwners();
+LO_DLLPUBLIC_JSUNO std::size_t proxyOwnerRegistrySize();
 
 // Deliver an iframe-side `jsonValue` to a `ProxyInvocation::invoke` blocked in Application::
 // Yield on `callId`; spurious callIds are silently ignored:
