@@ -1116,8 +1116,9 @@ bool DocumentBroker::handleAgentControl(const std::shared_ptr<ClientSession>& se
             capabilities += " rawview=1";
 #if defined(__linux__) && !DOCS_SHARE_PROCESS
         if (_childProcess->scriptControlFD() >= 0 && _childProcess->supportsRawView())
-            capabilities += " scriptcontrol=2 scriptcallbacks=0 generation=" +
-                            _childProcess->scriptGeneration();
+            capabilities += std::string(" scriptcontrol=2 scriptcallbacks=") +
+                            (_childProcess->supportsRawSourceCallbacks() ? "1" : "0") +
+                            " generation=" + _childProcess->scriptGeneration();
 #endif
         session->sendTextFrame(capabilities);
         return true;

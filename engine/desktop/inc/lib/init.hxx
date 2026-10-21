@@ -556,6 +556,17 @@ namespace desktop {
             void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
             void* proxyCallbackData, std::chrono::milliseconds timeout,
             std::shared_ptr<std::atomic<bool> const> cancelled) override;
+        std::shared_ptr<COKitScriptOwner> createScriptOwner(COKitDocument* document,
+                                                            int viewId) override;
+        COKitScriptResult executeScriptWithOwner(
+            COKitDocument* document, int viewId, std::shared_ptr<COKitScriptOwner> const& owner,
+            char const* script, std::string_view source, int line,
+            std::function<void(void*, std::string_view, std::string_view)> consoleCallback,
+            void* consoleCallbackData, std::chrono::milliseconds timeout,
+            std::shared_ptr<std::atomic<bool> const> cancelled) override;
+        std::size_t collectScriptOwners() override;
+        bool drainScriptOwners() override;
+        bool retireScriptOwner(std::shared_ptr<COKitScriptOwner> const& owner) override;
     };
 
     /// Helper function to extract the value from parameters delimited by

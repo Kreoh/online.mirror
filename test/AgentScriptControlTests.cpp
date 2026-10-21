@@ -137,6 +137,18 @@ class AgentScriptControlTests final : public WopiTestServer
     std::atomic<bool> _httpHeld{ false }, _uploadCompleted{ false };
     std::shared_ptr<ClientSession> _otherRender;
     std::atomic<bool> _otherLoaded{ false };
+    std::shared_ptr<ClientSession> _browser;
+    std::atomic<bool> _browserLoaded{ false };
+
+    void sourceCommand(const std::string& command)
+    {
+        broker(
+            [this, command](DocumentBroker& document)
+            {
+                LOK_ASSERT(document.forwardToChild(_browser, "unitretirement " + command, false));
+                return std::string();
+            });
+    }
 
     void await(const std::function<bool()>& predicate)
     {
@@ -173,7 +185,7 @@ class AgentScriptControlTests final : public WopiTestServer
     {
         send("agentcapabilities");
         const auto capabilities = response("agentcapabilities:");
-        LOK_ASSERT(capabilities.find("scriptcontrol=2 scriptcallbacks=0 generation=") !=
+        LOK_ASSERT(capabilities.find("scriptcontrol=2 scriptcallbacks=1 generation=") !=
                    std::string::npos);
         _generation = capabilities.substr(capabilities.find("generation=") + 11);
         LOK_ASSERT_EQUAL(std::size_t(32), _generation.size());
@@ -314,8 +326,9 @@ class AgentScriptControlTests final : public WopiTestServer
             LOK_ASSERT(undefined.find("\"err\"") == std::string::npos);
             LOK_ASSERT(execute(3, "throw new Error('private-controlled-error-marker');")
                            .find("private-controlled-error-marker") != std::string::npos);
-            LOK_ASSERT(execute(4, "$internal.takeProxy('absent');")
-                           .find("Proxy callbacks are unavailable") != std::string::npos);
+            LOK_ASSERT(
+                execute(4, "$internal.takeProxy('absent');").find("Owned proxy unavailable") !=
+                std::string::npos);
             const std::string marker = "private-controlled-source-marker";
             for (const auto& prefix :
                  { "agentscript ", "agentscriptbroken ", "agentstopbroken ",
@@ -327,6 +340,36 @@ class AgentScriptControlTests final : public WopiTestServer
             }
             expectRejected(request(5, std::string(1024 * 1024 + 1, 'x')), "syntax");
             LOK_ASSERT_EQUAL(std::string("4"), state("watermark"));
+            LOK_ASSERT(
+                execute(5,
+                        "$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'source', "
+                        "'function(method,args,state) { state.calls++; return args[0] + "
+                        "state.calls; }', "
+                        "{calls:0}).escapeString('connected');")
+                    .find("connected1") != std::string::npos);
+            LOK_ASSERT(execute(6, "$internal.takeProxy('source').escapeString('retained');")
+                           .find("retained2") != std::string::npos);
+            LOK_ASSERT(execute(7, "$internal.proxyState('source').state.calls;").find("\"ok\":2") !=
+                       std::string::npos);
+            LOK_ASSERT(execute(8, "$internal.disposeProxy('source'); 8;").find("\"ok\":8") !=
+                       std::string::npos);
+            LOK_ASSERT(
+                execute(
+                    9,
+                    "document.addModifyListener($internal.createProxy("
+                    "uno.idl.com.sun.star.util.XModifyListener, 'listener', "
+                    "'function(method,args,state) { if(method===\"modified\") state.calls++; }', "
+                    "{calls:0})); 9;")
+                    .find("\"ok\":9") != std::string::npos);
+            LOK_ASSERT(
+                execute(10, "document.Text.String='connected listener'; 10;").find("\"ok\":10") !=
+                std::string::npos);
+            LOK_ASSERT(execute(11, "$internal.proxyState('listener').state.calls > 0;")
+                           .find("\"ok\":true") != std::string::npos);
+            LOK_ASSERT(execute(12,
+                               "document.removeModifyListener($internal.takeProxy('listener')); "
+                               "$internal.disposeProxy('listener'); 12;")
+                           .find("\"ok\":12") != std::string::npos);
         }
         else if (_mode == 1 || _mode == 2)
         {
@@ -663,13 +706,20 @@ class AgentScriptControlTests final : public WopiTestServer
                 _socket = secondSocket;
                 _generation = secondGeneration;
             };
-            LOK_ASSERT(execute(1, "41;").find("\"ok\":41") != std::string::npos);
+            LOK_ASSERT(
+                execute(
+                    1,
+                    "$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'survivor', "
+                    "'function(method,args,state) { state.calls++; return args[0]; }', {calls:0})"
+                    ".escapeString('second'); 41;")
+                    .find("\"ok\":41") != std::string::npos);
             selectFirst();
             send(request(1, "while (true) {}"));
             const auto tuple = identity(waitState("reservationPending"));
             waitState("dispatched");
             selectSecond();
-            LOK_ASSERT(execute(2, "42;").find("\"ok\":42") != std::string::npos);
+            LOK_ASSERT(execute(2, "$internal.proxyState('survivor').state.calls + 41;")
+                           .find("\"ok\":42") != std::string::npos);
             selectFirst();
             state("holdReplies");
             send("agentstop " + tuple);
@@ -677,7 +727,8 @@ class AgentScriptControlTests final : public WopiTestServer
             LOK_ASSERT_EQUAL(std::string("terminal"), state("state"));
             // The first document still awaits its independent Stop acknowledgement.
             selectSecond();
-            LOK_ASSERT(execute(3, "43;").find("\"ok\":43") != std::string::npos);
+            LOK_ASSERT(execute(3, "$internal.proxyState('survivor').state.calls + 42;")
+                           .find("\"ok\":43") != std::string::npos);
             selectFirst();
             state("releaseReplies");
             waitState("stopApplied");
@@ -688,8 +739,51 @@ class AgentScriptControlTests final : public WopiTestServer
             LOK_ASSERT_EQUAL(std::string("1"), state("droppedReplies"));
             expectRejected(request(3, "1;"), "unavailable");
             selectSecond();
-            LOK_ASSERT(execute(4, "44;").find("\"ok\":44") != std::string::npos);
+            LOK_ASSERT(execute(4, "$internal.proxyState('survivor').state.calls + 43;")
+                           .find("\"ok\":44") != std::string::npos);
             LOK_ASSERT_EQUAL(std::string("4"), state("watermark"));
+        }
+        else if (_mode == 22)
+        {
+            // Keep an independent view alive while the registered source view retires.
+            initWebsocket("/wopi/files/0?access_token=script-test-token&access_token_ttl=" +
+                          std::to_string(_expiry));
+            const auto browserSocket = getWs()->getWebSocket();
+            WSD_CMD("load url=" + getWopiSrc());
+            await([this] { return _browserLoaded.load(); });
+            LOK_ASSERT(
+                execute(
+                    1,
+                    "document.Text.String='source lifecycle'; "
+                    "$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'lifecycle', "
+                    "'function(method,args,state) { state.calls++; return args[0]; }', {calls:0})"
+                    ".escapeString('before'); 1;")
+                    .find("\"ok\":1") != std::string::npos);
+            sourceCommand("source=" + _render->getId());
+            response("unitretirement source-configured");
+            sourceCommand("source-save");
+            response("unitretirement source-saved");
+            LOK_ASSERT(
+                execute(2, "$internal.proxyState('lifecycle').state.calls;").find("\"ok\":1") !=
+                std::string::npos);
+            sourceCommand("source-export");
+            response("unitretirement source-exported");
+            LOK_ASSERT(execute(3, "$internal.takeProxy('lifecycle').escapeString('after'); "
+                                  "$internal.proxyState('lifecycle').state.calls;")
+                           .find("\"ok\":2") != std::string::npos);
+            // The Kit hook attempts every unload path during synchronous console delivery.
+            LOK_ASSERT(
+                execute(4, "console.log('source-unload-probe'); while(true) {}").find("\"err\"") !=
+                std::string::npos);
+            response("unitretirement source-unload-refused");
+            const auto view = _render->getKitViewId();
+            send("agentretire epoch=script-test requestid=source-retire viewid=" +
+                 std::to_string(view) + " renderid=" + _render->getId());
+            response("unitretirement source-retired");
+            response("agentretired:");
+            sourceCommand("source-drain");
+            response("unitretirement source-drained");
+            LOK_ASSERT(browserSocket);
         }
         passTest("Controlled execution integration and generation fencing");
     }
@@ -700,6 +794,8 @@ public:
         , _mode(mode)
     {
         setTimeout(std::chrono::seconds(120));
+        if (_mode == 22)
+            setHasKitHooks("unit-agent-control-kit.so");
     }
     void configure(Poco::Util::LayeredConfiguration& config) override
     {
@@ -783,6 +879,11 @@ public:
                 _phase = 2;
             }
         }
+        else if (_mode == 22)
+        {
+            _browser = session;
+            _browserLoaded = true;
+        }
     }
     bool filterSessionInput(Session* session, const char* buffer, int length,
                             std::unique_ptr<std::vector<char>>&) override
@@ -794,6 +895,12 @@ public:
     }
     bool filterChildMessage(const std::vector<char>& payload) override
     {
+        if (std::string_view(payload.data(), payload.size()).starts_with("unitretirement source-"))
+        {
+            std::lock_guard lock(_responsesMutex);
+            _responses.emplace_back(payload.begin(), payload.end());
+            return true;
+        }
         if (!_holdTerminal ||
             !std::string_view(payload.data(), payload.size()).starts_with("agentscriptresultkit:"))
             return false;
@@ -816,7 +923,8 @@ public:
         }
         if (data.starts_with("agentscriptstate:") || data.starts_with("agentscriptresult:") ||
             data.starts_with("error: cmd=agentscript") || data.starts_with("agentcapabilities:") ||
-            data.starts_with("agentregistered:") || data.starts_with("agentrenewed:"))
+            data.starts_with("agentregistered:") || data.starts_with("agentrenewed:") ||
+            data.starts_with("agentretired:"))
         {
             std::lock_guard lock(_responsesMutex);
             _responses.emplace_back(data);
@@ -866,7 +974,8 @@ UnitBase** unit_create_wsd_multi()
             new AgentScriptControlTests(14), new AgentScriptControlTests(15),
             new AgentScriptControlTests(16), new AgentScriptControlTests(17),
             new AgentScriptControlTests(18), new AgentScriptControlTests(19),
-            new AgentScriptControlTests(20), new AgentScriptControlTests(21), nullptr
+            new AgentScriptControlTests(20), new AgentScriptControlTests(21),
+            new AgentScriptControlTests(22), nullptr
     };
 #else
     return new UnitBase* [] { nullptr };

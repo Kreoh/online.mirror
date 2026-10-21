@@ -362,6 +362,7 @@ unit_any_input_la_SOURCES = UnitAnyInput.cpp
 unit_any_input_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 unit_agent_script_control_la_SOURCES = AgentScriptControlTests.cpp
 unit_agent_script_control_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
+EXTRA_unit_agent_script_control_la_DEPENDENCIES = unit-agent-control-kit.la
 unit_agent_control_la_SOURCES = UnitAgentControl.cpp
 unit_agent_control_la_LIBADD = libtesthelpers.la $(CPPUNIT_LIBS)
 EXTRA_unit_agent_control_la_DEPENDENCIES = unit-agent-control-kit.la

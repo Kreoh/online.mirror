@@ -473,7 +473,327 @@ public:
         CPPUNIT_ASSERT_EQUAL(std::size_t(0), jsuno::proxyOwnerRegistrySize());
         fails([&] { run(live, execution(), u"1;"_ustr); });
     }
+    void testEmptyRegistryLifecycle()
+    {
+        CPPUNIT_ASSERT_EQUAL(std::size_t(0), jsuno::proxyOwnerRegistrySize());
+        CPPUNIT_ASSERT_EQUAL(std::size_t(0), jsuno::collectProxyOwners());
+        jsuno::drainProxyOwners();
+        CPPUNIT_ASSERT_EQUAL(std::size_t(0), jsuno::proxyOwnerRegistrySize());
+    }
+    void testSourceStateAndAdapterIdentity()
+    {
+        auto owner = jsuno::createSourceProxyOwner();
+        auto other = jsuno::createSourceProxyOwner();
+        auto createSource
+            = u"$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'source', "
+              "'function(method,args,state) { ++state.calls; return args[0] + state.calls; }', "
+              "{calls:0}); 1;"_ustr;
+        CPPUNIT_ASSERT_EQUAL(u"1"_ustr, run(owner, execution(), createSource));
+        cpo::uno::Reference<css::util::XStringEscape> original(
+            jsuno::takeOwnedProxy(owner, u"source"_ustr), cpo::uno::UNO_QUERY_THROW);
+        fails([&] { original->escapeString(u"idle"_ustr); });
+        fails([&] { run(owner, execution(), createSource); });
+        fails([&] { jsuno::takeOwnedProxy(owner, u"source"_ustr); });
+        OUString observed;
+        jsuno::executeOwned(owner, execution(), u"console.log('invoke');"_ustr,
+                            u"<source-test>"_ustr, 1, [&](auto const&, auto const&)
+                            { observed = original->escapeString(u"typed"_ustr); });
+        CPPUNIT_ASSERT_EQUAL(u"typed1"_ustr, observed);
+        CPPUNIT_ASSERT_EQUAL(u"1"_ustr, run(owner, execution(),
+                                            u"$internal.proxyState('source').state.calls;"_ustr));
+        CPPUNIT_ASSERT_EQUAL(u"1"_ustr, run(other, execution(), createSource));
+        CPPUNIT_ASSERT(jsuno::retireProxyOwner(other));
+        CPPUNIT_ASSERT_EQUAL(u"1"_ustr, run(owner, execution(),
+                                            u"$internal.proxyState('source').state.calls;"_ustr));
+        run(owner, execution(), u"$internal.disposeProxy('source');"_ustr);
+        run(owner, execution(), createSource);
+        jsuno::executeOwned(owner, execution(), u"console.log('old');"_ustr, u"<source-test>"_ustr,
+                            1, [&](auto const&, auto const&)
+                            { fails([&] { original->escapeString(u"old"_ustr); }); });
+        CPPUNIT_ASSERT_EQUAL(u"0"_ustr, run(owner, execution(),
+                                            u"$internal.proxyState('source').state.calls;"_ustr));
+        std::atomic<bool> rejected{ false };
+        std::thread foreign(
+            [&]
+            {
+                try
+                {
+                    original->escapeString(u"foreign"_ustr);
+                }
+                catch (cpo::uno::Exception const&)
+                {
+                    rejected = true;
+                }
+            });
+        foreign.join();
+        CPPUNIT_ASSERT(rejected.load());
+    }
+    void testSourceStateFailureAndLimits()
+    {
+        auto owner = jsuno::createSourceProxyOwner();
+        const auto prefix
+            = u"$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'x', "_ustr;
+        for (auto const& state :
+             { u"undefined"_ustr, u"{bad:undefined}"_ustr, u"{bad:NaN}"_ustr, u"{bad:1n}"_ustr,
+               u"{bad:function(){}}"_ustr, u"(()=>{let x={}; x.self=x; return x;})()"_ustr })
+            fails(
+                [&]
+                {
+                    run(owner, execution(),
+                        prefix + u"'function(method,args,state) { return args[0]; }', "_ustr + state
+                            + u");"_ustr);
+                });
+        fails([&] { run(owner, execution(), prefix + u"'function(', {});"_ustr); });
+        fails(
+            [&]
+            {
+                run(owner, execution(),
+                    prefix
+                        + u"'function(method,args,state) { return args[0]; }', {large:'x'.repeat(65537)});"_ustr);
+            });
+        fails(
+            [&]
+            {
+                run(owner, execution(),
+                    u"$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'old');"_ustr);
+            });
+        run(owner, execution(),
+            prefix
+                + u"'function(method,args,state) { state.calls++; state.bad=undefined; return "
+                  u"args[0]; }', "
+                  "{calls:0});"_ustr);
+        fails([&]
+              { run(owner, execution(), u"$internal.takeProxy('x').escapeString('bad');"_ustr); });
+        CPPUNIT_ASSERT_EQUAL(
+            u"0"_ustr, run(owner, execution(), u"$internal.proxyState('x').state.calls;"_ustr));
+        CPPUNIT_ASSERT_EQUAL(u"1"_ustr,
+                             run(owner, execution(), u"$internal.proxyState('x').failed;"_ustr));
+    }
+    void testSourceReentryDisposalAndResources()
+    {
+        auto owner = jsuno::createSourceProxyOwner();
+        CPPUNIT_ASSERT_EQUAL(u"[true,0]"_ustr, run(owner, execution(), uR"(
+            const proxy = $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'self',
+                'function(method,args,state) { ++state.calls; '
+                + 'return $internal.takeProxy("self").escapeString("recursive"); }', {calls:0});
+            let failed = false;
+            try { proxy.escapeString('start'); } catch (error) { failed = true; }
+            [failed, $internal.proxyState('self').state.calls];
+        )"_ustr));
+        CPPUNIT_ASSERT_EQUAL(u"[true,true,1]"_ustr, run(owner, execution(), uR"(
+            $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'inner',
+                'function(method,args,state) { $internal.disposeProxy("outer"); return "inner"; }', {});
+            const stale = $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'outer',
+                'function(method,args,state) { return $internal.takeProxy("inner").escapeString("nested"); }', {});
+            let discarded = false, inert = false;
+            try { stale.escapeString('outer'); } catch (error) { discarded = true; }
+            $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'outer',
+                'function(method,args,state) { return "replacement"; }', {});
+            try { stale.escapeString('stale'); } catch (error) { inert = true; }
+            [discarded, inert, $internal.proxyState('inner').completed];
+        )"_ustr));
+        auto bounded = jsuno::createSourceProxyOwner();
+        CPPUNIT_ASSERT_EQUAL(u"17"_ustr, run(bounded, execution(), uR"(
+            let count = 0;
+            try {
+                for (; count < 18; ++count)
+                    $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'p'+count,
+                        'function(method,args,state) { return args[0]; }', {value:'x'.repeat(60000)});
+            } catch (error) {}
+            count;
+        )"_ustr));
+        fails(
+            [&]
+            {
+                run(owner, execution(), uR"(
+            $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'heap',
+                'function(method,args,state) { const values=[]; '
+                + 'for(let i=0;i<10000000;i++) values.push({value:i}); return "unexpected"; }', {})
+                .escapeString('bounded');
+        )"_ustr);
+            });
+        CPPUNIT_ASSERT_EQUAL(u"1"_ustr,
+                             run(owner, execution(), u"$internal.proxyState('heap').failed;"_ustr));
+    }
+    void testSourceSharedStateTraversal()
+    {
+        auto owner = jsuno::createSourceProxyOwner();
+        const auto started = std::chrono::steady_clock::now();
+        fails(
+            [&]
+            {
+                run(owner, execution(std::chrono::seconds(1)), uR"(
+            let state = {leaf:0};
+            for (let i=0;i<50;++i) state={a:state,b:state};
+            $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'dag',
+                'function(method,args,state) { return args[0]; }', state);
+        )"_ustr);
+            });
+        CPPUNIT_ASSERT(std::chrono::steady_clock::now() - started < std::chrono::seconds(2));
+        // Failed validation neither publishes the registration nor reserves its ID.
+        run(owner, execution(), uR"(
+            $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'dag',
+                'function(method,args,state) { let tree={leaf:0}; '
+                + 'for(let i=0;i<50;++i) tree={a:tree,b:tree}; '
+                + 'state.tree=tree; return args[0]; }', {calls:0});
+        )"_ustr);
+        fails(
+            [&]
+            {
+                run(owner, execution(std::chrono::seconds(1)),
+                    u"$internal.takeProxy('dag').escapeString('bounded');"_ustr);
+            });
+        CPPUNIT_ASSERT_EQUAL(u"{\"calls\":0}"_ustr,
+                             run(owner, execution(), u"$internal.proxyState('dag').state;"_ustr));
+    }
+    void testDisposedSourcePayloadAccounting()
+    {
+        auto owner = jsuno::createSourceProxyOwner();
+        const auto create = uR"(
+            $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'retained',
+                'function(method,args,state) { return args[0]; }', {value:'x'.repeat(60000)});
+            1;
+        )"_ustr;
+        std::vector<cpo::uno::Reference<cpo::uno::XInterface>> retained;
+        for (unsigned i = 0; i < 17; ++i)
+        {
+            CPPUNIT_ASSERT_EQUAL(u"1"_ustr, run(owner, execution(), create));
+            retained.push_back(jsuno::takeOwnedProxy(owner, u"retained"_ustr));
+            run(owner, execution(), u"$internal.disposeProxy('retained');"_ustr);
+        }
+        // Disposal frees the ID, but retained native payloads still consume the owner budget.
+        fails([&] { run(owner, execution(), create); });
+        // The final external release refunds the charge without accessing an owner lock.
+        std::thread release([adapters = std::move(retained)]() mutable { adapters.clear(); });
+        release.join();
+        CPPUNIT_ASSERT_EQUAL(u"1"_ustr, run(owner, execution(), create));
+    }
+    void testSourceShutdownDrain()
+    {
+        auto first = jsuno::createSourceProxyOwner();
+        auto second = jsuno::createSourceProxyOwner();
+        auto create = uR"(
+            $internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'retained',
+                'function(method,args,state) { state.calls++; return args[0]; }', {calls:0});
+            1;
+        )"_ustr;
+        run(first, execution(), create);
+        run(second, execution(), create);
+        CPPUNIT_ASSERT_EQUAL(u"\"second\""_ustr,
+                             run(second, execution(),
+                                 u"$internal.takeProxy('retained').escapeString('second');"_ustr));
+        CPPUNIT_ASSERT(jsuno::retireProxyOwner(first));
+        CPPUNIT_ASSERT_EQUAL(u"1"_ustr, run(second, execution(),
+                                            u"$internal.proxyState('retained').state.calls;"_ustr));
+        jsuno::drainProxyOwners();
+        CPPUNIT_ASSERT_EQUAL(std::size_t(0), jsuno::proxyOwnerRegistrySize());
+        fails([&] { run(second, execution(), u"$internal.proxyState('retained');"_ustr); });
+        // Repeating orderly shutdown must remain harmless after all engine state is collected.
+        jsuno::drainProxyOwners();
+    }
+    void testSourceTypedArgumentsAndOutputs()
+    {
+        auto owner = jsuno::createSourceProxyOwner();
+        CPPUNIT_ASSERT_EQUAL(u"[7,[0],[\"out\"]]"_ustr, run(owner, execution(), uR"(
+            const proxy = $internal.createProxy(uno.idl.com.sun.star.script.XInvocation, 'out',
+                'function(method,args,state) { args[2].val=[0]; '
+                + 'args[3].val=[new uno.Any(uno.type.string,"out")]; '
+                + 'return new uno.Any(uno.type.long,7); }', {});
+            const indices = {}, values = {};
+            const result = proxy.invoke('typed', [], indices, values);
+            [result, indices.val, values.val];
+        )"_ustr));
+        CPPUNIT_ASSERT_EQUAL(u"[\"detected\",\"updated\",7,true]"_ustr, run(owner, execution(), uR"(
+                const proxy = $internal.createProxy(
+                    uno.idl.com.sun.star.document.XExtendedFilterDetection, 'inout',
+                    'function(method,args,state) { args[0].val=[{Name:"updated",Handle:0, '
+                    + 'Value:new uno.Any(uno.type.long,7), '
+                    + 'State:uno.idl.com.sun.star.beans.PropertyState.DIRECT_VALUE}]; '
+                    + 'return "detected"; }', {});
+                const descriptor = {val:[]};
+                const result = proxy.detect(descriptor);
+                [result, descriptor.val[0].Name, descriptor.val[0].Value,
+                 descriptor.val[0].State === uno.idl.com.sun.star.beans.PropertyState.DIRECT_VALUE];
+            )"_ustr));
+        CPPUNIT_ASSERT_EQUAL(u"true"_ustr, run(owner, execution(), uR"(
+            const listener = $internal.createProxy(uno.idl.com.sun.star.util.XModifyListener,
+                'identity', 'function(method,args,state) { '
+                + 'state.same=uno.sameUnoObject(args[0].Source,uno.componentContext); }', {});
+            listener.modified({Source:uno.componentContext});
+            $internal.proxyState('identity').state.same;
+        )"_ustr));
+        // Every output and the state remain unchanged if a later output conversion fails.
+        CPPUNIT_ASSERT_EQUAL(u"[11,12,0]"_ustr, run(owner, execution(), uR"(
+            const proxy = $internal.createProxy(uno.idl.com.sun.star.awt.XTextLayoutConstrains,
+                'atomic', 'function(method,args,state) { state.calls++; '
+                + 'args[0].val=1; args[1].val={invalid:true}; }', {calls:0});
+            const first = {val:11}, second = {val:12};
+            try { proxy.getColumnsAndLines(first,second); } catch (error) {}
+            [first.val, second.val, $internal.proxyState('atomic').state.calls];
+        )"_ustr));
+    }
+    void testSourceExactTokenAndRetirement()
+    {
+        auto owner = jsuno::createSourceProxyOwner();
+        run(owner, execution(),
+            u"$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'loop', "
+            "'function(method,args,state) { state.calls++; while(true) {} }', {calls:0});"_ustr);
+        auto admitted = std::make_shared<std::atomic<bool>>(false);
+        auto bound = jsuno::createBoundProxyExecution(std::chrono::seconds(2), admitted);
+        std::thread cancel(
+            [admitted]
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                admitted->store(true);
+            });
+        fails([&]
+              { run(owner, bound, u"$internal.takeProxy('loop').escapeString('loop');"_ustr); });
+        cancel.join();
+        CPPUNIT_ASSERT_EQUAL(
+            u"0"_ustr, run(owner, execution(), u"$internal.proxyState('loop').state.calls;"_ustr));
+        bool retiredWhileActive = true;
+        fails(
+            [&]
+            {
+                jsuno::executeOwned(owner, execution(),
+                                    u"console.log('retire'); while(true) {}"_ustr,
+                                    u"<retirement-test>"_ustr, 1, [&](auto const&, auto const&)
+                                    { retiredWhileActive = jsuno::retireProxyOwner(owner); });
+            });
+        CPPUNIT_ASSERT(!retiredWhileActive);
+        CPPUNIT_ASSERT(jsuno::retireProxyOwner(owner));
+    }
+    void testImmutableAdmissionCancellation()
+    {
+        auto target = std::make_shared<OwnedTarget>();
+        auto owner = jsuno::createProxyOwner(target);
+        auto admitted = std::make_shared<std::atomic<bool>>(false);
+        auto local = jsuno::createBoundProxyExecution(std::chrono::seconds(2), admitted);
+        jsuno::cancelProxyExecution(local);
+        CPPUNIT_ASSERT(!admitted->load());
+        fails([&] { run(owner, local, u"1;"_ustr); });
+
+        auto bound = jsuno::createBoundProxyExecution(std::chrono::seconds(2), admitted);
+        target->action = [&](auto const&)
+        {
+            // Change the original token after admission, while invocation is active.
+            admitted->store(true);
+            return jsuno::ProxyAdmission::Accepted;
+        };
+        fails([&] { run(owner, bound, invoke()); });
+        CPPUNIT_ASSERT(admitted->load());
+    }
     CPPUNIT_TEST_SUITE(OwnedProxy);
+    CPPUNIT_TEST(testEmptyRegistryLifecycle);
+    CPPUNIT_TEST(testSourceStateAndAdapterIdentity);
+    CPPUNIT_TEST(testSourceStateFailureAndLimits);
+    CPPUNIT_TEST(testSourceExactTokenAndRetirement);
+    CPPUNIT_TEST(testSourceTypedArgumentsAndOutputs);
+    CPPUNIT_TEST(testSourceSharedStateTraversal);
+    CPPUNIT_TEST(testDisposedSourcePayloadAccounting);
+    CPPUNIT_TEST(testSourceShutdownDrain);
+    CPPUNIT_TEST(testSourceReentryDisposalAndResources);
+    CPPUNIT_TEST(testImmutableAdmissionCancellation);
     CPPUNIT_TEST(testOwnersAndLegacy);
     CPPUNIT_TEST(testActiveExecutionAndRevocation);
     CPPUNIT_TEST(testTerminalFailuresAndRecovery);

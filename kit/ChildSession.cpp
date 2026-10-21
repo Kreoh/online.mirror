@@ -152,10 +152,36 @@ ChildSession::ChildSession(const std::shared_ptr<ProtocolHandlerInterface>& prot
     LOG_INF("ChildSession ctor [" << getName() << "]. JailRoot: [" << _jailRoot << ']');
 }
 
+namespace
+{
+std::atomic<std::size_t> ConnectedScriptOwners{ 0 };
+}
+bool ChildSession::hasConnectedScriptOwners() { return ConnectedScriptOwners.load() != 0; }
+bool ChildSession::prepareScriptOwnerUnload()
+{
+    if (!_scriptOwner)
+        return true;
+    _scriptOwner->revoke();
+    if (!_scriptOwnerKit || !_scriptOwnerKit->retireScriptOwner(_scriptOwner))
+        return false;
+    _scriptOwner.reset();
+    _scriptOwnerKit.reset();
+    _scriptOwnerGeneration.clear();
+    _scriptOwnerEpoch.clear();
+    --ConnectedScriptOwners;
+    return true;
+}
+
 ChildSession::~ChildSession()
 {
     LOG_INF("~ChildSession dtor [" << getName() << ']');
 
+    if (_scriptOwner)
+    {
+        _scriptOwner->revoke();
+        // Readiness must be established while the session still has a strong owner.
+        std::terminate();
+    }
     stopURPBridge();
 
     disconnect();
@@ -184,6 +210,8 @@ void ChildSession::stopURPBridge()
 
 void ChildSession::disconnect()
 {
+    if (!prepareScriptOwnerUnload())
+        return;
     if (!isDisconnected())
     {
         if (_viewId >= 0)
@@ -5175,13 +5203,42 @@ bool ChildSession::executeControlledScript(const std::string& message)
                             session->sendTextFrame("agentscriptconsole: " + std::string(level) +
                                                    '\n' + std::string(text));
                     };
-                    // Proxy callbacks require engine-owned lifetime and execution ownership.
-                    // A null hook makes creation and retrieval fail explicitly in this interim path.
+                    const auto callbacks = engineInfo->get("RawSourceCallbacks");
+                    const bool connected = callbacks.isInteger() && callbacks.convert<int>() == 1;
                     const std::string source = message.substr(newline + 1);
-                    // This exact-view ABI retains the same token while acquiring SolarMutex and executing.
-                    const auto result = kit->executeScriptWithView(
-                        document.get(), _viewId, source.c_str(), "agent-control.js", 1, console,
-                        nullptr, nullptr, nullptr, std::chrono::milliseconds(timeout), token);
+                    COKitScriptResult result;
+                    if (connected)
+                    {
+                        if (!isURPEnabled() || !hasURPBridge() || agentRetirementFenced())
+                            throw std::logic_error("Source owner route unavailable");
+                        if (_scriptOwner &&
+                            (_scriptOwnerGeneration != fields[0] || _scriptOwnerEpoch != fields[1]))
+                        {
+                            if (!prepareScriptOwnerUnload())
+                                throw std::logic_error("Source owner remains active");
+                        }
+                        if (!_scriptOwner)
+                        {
+                            _scriptOwner = kit->createScriptOwner(document.get(), _viewId);
+                            if (!_scriptOwner)
+                                throw std::logic_error("Source owner creation failed");
+                            _scriptOwnerKit = kit;
+                            _scriptOwnerGeneration = fields[0];
+                            _scriptOwnerEpoch = fields[1];
+                            ++ConnectedScriptOwners;
+                        }
+                        result = kit->executeScriptWithOwner(
+                            document.get(), _viewId, _scriptOwner, source.c_str(),
+                            "agent-control.js", 1, console, nullptr,
+                            std::chrono::milliseconds(timeout), token);
+                        // The complete synchronous handler stack has unwound. No socket or
+                        // session-map lock is held while the engine releases retired owners.
+                        kit->collectScriptOwners();
+                    }
+                    else
+                        result = kit->executeScriptWithView(
+                            document.get(), _viewId, source.c_str(), "agent-control.js", 1, console,
+                            nullptr, nullptr, nullptr, std::chrono::milliseconds(timeout), token);
                     body = "{\"state\":\"returned\",\"invoked\":true";
                     if (result.oError)
                         body += ",\"err\":" +

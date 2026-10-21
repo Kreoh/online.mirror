@@ -10013,12 +10013,37 @@ COKitScriptResult COKitImpl::executeScriptWithControl(
                                      timeout, std::move(cancelled));
 }
 
+#if HAVE_FEATURE_QUICKJS
+namespace
+{
+struct SourceScriptOwner final : COKitScriptOwner
+{
+    COKitImpl const* engine;
+    COKitDocument* document;
+    int view;
+    std::shared_ptr<jsuno::ProxyOwner> owner;
+    SourceScriptOwner(COKitImpl const* engineValue, COKitDocument* documentValue, int viewValue)
+        : engine(engineValue)
+        , document(documentValue)
+        , view(viewValue)
+        , owner(jsuno::createSourceProxyOwner())
+    {
+    }
+    ~SourceScriptOwner() override { revoke(); }
+    void revoke() noexcept override { jsuno::revokeProxyOwner(owner); }
+};
+}
+#endif
+
 static COKitScriptResult executeScriptWithBindings(
-    COKitDocument* document, std::optional<int> viewId, char const* script, std::string_view source, int line,
-    std::function<void(void* data, std::string_view level, std::string_view message)> consoleCallback,
+    COKitDocument* document, std::optional<int> viewId, char const* script, std::string_view source,
+    int line,
+    std::function<void(void* data, std::string_view level, std::string_view message)>
+        consoleCallback,
     void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
     void* proxyCallbackData, std::chrono::milliseconds timeout,
-    std::shared_ptr<std::atomic<bool> const> cancelled)
+    std::shared_ptr<std::atomic<bool> const> cancelled,
+    std::shared_ptr<COKitScriptOwner> const& scriptOwner = {})
 {
     comphelper::ProfileZone zone("lo_executeScript");
     SolarMutexGuard guard;
@@ -10055,13 +10080,29 @@ static COKitScriptResult executeScriptWithBindings(
                 frame != shell->GetViewFrame().GetFrame().GetFrameInterface())
                 throw uno::RuntimeException(u"Raw script controller binding is unavailable"_ustr);
         }
-        OUString value = jsuno::execute(
-            OUString::fromUtf8(script), OUString::fromUtf8(source), line,
-            [consoleCallback, consoleCallbackData](OUString const & level, OUString const & message)
-            { consoleCallback(consoleCallbackData, level.toUtf8(), message.toUtf8()); },
-            std::move(hook), &aScriptResult.bUsedLegacyUnoApi, timeout, cancelled.get(),
-            document ? static_cast<COKitDocumentImpl*>(document)->mxComponent
-                     : uno::Reference<css::lang::XComponent>(), controller);
+        auto sourceOwner = std::dynamic_pointer_cast<SourceScriptOwner>(scriptOwner);
+        auto console
+            = [consoleCallback, consoleCallbackData](OUString const& level, OUString const& message)
+        {
+            if (consoleCallback)
+                consoleCallback(consoleCallbackData, level.toUtf8(), message.toUtf8());
+        };
+        OUString value;
+        if (sourceOwner)
+            value = jsuno::executeOwned(
+                sourceOwner->owner, jsuno::createBoundProxyExecution(timeout, cancelled),
+                OUString::fromUtf8(script), OUString::fromUtf8(source), line, console,
+                static_cast<COKitDocumentImpl*>(document)->mxComponent, controller);
+        else
+            value = jsuno::execute(
+                OUString::fromUtf8(script), OUString::fromUtf8(source), line,
+                [consoleCallback, consoleCallbackData](OUString const& level,
+                                                       OUString const& message)
+                { consoleCallback(consoleCallbackData, level.toUtf8(), message.toUtf8()); },
+                std::move(hook), &aScriptResult.bUsedLegacyUnoApi, timeout, cancelled.get(),
+                document ? static_cast<COKitDocumentImpl*>(document)->mxComponent
+                         : uno::Reference<css::lang::XComponent>(),
+                controller);
         if (!value.isEmpty()) {
             aScriptResult.oResult = convertOUStringToStdString(value);
         }
@@ -10099,6 +10140,7 @@ static COKitScriptResult executeScriptWithBindings(
     (void) cancelled;
     (void) document;
     (void) viewId;
+    (void)scriptOwner;
     static constexpr auto msg = u"executeScript: QuickJS support is not enabled in this build"_ustr;
     SetLastExceptionMsg(msg);
     aScriptResult.oError = convertOUStringToStdString(msg);
@@ -10128,6 +10170,93 @@ COKitScriptResult COKitImpl::executeScriptWithView(
     return executeScriptWithBindings(document, viewId, script, source, line,
                                      std::move(consoleCallback), consoleCallbackData, proxyCallback,
                                      proxyCallbackData, timeout, std::move(cancelled));
+}
+
+std::shared_ptr<COKitScriptOwner> COKitImpl::createScriptOwner(COKitDocument* document, int viewId)
+{
+#if HAVE_FEATURE_QUICKJS
+    if (!Application::IsMainThread())
+        throw uno::RuntimeException(u"Source owner creation requires the engine thread"_ustr);
+    SolarMutexGuard guard;
+    auto owner = std::make_shared<SourceScriptOwner>(this, document, viewId);
+    auto result
+        = executeScriptWithBindings(document, viewId, "undefined", "<owner-binding>", 1, {},
+                                    nullptr, nullptr, nullptr, std::chrono::seconds(1), {}, owner);
+    if (result.oError)
+    {
+        jsuno::retireProxyOwner(owner->owner);
+        throw uno::RuntimeException(u"Source owner binding unavailable"_ustr);
+    }
+    return owner;
+#else
+    (void)document;
+    (void)viewId;
+    return {};
+#endif
+}
+COKitScriptResult COKitImpl::executeScriptWithOwner(
+    COKitDocument* document, int viewId, std::shared_ptr<COKitScriptOwner> const& owner,
+    char const* script, std::string_view source, int line,
+    std::function<void(void*, std::string_view, std::string_view)> consoleCallback,
+    void* consoleCallbackData, std::chrono::milliseconds timeout,
+    std::shared_ptr<std::atomic<bool> const> cancelled)
+{
+#if HAVE_FEATURE_QUICKJS
+    if (!Application::IsMainThread())
+    {
+        COKitScriptResult rejected;
+        rejected.oError = "Source execution requires the engine thread";
+        return rejected;
+    }
+    auto bound = std::dynamic_pointer_cast<SourceScriptOwner>(owner);
+    if (!bound || bound->engine != this || bound->document != document || bound->view != viewId)
+    {
+        COKitScriptResult rejected;
+        rejected.oError = "Source owner binding mismatch";
+        return rejected;
+    }
+#endif
+    return executeScriptWithBindings(document, viewId, script, source, line,
+                                     std::move(consoleCallback), consoleCallbackData, nullptr,
+                                     nullptr, timeout, std::move(cancelled), owner);
+}
+std::size_t COKitImpl::collectScriptOwners()
+{
+#if HAVE_FEATURE_QUICKJS
+    if (!Application::IsMainThread())
+        throw uno::RuntimeException(u"Source owner collection requires the engine thread"_ustr);
+    if (jsuno::proxyOwnerRegistrySize())
+        return jsuno::collectProxyOwners();
+#endif
+    return 0;
+}
+bool COKitImpl::retireScriptOwner(std::shared_ptr<COKitScriptOwner> const& owner)
+{
+#if HAVE_FEATURE_QUICKJS
+    if (!Application::IsMainThread())
+        return false;
+    auto bound = std::dynamic_pointer_cast<SourceScriptOwner>(owner);
+    return !owner || (bound && bound->engine == this && jsuno::retireProxyOwner(bound->owner));
+#else
+    return !owner;
+#endif
+}
+bool COKitImpl::drainScriptOwners()
+{
+#if HAVE_FEATURE_QUICKJS
+    if (!Application::IsMainThread())
+        return false;
+    try
+    {
+        if (jsuno::proxyOwnerRegistrySize())
+            jsuno::drainProxyOwners();
+    }
+    catch (...)
+    {
+        return false;
+    }
+#endif
+    return true;
 }
 
 void COKitImpl::deliverProxyResult(char const * callId, char const * jsonValue)
@@ -10205,20 +10334,21 @@ void COKitImpl::setDocumentPassword(const char* pURL, const char* pPassword)
 std::string COKitImpl::getVersionInfo()
 {
     SetLastExceptionMsg();
-    return convertOUStringToStdString(ReplaceStringHookProc(
-        u"{ "
-        "\"ProductName\": \"%PRODUCTNAME\", "
-        "\"ProductVersion\": \"%PRODUCTVERSION\", "
-        "\"ProductExtension\": \"%PRODUCTEXTENSION\", "
-        "\"BuildId\": \"%BUILDID\""
+    return convertOUStringToStdString(
+        ReplaceStringHookProc(u"{ "
+                              "\"ProductName\": \"%PRODUCTNAME\", "
+                              "\"ProductVersion\": \"%PRODUCTVERSION\", "
+                              "\"ProductExtension\": \"%PRODUCTEXTENSION\", "
+                              "\"BuildId\": \"%BUILDID\""
 #if HAVE_FEATURE_QUICKJS
-        ", \"RawDocumentBinding\": true"
-        ", \"RawViewBinding\": true"
+                              ", \"RawDocumentBinding\": true"
+                              ", \"RawViewBinding\": true"
+                              ", \"RawSourceCallbacks\": 1"
 #endif
 #if BUILDCONFIG_RECORDED
-        ", \"BuildConfig\": \"" BUILDCONFIG "\""
+                              ", \"BuildConfig\": \"" BUILDCONFIG "\""
 #endif
-        " }"_ustr));
+                              " }"_ustr));
 }
 
 static void aBasicErrorFunc(const OUString& rError, const OUString& rAction)

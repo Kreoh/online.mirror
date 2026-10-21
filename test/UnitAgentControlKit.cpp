@@ -12,15 +12,23 @@
 #include <config.h>
 
 #include <common/Unit.hpp>
+#include <common/JsonUtil.hpp>
+#include <kit/ChildSession.hpp>
+#include <kit/Kit.hpp>
 #include <net/WebSocketHandler.hpp>
 #include <test/lokassert.hpp>
 
+#include <algorithm>
 #include <atomic>
+#include <map>
+#include <memory>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <stdexcept>
+#include <vector>
 
 #if ENABLE_DEBUG
 namespace
@@ -38,6 +46,13 @@ class UnitKitAgentRetirement final : public UnitKit
     std::string _queueEpoch; // Poll thread only.
     std::atomic<std::uint64_t> _consumed{0}, _discarded{0};
     bool _queueStopped = false, _queueDrained = false, _queueReported = false;
+    std::map<std::string, std::weak_ptr<ChildSession>> _sessions;
+    std::weak_ptr<ChildSession> _sourceSession;
+    bool _sourceArmed = false, _sourceUnloadRefused = false, _sourceTerminal = false;
+    bool _sourceSave = false, _sourceExport = false, _sourceSaveReported = false;
+    unsigned _backgroundForks = 0;
+    int _sourceView = -1;
+
     void setRelease(bool value)
     {
         {
@@ -57,7 +72,59 @@ public:
             return false;
         _handler = handler;
         const std::string command = message.substr(position + 15);
-        if (command.starts_with("mode="))
+        if (command.starts_with("source="))
+        {
+            const auto found = _sessions.find(command.substr(7));
+            LOK_ASSERT(found != _sessions.end());
+            _sourceSession = found->second;
+            const auto session = _sourceSession.lock();
+            LOK_ASSERT(session && session->hasURPBridge());
+            _sourceView = session->getViewId();
+            _sourceArmed = true;
+            _handler->sendTextMessage("unitretirement source-configured", true);
+        }
+        else if (command == "source-save" || command == "source-export")
+        {
+            const auto session = _sourceSession.lock();
+            LOK_ASSERT(session && _sourceArmed && isURPEnabled());
+            LOK_ASSERT(ChildSession::hasConnectedScriptOwners());
+            const std::string input =
+                command == "source-save"
+                    ? "save background=true {}"
+                    : "downloadas name=connected.odt id=source-export format=odt options=";
+            session->handleMessage(std::vector<char>(input.begin(), input.end()));
+            LOK_ASSERT_EQUAL(0U, _backgroundForks);
+            LOK_ASSERT(command == "source-save" ? _sourceSave : _sourceExport);
+            if (command == "source-export")
+                _handler->sendTextMessage("unitretirement source-exported", true);
+        }
+        else if (command == "source-drain")
+        {
+            const auto document = KitSocketPoll::getMainPoll()->getDocument();
+            LOK_ASSERT(document && document->isLoaded());
+            const auto kit = document->getLOKit();
+            const auto native = document->getLOKitDocument();
+            const auto views = native->getViewIds();
+            LOK_ASSERT(!views.empty());
+            auto owner = kit->createScriptOwner(native.get(), views.front());
+            LOK_ASSERT(owner);
+            const auto result = kit->executeScriptWithOwner(
+                native.get(), views.front(), owner,
+                "$internal.createProxy(uno.idl.com.sun.star.util.XStringEscape, 'shutdown', "
+                "'function(method,args,state) { return args[0]; }', {}); 1;",
+                "source-shutdown-test.js", 1, {}, nullptr, std::chrono::seconds(2), {});
+            LOK_ASSERT(!result.oError);
+            LOK_ASSERT(kit->drainScriptOwners());
+            LOK_ASSERT_EQUAL(std::size_t(0), kit->collectScriptOwners());
+            const auto revoked = kit->executeScriptWithOwner(native.get(), views.front(), owner,
+                                                             "1;", "source-shutdown-test.js", 1, {},
+                                                             nullptr, std::chrono::seconds(2), {});
+            LOK_ASSERT(revoked.oError);
+            LOK_ASSERT(views == native->getViewIds());
+            LOK_ASSERT(kit->drainScriptOwners());
+            _handler->sendTextMessage("unitretirement source-drained", true);
+        }
+        else if (command.starts_with("mode="))
         {
             _mode.store(std::stoi(command.substr(5)));
             _handler->sendTextMessage("unitretirement configured", true);
@@ -77,6 +144,89 @@ public:
             _readerPaused.store(false);
         }
         return true;
+    }
+    void postKitSessionCreated(Session* session) override
+    {
+        auto child = std::dynamic_pointer_cast<ChildSession>(session->shared_from_this());
+        LOK_ASSERT(child);
+        _sessions[child->getId()] = child;
+    }
+    void preSaveHook() override
+    {
+        if (_sourceArmed)
+        {
+            LOK_ASSERT(isURPEnabled());
+            LOK_ASSERT(ChildSession::hasConnectedScriptOwners());
+            _sourceSave = true;
+        }
+    }
+    bool filterLoKitCallback(COKitCallbackType type, const std::string& payload) override
+    {
+        if (_sourceSave && !_sourceSaveReported && type == COKitCallbackType::UNO_COMMAND_RESULT)
+        {
+            Poco::JSON::Object::Ptr result;
+            if (JsonUtil::parseJSON(payload, result) && result &&
+                result->getValue<std::string>("commandName") == ".uno:Save")
+            {
+                LOK_ASSERT(result->get("success").toString() == "true");
+                _sourceSaveReported = true;
+                _handler->sendTextMessage("unitretirement source-saved", true);
+            }
+        }
+        return false;
+    }
+    void postBackgroundSaveFork() override
+    {
+        ++_backgroundForks;
+        LOK_ASSERT(!_sourceArmed);
+    }
+    bool onFilterSendWebSocketMessage(std::string_view data, WSOpCode, bool, int&) override
+    {
+        if (!_sourceArmed)
+            return false;
+        if (data.find("downloadas:") != std::string_view::npos &&
+            data.find("id=source-export") != std::string_view::npos)
+            _sourceExport = true;
+        if (!_sourceUnloadRefused && data.find("source-unload-probe") != std::string_view::npos)
+        {
+            // Console delivery is synchronous inside the admitted execution.
+            const auto session = _sourceSession.lock();
+            const auto document = KitSocketPoll::getMainPoll()->getDocument();
+            LOK_ASSERT(session && document);
+            const auto native = document->getLOKitDocument();
+            const auto views = native->getViewIds();
+            LOK_ASSERT(!session->prepareScriptOwnerUnload());
+            LOK_ASSERT(!session->resetDocManager());
+            session->disconnect();
+            bool refused = false;
+            try
+            {
+                document->finishAgentRetirement(session);
+            }
+            catch (const std::logic_error&)
+            {
+                refused = true;
+            }
+            LOK_ASSERT(refused);
+            LOK_ASSERT(session->hasURPBridge());
+            LOK_ASSERT(views == native->getViewIds());
+            LOK_ASSERT(document->findSessionByViewId(_sourceView) == session);
+            _sourceUnloadRefused = true;
+            _handler->sendTextMessage("unitretirement source-unload-refused", true);
+        }
+        if (data.starts_with("agentscriptresultkit:") && _sourceUnloadRefused)
+            _sourceTerminal = true;
+        if (data.starts_with("agentretiredkit:"))
+        {
+            LOK_ASSERT(_sourceUnloadRefused && _sourceTerminal);
+            const auto document = KitSocketPoll::getMainPoll()->getDocument();
+            LOK_ASSERT(document);
+            const auto views = document->getLOKitDocument()->getViewIds();
+            LOK_ASSERT(std::find(views.begin(), views.end(), _sourceView) == views.end());
+            LOK_ASSERT(!ChildSession::hasConnectedScriptOwners());
+            _handler->sendTextMessage("unitretirement source-retired", true);
+        }
+        return false;
     }
     bool agentRetirementFault(AgentRetirementTestPoint point) override
     {

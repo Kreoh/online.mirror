@@ -151,19 +151,32 @@ public:
 };
 LO_DLLPUBLIC_JSUNO std::shared_ptr<ProxyOwner> createProxyOwner(std::shared_ptr<ProxyTarget> target,
                                                                 ProxyLimits limits = {});
+LO_DLLPUBLIC_JSUNO std::shared_ptr<ProxyOwner> createSourceProxyOwner(ProxyLimits limits = {});
+LO_DLLPUBLIC_JSUNO bool retireProxyOwner(std::shared_ptr<ProxyOwner> const& owner);
 LO_DLLPUBLIC_JSUNO std::shared_ptr<ProxyExecution>
 createProxyExecution(std::chrono::milliseconds timeout,
                      std::shared_ptr<std::atomic<bool>> cancelled = {});
+// Keep the admission token itself alive; local cancellation never mutates it.
+LO_DLLPUBLIC_JSUNO std::shared_ptr<ProxyExecution>
+createBoundProxyExecution(std::chrono::milliseconds timeout,
+                          std::shared_ptr<std::atomic<bool> const> admittedCancellation);
 LO_DLLPUBLIC_JSUNO OUString executeOwned(
     std::shared_ptr<ProxyOwner> const& owner, std::shared_ptr<ProxyExecution> const& execution,
     OUString const& script, OUString const& source, int line,
     std::function<void(OUString const&, OUString const&)> consoleHook = {});
+LO_DLLPUBLIC_JSUNO OUString executeOwned(
+    std::shared_ptr<ProxyOwner> const& owner, std::shared_ptr<ProxyExecution> const& execution,
+    OUString const& script, OUString const& source, int line,
+    std::function<void(OUString const&, OUString const&)> consoleHook,
+    cpo::uno::Reference<css::lang::XComponent> const& document,
+    cpo::uno::Reference<css::frame::XController> const& controller);
 LO_DLLPUBLIC_JSUNO bool deliverOwnedProxyResult(std::shared_ptr<ProxyOwner> const& owner,
                                                 std::uint64_t incarnation, std::uint64_t call,
                                                 ProxyReply reply, OUString const& json);
 LO_DLLPUBLIC_JSUNO void cancelProxyExecution(std::shared_ptr<ProxyExecution> const& execution);
 LO_DLLPUBLIC_JSUNO void revokeProxyOwner(std::shared_ptr<ProxyOwner> const& owner) noexcept;
-// Engine-thread operations. Retrieval preserves the original adapter and removes its ID.
+// Engine-thread retrieval preserves the original adapter. Source owners reserve the ID
+// and retain state until explicit disposal; legacy external owners remove the ID.
 LO_DLLPUBLIC_JSUNO cpo::uno::Reference<cpo::uno::XInterface>
 takeOwnedProxy(std::shared_ptr<ProxyOwner> const& owner, OUString const& id);
 // Explicitly collect after revocation and drain before engine shutdown. Never release UNO

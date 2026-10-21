@@ -3514,6 +3514,7 @@ private:
             std::string configId;
             bool supportsRawDocument = false;
             bool supportsRawView = false;
+            bool supportsRawSourceCallbacks = false;
             std::string scriptControlVersion, scriptGeneration;
             bool duplicateScriptControl = false;
             bool seenScriptControl = false, seenScriptGeneration = false;
@@ -3604,6 +3605,8 @@ private:
                     supportsRawDocument = param.second == "1";
                 else if (param.first == "rawview")
                     supportsRawView = param.second == "1";
+                else if (param.first == "rawsourcecallbacks")
+                    supportsRawSourceCallbacks = param.second == "1";
                 else if (param.first == "version")
                 {
                     COOLWSD::LOKitVersion = param.second;
@@ -3682,8 +3685,9 @@ private:
 #endif
             LOG_TRC("Calling make_shared<ChildProcess>, for NewChildren?");
 
-            auto child = std::make_shared<ChildProcess>(pid, jailId, configId, socket, request,
-                                                       admsProps, supportsRawDocument, supportsRawView);
+            auto child = std::make_shared<ChildProcess>(
+                pid, jailId, configId, socket, request, admsProps, supportsRawDocument,
+                supportsRawView, supportsRawSourceCallbacks);
 #if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS
             if (scriptControlCompatible)
                 child->negotiateScriptControl(socket->takeIncomingFD(SharedFDType::ScriptControl),

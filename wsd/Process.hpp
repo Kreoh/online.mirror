@@ -224,7 +224,7 @@ public:
     ChildProcess(const pid_t pid, const std::string& jailId, const std::string& configId,
                  const std::shared_ptr<StreamSocket>& socket, const T& request,
                  std::map<std::string, std::string>& jailProps, bool supportsRawDocument = false,
-                 bool supportsRawView = false)
+                 bool supportsRawView = false, bool supportsRawSourceCallbacks = false)
         : WSProcess("ChildProcess", pid, socket,
                     std::make_shared<WebSocketHandler>(socket, request, true))
         , _jailId(jailId)
@@ -232,6 +232,7 @@ public:
         , _jailProps(jailProps)
         , _supportsRawDocument(supportsRawDocument)
         , _supportsRawView(supportsRawView)
+        , _supportsRawSourceCallbacks(supportsRawSourceCallbacks)
         , _urpFromKitFD(socket->takeIncomingFD(SharedFDType::URPFromKit))
         , _urpToKitFD(socket->takeIncomingFD(SharedFDType::URPToKit))
     {
@@ -269,6 +270,7 @@ public:
 
     bool supportsRawDocument() const { return _supportsRawDocument; }
     bool supportsRawView() const { return _supportsRawView; }
+    bool supportsRawSourceCallbacks() const { return _supportsRawSourceCallbacks; }
 
     void fenceUrpInput() { _urpInputFenced = true; }
     void resumeUrpInput()
@@ -502,6 +504,7 @@ private:
     std::map<std::string, std::string> _jailProps;
     const bool _supportsRawDocument;
     const bool _supportsRawView;
+    const bool _supportsRawSourceCallbacks;
     int _urpFromKitFD;
     int _urpToKitFD;
 #if defined(__linux__) && !MOBILEAPP && !DOCS_SHARE_PROCESS

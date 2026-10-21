@@ -2036,7 +2036,7 @@ Controlled agent script execution (dedicated Linux Kit)
 ------------------------------------------------------
 
 agentcapabilities adds:
-    scriptcontrol=2 scriptcallbacks=0 generation=<32 lowercase hexadecimal characters>
+    scriptcontrol=2 scriptcallbacks=<0|1> generation=<32 lowercase hexadecimal characters>
 
 These fields require a checked four-descriptor hand-off and exact-view engine support.
 The descriptor order is smaps, URP input, URP output, private cancellation channel.
@@ -2101,6 +2101,22 @@ backend operation fencing remains required. Arbitrary blocked UNO calls, SolarMu
 and process recovery require separate evidence and cannot be declared cancelled by timeout.
 
 scriptcallbacks=0 means proxy creation and retrieval fail explicitly in this controlled route.
+scriptcallbacks=1 means synchronous source handlers during an admitted controlled execution.
+It requires the loaded engine's RawSourceCallbacks:1 capability. It does not enable idle,
+foreign-thread or autonomous human-edit notifications. No callback event/reply wire family is used.
+$internal.createProxy(interfaceType, id, handlerSource, initialState) retains a function source
+expression and strict JSON state. The function receives (method, args, state), with OUT and
+INOUT arguments boxed as {val: ...}. Native UNO references remain native. Captured lexical
+variables are unavailable. Each invocation uses a fresh runtime with the original execution
+cancellation token and deadline. Failed conversion or cancellation preserves committed state;
+native mutations may remain. There is no replay.
+$internal.takeProxy(id) returns the original adapter once and keeps the ID reserved.
+$internal.proxyState(id) returns a fresh state copy and bounded completed/failed counts.
+$internal.disposeProxy(id) revokes that registration and frees its ID. It does not remove native
+listeners: remove listeners explicitly through UNO using their original adapter before disposal.
+An old adapter remains inert after disposal and ID reuse. Disposed adapters still retained by
+native listeners continue to consume the owner byte budget until their final release. Save, export and renewal do not admit
+handlers. Registered URP sessions use the existing foreground save/export fallback.
 No borrowed proxy callback pointer is installed. Existing hooked legacy execution keeps its
 behaviour. Console frames use weak session ownership and the agentscriptconsole: family.
 An engine-owned callback lifetime and execution-scoped response bridge remain required for

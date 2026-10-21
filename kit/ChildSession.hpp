@@ -158,7 +158,14 @@ public:
     const std::string& agentRetirementEpoch() const { return _agentRetirementEpoch; }
     void setAgentRetirementEpoch(const std::string& epoch) { _agentRetirementEpoch = epoch; }
     bool agentRetirementFenced() const { return _agentRetirementFenced; }
-    void fenceAgentRetirement() { _agentRetirementFenced = true; }
+    void fenceAgentRetirement()
+    {
+        _agentRetirementFenced = true;
+        if (_scriptOwner)
+            _scriptOwner->revoke();
+    }
+    bool prepareScriptOwnerUnload();
+    static bool hasConnectedScriptOwners();
     void* releaseURPForRetirement()
     {
         if (!_hasURP || !_agentRetirementFenced)
@@ -169,11 +176,14 @@ public:
         return context;
     }
 
-    void resetDocManager()
+    bool resetDocManager()
     {
+        if (!prepareScriptOwnerUnload())
+            return false;
         stopURPBridge();
         disconnect();
         _docManager = nullptr;
+        return true;
     }
 
     // Only called by kit.
@@ -487,6 +497,10 @@ private:
     bool _hasURP;
     std::string _agentRetirementEpoch;
     bool _agentRetirementFenced = false;
+    std::shared_ptr<COKitScriptOwner> _scriptOwner;
+    std::shared_ptr<COKit> _scriptOwnerKit;
+    std::string _scriptOwnerGeneration;
+    std::string _scriptOwnerEpoch;
 
     /// The existing writable collaborator view borrowed by this URP transport session.
     int _boundAgentViewId;

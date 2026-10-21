@@ -1574,6 +1574,12 @@ typedef void (*COKitFileSaveDialogCallback)(const char* pSuggestedUri, char* pRe
 /// @see COKit::registerRevealInFileManagerCallback()
 using COKitRevealInFileManagerCallback = std::function<void(const char* pUri)>;
 
+struct COKitScriptOwner
+{
+    virtual ~COKitScriptOwner() = default;
+    virtual void revoke() noexcept = 0;
+};
+
 struct COKitDocument;
 
 struct COKit
@@ -2004,6 +2010,18 @@ struct COKit
         void* consoleCallbackData, void (*proxyCallback)(void* data, char const* payload),
         void* proxyCallbackData, std::chrono::milliseconds timeout,
         std::shared_ptr<std::atomic<bool> const> cancelled) = 0;
+    // Appended slots: call only after RawSourceCallbacks:1 capability validation.
+    virtual std::shared_ptr<COKitScriptOwner> createScriptOwner(COKitDocument* document, int viewId)
+        = 0;
+    virtual COKitScriptResult executeScriptWithOwner(
+        COKitDocument* document, int viewId, std::shared_ptr<COKitScriptOwner> const& owner,
+        char const* script, std::string_view source, int line,
+        std::function<void(void*, std::string_view, std::string_view)> consoleCallback,
+        void* consoleCallbackData, std::chrono::milliseconds timeout,
+        std::shared_ptr<std::atomic<bool> const> cancelled) = 0;
+    virtual std::size_t collectScriptOwners() = 0;
+    virtual bool drainScriptOwners() = 0;
+    virtual bool retireScriptOwner(std::shared_ptr<COKitScriptOwner> const& owner) = 0;
 };
 
 struct COKitDocument

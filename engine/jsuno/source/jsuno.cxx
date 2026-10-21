@@ -9,6 +9,7 @@
 
 #include <sal/config.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -35,6 +36,8 @@
 #include <com/sun/star/container/XEnumeration.hpp>
 #include <com/sun/star/container/XHierarchicalNameAccess.hpp>
 #include <com/sun/star/lang/XTypeProvider.hpp>
+#include <com/sun/star/frame/XFrame.hpp>
+#include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/reflection/InvocationTargetException.hpp>
 #include <com/sun/star/reflection/XCompoundTypeDescription.hpp>
 #include <com/sun/star/reflection/XConstantTypeDescription.hpp>
@@ -90,7 +93,13 @@ namespace jsuno
 class ProxyExecution
 {
 public:
-    std::shared_ptr<std::atomic<bool>> cancelled;
+    std::shared_ptr<std::atomic<bool> const> cancelled;
+    std::atomic<bool> localCancelled{ false };
+    bool isCancelled() const
+    {
+        return localCancelled.load(std::memory_order_relaxed)
+               || (cancelled && cancelled->load(std::memory_order_relaxed));
+    }
     std::chrono::steady_clock::time_point deadline;
 };
 class ProxyOwner
@@ -124,10 +133,35 @@ struct OwnedPending
     OUString json;
     std::size_t bytes = 0;
 };
+struct SourceRegistration
+{
+    OString source;
+    OString state;
+    bool disposed = false;
+    bool invoking = false;
+    unsigned completed = 0;
+    unsigned failed = 0;
+    std::shared_ptr<std::atomic<std::size_t>> retainedBytes;
+    std::size_t accountedBytes = 0;
+    ~SourceRegistration()
+    {
+        // External UNO adapters can die off-thread. Accounting owns no native graph.
+        if (retainedBytes)
+            retainedBytes->fetch_sub(accountedBytes, std::memory_order_relaxed);
+    }
+};
 struct OwnedState
 {
     std::mutex mutex;
     bool revoked = false;
+    bool sourceHandlers = false;
+    cpo::uno::Reference<css::lang::XComponent> document;
+    cpo::uno::Reference<css::frame::XController> controller;
+    bool bound = false;
+    int view = -1;
+    std::map<OUString, std::shared_ptr<SourceRegistration>> sources;
+    std::shared_ptr<std::atomic<std::size_t>> retainedSourceBytes
+        = std::make_shared<std::atomic<std::size_t>>(0);
     jsuno::ProxyLimits limits;
     std::shared_ptr<jsuno::ProxyTarget> target;
     std::shared_ptr<jsuno::ProxyExecution> active;
@@ -149,6 +183,7 @@ struct OwnedRegistration
 {
     std::weak_ptr<OwnedState> owner;
     std::uint64_t incarnation;
+    std::shared_ptr<jsuno::detail::SourceRegistration> source;
     ~OwnedRegistration()
     {
         if (auto state = owner.lock())
@@ -173,6 +208,10 @@ void requireOwnedEngineThread()
 {
     auto& registry = ownedRegistry();
     std::lock_guard lock(registry.mutex);
+    // Ordinary kits may reach shutdown without ever creating a callback owner.
+    if (registry.engine == std::thread::id() && registry.owners.empty()
+        && Application::IsMainThread())
+        return;
     if (registry.engine != std::this_thread::get_id())
         throw cpo::uno::RuntimeException(u"Owned proxy operation requires the engine thread"_ustr);
 }
@@ -182,7 +221,7 @@ void refreshOwnedPending(OwnedState const& state, OwnedPending& pending)
         return;
     if (state.revoked)
         pending.terminal = OwnedTerminal::Revoked;
-    else if (pending.execution->cancelled->load(std::memory_order_relaxed))
+    else if (pending.execution->isCancelled())
         pending.terminal = OwnedTerminal::Cancelled;
     else if (std::chrono::steady_clock::now() >= pending.execution->deadline)
         pending.terminal = OwnedTerminal::Deadline;
@@ -196,7 +235,7 @@ void revokeOwnedState(std::shared_ptr<OwnedState> const& state) noexcept
             return;
         state->revoked = true;
         if (state->active)
-            state->active->cancelled->store(true, std::memory_order_relaxed);
+            state->active->localCancelled.store(true, std::memory_order_relaxed);
         for (auto const& [id, pending] : state->pending)
         {
             (void)id;
@@ -221,8 +260,7 @@ std::shared_ptr<OwnedRegistration> registerOwnedAdapter(std::shared_ptr<OwnedSta
     }
     {
         std::lock_guard lock(state->mutex);
-        if (state->revoked || !state->active
-            || state->active->cancelled->load(std::memory_order_relaxed)
+        if (state->revoked || !state->active || state->active->isCancelled()
             || std::chrono::steady_clock::now() >= state->active->deadline)
             throw cpo::uno::RuntimeException(u"Owned proxy execution unavailable"_ustr);
         if (state->liveAdapters >= state->limits.adapters)
@@ -253,13 +291,15 @@ struct ExecutionBudget
     std::chrono::steady_clock::time_point deadline;
     std::atomic<bool> const* cancelled;
     bool interrupted = false;
+    jsuno::ProxyExecution const* execution = nullptr;
 
     static int interrupt(JSRuntime*, void* opaque)
     {
         auto& budget = *static_cast<ExecutionBudget*>(opaque);
-        budget.interrupted = budget.interrupted
-            || (budget.cancelled && budget.cancelled->load(std::memory_order_relaxed))
-            || std::chrono::steady_clock::now() >= budget.deadline;
+        budget.interrupted
+            = budget.interrupted || (budget.execution && budget.execution->isCancelled())
+              || (budget.cancelled && budget.cancelled->load(std::memory_order_relaxed))
+              || std::chrono::steady_clock::now() >= budget.deadline;
         return budget.interrupted;
     }
 };
@@ -527,6 +567,10 @@ template <typename F> JSValue callFromJs(JSContext* ctx, F&& f)
         ValueRef val = toJs(ctx, e);
         addCurrentStack(ctx, val);
         return JS_Throw(ctx, val.release());
+    }
+    catch (jsuno::Exception const&)
+    {
+        return JS_ThrowPlainError(ctx, "Source proxy runtime failed");
     }
     catch (std::exception& e)
     {
@@ -3156,6 +3200,375 @@ cpo::uno::Type lookupMethodReturnType(cpo::uno::Type const& interfaceType,
     return ret;
 }
 
+OUString executeImpl(OUString const& script, OUString const& source, int line,
+                     std::function<void(OUString const&, OUString const&)> consoleHook,
+                     std::function<void(OUString const&)> proxyCallHook, bool* usedLegacyUnoApi,
+                     std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
+                     cpo::uno::Reference<css::lang::XComponent> const& document,
+                     cpo::uno::Reference<css::frame::XController> const& controller,
+                     std::shared_ptr<OwnedState> const& owner,
+                     std::function<void(JSContext*)> nativeBody = {});
+
+struct SourceStateBudget
+{
+    std::shared_ptr<jsuno::ProxyExecution> execution;
+    std::size_t remaining = 256 * 1024;
+
+    void visit(std::size_t work = 1)
+    {
+        if (!execution || execution->isCancelled()
+            || std::chrono::steady_clock::now() >= execution->deadline)
+            throw cpo::uno::RuntimeException(u"Proxy state traversal interrupted"_ustr);
+        if (work > remaining)
+            throw cpo::uno::RuntimeException(u"Proxy state traversal limit reached"_ustr);
+        remaining -= work;
+    }
+};
+
+// Validate every own value before stringification. No getters, native wrappers or
+// coercions are permitted in retained state.
+void validateSourceState(JSContext* ctx, JSValueConst value, std::vector<void*>& ancestors,
+                         SourceStateBudget& budget, unsigned depth = 0)
+{
+    budget.visit();
+    if (depth > 64)
+        throw cpo::uno::RuntimeException(u"Proxy state nesting limit reached"_ustr);
+    if (JS_IsNull(value) || JS_IsBool(value) || JS_IsString(value))
+        return;
+    if (JS_IsNumber(value))
+    {
+        double number;
+        if (JS_ToFloat64(ctx, &number, value) < 0 || !std::isfinite(number))
+            throw cpo::uno::RuntimeException(u"Proxy state requires finite numbers"_ustr);
+        return;
+    }
+    ValueRef plain(ctx, JS_NewObject(ctx));
+    ValueRef array(ctx, JS_NewArray(ctx));
+    if (!JS_IsObject(value)
+        || (JS_GetClassID(value) != JS_GetClassID(plain)
+            && JS_GetClassID(value) != JS_GetClassID(array)))
+        throw cpo::uno::RuntimeException(u"Proxy state must contain only JSON values"_ustr);
+    auto identity = JS_VALUE_GET_PTR(value);
+    if (std::find(ancestors.begin(), ancestors.end(), identity) != ancestors.end())
+        throw cpo::uno::RuntimeException(u"Proxy state contains a cycle"_ustr);
+    ancestors.push_back(identity);
+    comphelper::ScopeGuard pop([&] { ancestors.pop_back(); });
+    JSPropertyEnum* properties = nullptr;
+    uint32_t count = 0;
+    if (JS_GetOwnPropertyNames(ctx, &properties, &count, value,
+                               JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK)
+        < 0)
+        throw JsException();
+    comphelper::ScopeGuard release(
+        [&]
+        {
+            for (uint32_t i = 0; i < count; ++i)
+                JS_FreeAtom(ctx, properties[i].atom);
+            js_free(ctx, properties);
+        });
+    budget.visit(count);
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        ValueRef key(ctx, JS_AtomToValue(ctx, properties[i].atom));
+        if (JS_IsSymbol(key))
+            throw cpo::uno::RuntimeException(u"Proxy state cannot contain symbol keys"_ustr);
+        JSPropertyDescriptor descriptor{};
+        if (JS_GetOwnProperty(ctx, &descriptor, value, properties[i].atom) < 0)
+            throw JsException();
+        ValueRef member(ctx, descriptor.value);
+        ValueRef getter(ctx, descriptor.getter);
+        ValueRef setter(ctx, descriptor.setter);
+        if (!JS_IsUndefined(getter) || !JS_IsUndefined(setter))
+            throw cpo::uno::RuntimeException(u"Proxy state cannot contain accessors"_ustr);
+        validateSourceState(ctx, member, ancestors, budget, depth + 1);
+    }
+}
+void appendSourceJson(JSContext* ctx, JSValueConst value, OStringBuffer& output,
+                      SourceStateBudget& budget)
+{
+    budget.visit();
+    if (!JS_IsObject(value) || JS_IsNull(value))
+    {
+        ValueRef json(ctx, JS_JSONStringify(ctx, value, JS_UNDEFINED, JS_UNDEFINED));
+        if (JS_IsException(json) || JS_IsUndefined(json))
+            throw JsException();
+        std::size_t length = 0;
+        UniqueCString8 bytes(ctx, JS_ToCStringLen(ctx, &length, json));
+        if (!bytes.get())
+            throw JsException();
+        output.append(bytes.get(), length);
+    }
+    else if (JS_IsArray(value))
+    {
+        ValueRef lengthValue(ctx, JS_GetPropertyStr(ctx, value, "length"));
+        uint32_t length = 0;
+        if (JS_ToUint32(ctx, &length, lengthValue) < 0 || length > 64 * 1024)
+            throw cpo::uno::RuntimeException(u"Proxy state array limit reached"_ustr);
+        output.append('[');
+        for (uint32_t i = 0; i < length; ++i)
+        {
+            auto atom = JS_NewAtomUInt32(ctx, i);
+            comphelper::ScopeGuard release([&] { JS_FreeAtom(ctx, atom); });
+            JSPropertyDescriptor descriptor{};
+            auto found = JS_GetOwnProperty(ctx, &descriptor, value, atom);
+            ValueRef member(ctx, descriptor.value);
+            ValueRef getter(ctx, descriptor.getter);
+            ValueRef setter(ctx, descriptor.setter);
+            if (found != 1)
+                throw cpo::uno::RuntimeException(u"Proxy state cannot contain array holes"_ustr);
+            if (i)
+                output.append(',');
+            appendSourceJson(ctx, member, output, budget);
+        }
+        output.append(']');
+    }
+    else
+    {
+        JSPropertyEnum* properties = nullptr;
+        uint32_t count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &properties, &count, value,
+                                   JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY)
+            < 0)
+            throw JsException();
+        comphelper::ScopeGuard release(
+            [&]
+            {
+                for (uint32_t i = 0; i < count; ++i)
+                    JS_FreeAtom(ctx, properties[i].atom);
+                js_free(ctx, properties);
+            });
+        output.append('{');
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            if (i)
+                output.append(',');
+            ValueRef key(ctx, JS_AtomToValue(ctx, properties[i].atom));
+            appendSourceJson(ctx, key, output, budget);
+            output.append(':');
+            JSPropertyDescriptor descriptor{};
+            if (JS_GetOwnProperty(ctx, &descriptor, value, properties[i].atom) != 1)
+                throw JsException();
+            ValueRef member(ctx, descriptor.value);
+            ValueRef getter(ctx, descriptor.getter);
+            ValueRef setter(ctx, descriptor.setter);
+            appendSourceJson(ctx, member, output, budget);
+        }
+        output.append('}');
+    }
+    if (output.getLength() > 64 * 1024)
+        throw cpo::uno::RuntimeException(u"Proxy state byte limit reached"_ustr);
+}
+OString serialiseSourceState(JSContext* ctx, JSValueConst value)
+{
+    auto owner = getRuntimeData(ctx)->proxyOwner;
+    SourceStateBudget budget{ owner ? owner->active : nullptr };
+    std::vector<void*> ancestors;
+    validateSourceState(ctx, value, ancestors, budget);
+    OStringBuffer output;
+    appendSourceJson(ctx, value, output, budget);
+    return output.makeStringAndClear();
+}
+std::size_t sourceOwnerBytes(OwnedState const& owner)
+{
+    // Include disposed registrations while external adapters still retain their payloads.
+    return owner.retainedSourceBytes->load(std::memory_order_relaxed);
+}
+
+struct SourceParameter
+{
+    cpo::uno::Type type;
+    bool input;
+    bool output;
+};
+struct SourceMethod
+{
+    cpo::uno::Type result;
+    std::vector<SourceParameter> parameters;
+};
+SourceMethod sourceMethod(cpo::uno::Type const& type, OUString const& name)
+{
+    typelib_TypeDescription* description = nullptr;
+    typelib_typedescriptionreference_getDescription(&description, type.getTypeLibType());
+    comphelper::ScopeGuard release(
+        [&]
+        {
+            if (description)
+                typelib_typedescription_release(description);
+        });
+    if (!description || !typelib_typedescription_complete(&description)
+        || description->eTypeClass != typelib_TypeClass_INTERFACE)
+        throw cpo::uno::RuntimeException(u"Proxy interface metadata unavailable"_ustr);
+    auto interfaceDescription = reinterpret_cast<typelib_InterfaceTypeDescription*>(description);
+    for (sal_Int32 i = 0; i < interfaceDescription->nAllMembers; ++i)
+    {
+        typelib_TypeDescription* member = nullptr;
+        typelib_typedescriptionreference_getDescription(&member,
+                                                        interfaceDescription->ppAllMembers[i]);
+        comphelper::ScopeGuard releaseMember(
+            [&]
+            {
+                if (member)
+                    typelib_typedescription_release(member);
+            });
+        if (!member || member->eTypeClass != typelib_TypeClass_INTERFACE_METHOD)
+            continue;
+        auto method = reinterpret_cast<typelib_InterfaceMethodTypeDescription*>(member);
+        if (OUString::unacquired(&method->aBase.pMemberName) != name)
+            continue;
+        SourceMethod result{ cpo::uno::Type(method->pReturnTypeRef), {} };
+        for (sal_Int32 j = 0; j < method->nParams; ++j)
+            result.parameters.push_back({ cpo::uno::Type(method->pParams[j].pTypeRef),
+                                          bool(method->pParams[j].bIn),
+                                          bool(method->pParams[j].bOut) });
+        return result;
+    }
+    throw cpo::uno::RuntimeException(u"Unknown proxy method"_ustr);
+}
+void checkSourceAdmission(OwnedState const& owner,
+                          jsuno::detail::SourceRegistration const& registration)
+{
+    if (owner.revoked || registration.disposed || !owner.active || executingOwner != &owner
+        || owner.active->isCancelled()
+        || std::chrono::steady_clock::now() >= owner.active->deadline)
+        throw cpo::uno::RuntimeException(u"Source proxy execution unavailable"_ustr);
+}
+cpo::uno::Any invokeSourceProxy(std::shared_ptr<OwnedRegistration> const& registration,
+                                cpo::uno::Type const& type, OUString const& method,
+                                cpo::uno::Sequence<cpo::uno::Any> const& parameters,
+                                cpo::uno::Sequence<sal_Int16>& outIndices,
+                                cpo::uno::Sequence<cpo::uno::Any>& outValues)
+{
+    requireOwnedEngineThread();
+    auto owner = registration->owner.lock();
+    if (!owner)
+        throw cpo::uno::RuntimeException(u"Source proxy owner revoked"_ustr);
+    auto source = registration->source;
+    {
+        std::lock_guard lock(owner->mutex);
+        checkSourceAdmission(*owner, *source);
+        if (source->invoking || owner->depth >= owner->limits.nesting)
+            throw cpo::uno::RuntimeException(u"Source proxy re-entry or depth limit"_ustr);
+        source->invoking = true;
+        ++owner->depth;
+    }
+    bool completed = false;
+    comphelper::ScopeGuard finish(
+        [&]
+        {
+            std::lock_guard lock(owner->mutex);
+            source->invoking = false;
+            --owner->depth;
+            auto& count = completed ? source->completed : source->failed;
+            if (count < 65535)
+                ++count;
+        });
+    comphelper::ScopeGuard restoreView([view = KitHelper::getCurrentView()]
+                                       { KitHelper::setView(view); });
+    if (owner->controller.is())
+    {
+        KitHelper::setView(owner->view);
+        auto frame = owner->controller->getFrame();
+        cpo::uno::Reference<css::frame::XModel> model(owner->document, cpo::uno::UNO_QUERY);
+        if (!frame.is() || frame->getController() != owner->controller || !model.is()
+            || owner->controller->getModel() != model)
+            throw cpo::uno::RuntimeException(u"Source proxy controller is detached"_ustr);
+        std::lock_guard lock(owner->mutex);
+        checkSourceAdmission(*owner, *source);
+    }
+    auto info = sourceMethod(type, method);
+    if (info.parameters.size() != static_cast<std::size_t>(parameters.getLength()))
+        throw cpo::uno::RuntimeException(u"Source proxy argument count mismatch"_ustr);
+    cpo::uno::Any result;
+    std::vector<sal_Int16> indices;
+    std::vector<cpo::uno::Any> outputs;
+    OString nextState;
+    try
+    {
+        executeImpl(
+            {}, u"<source-proxy>"_ustr, 1, [](auto const&, auto const&) {}, {}, nullptr,
+            std::chrono::milliseconds::zero(), owner->active->cancelled.get(), owner->document,
+            owner->controller, owner,
+            [&](JSContext* ctx)
+            {
+                auto expression = "(" + source->source + "\n)";
+                ValueRef handler(ctx, JS_Eval(ctx, expression.getStr(), expression.getLength(),
+                                              "<source-proxy>", JS_EVAL_TYPE_GLOBAL));
+                if (JS_IsException(handler))
+                    throw JsException();
+                if (!JS_IsFunction(ctx, handler))
+                    throw cpo::uno::RuntimeException(
+                        u"Proxy source must evaluate to a function"_ustr);
+                ValueRef state(ctx, JS_ParseJSON(ctx, source->state.getStr(),
+                                                 source->state.getLength(), "<proxy-state>"));
+                if (JS_IsException(state))
+                    throw JsException();
+                ValueRef args(ctx, JS_NewArray(ctx));
+                for (std::size_t i = 0; i < info.parameters.size(); ++i)
+                {
+                    auto const& parameter = info.parameters[i];
+                    ValueRef value(ctx, parameter.input ? toJs(ctx, parameters[i]).release()
+                                                        : JS_UNDEFINED);
+                    if (parameter.output)
+                    {
+                        ValueRef box(ctx, JS_NewObject(ctx));
+                        if (JS_SetPropertyStr(ctx, box, "val", value.release()) < 0)
+                            throw JsException();
+                        value = std::move(box);
+                    }
+                    if (JS_SetPropertyUint32(ctx, args, i, value.release()) < 0)
+                        throw JsException();
+                }
+                auto name = method.toUtf8();
+                ValueRef methodName(ctx, JS_NewStringLen(ctx, name.getStr(), name.getLength()));
+                JSValueConst argv[] = { methodName, args, state };
+                ValueRef returned(ctx, JS_Call(ctx, handler, JS_UNDEFINED, 3, argv));
+                if (JS_IsException(returned))
+                    throw JsException();
+                if (info.result.getTypeClass() != cpo::uno::TypeClass_VOID)
+                    result = fromJs(ctx, info.result, returned);
+                for (std::size_t i = 0; i < info.parameters.size(); ++i)
+                {
+                    if (!info.parameters[i].output)
+                        continue;
+                    ValueRef box(ctx, JS_GetPropertyUint32(ctx, args, i));
+                    ValueRef value(ctx, JS_GetPropertyStr(ctx, box, "val"));
+                    if (JS_IsException(value))
+                        throw JsException();
+                    outputs.push_back(fromJs(ctx, info.parameters[i].type, value));
+                    indices.push_back(i);
+                }
+                nextState = serialiseSourceState(ctx, state);
+            });
+    }
+    catch (jsuno::Exception const&)
+    {
+        throw cpo::uno::RuntimeException(
+            u"Source proxy handler failed; native changes may remain"_ustr);
+    }
+    cpo::uno::Sequence<sal_Int16> convertedIndices(indices.data(), indices.size());
+    cpo::uno::Sequence<cpo::uno::Any> convertedOutputs(outputs.data(), outputs.size());
+    {
+        std::lock_guard lock(owner->mutex);
+        checkSourceAdmission(*owner, *source);
+        if (sourceOwnerBytes(*owner) - source->state.getLength() + nextState.getLength()
+            > 1024 * 1024)
+            throw cpo::uno::RuntimeException(u"Source proxy owner byte limit reached"_ustr);
+        const std::size_t bytes = source->source.getLength() + nextState.getLength();
+        if (bytes >= source->accountedBytes)
+            source->retainedBytes->fetch_add(bytes - source->accountedBytes,
+                                             std::memory_order_relaxed);
+        else
+            source->retainedBytes->fetch_sub(source->accountedBytes - bytes,
+                                             std::memory_order_relaxed);
+        source->accountedBytes = bytes;
+        source->state = std::move(nextState);
+        std::swap(outIndices, convertedIndices);
+        std::swap(outValues, convertedOutputs);
+        completed = true;
+    }
+    return result;
+}
+
 cpo::uno::Any invokeOwnedProxy(std::shared_ptr<OwnedRegistration> const& registration,
                                OUString const& proxyId, OUString const& method,
                                cpo::uno::Sequence<cpo::uno::Any> const& parameters,
@@ -3309,6 +3722,10 @@ public:
                                   cpo::uno::Sequence<sal_Int16>& aOutParamIndex,
                                   cpo::uno::Sequence<cpo::uno::Any>& aOutParam) override
     {
+        if (m_registration && m_registration->source && aFunctionName != u"getTypes"
+            && aFunctionName != u"getImplementationId")
+            return invokeSourceProxy(m_registration, m_interfaceType, aFunctionName, aParams,
+                                     aOutParamIndex, aOutParam);
         aOutParamIndex = {};
         aOutParam = {};
 
@@ -3429,7 +3846,21 @@ public:
 
     cpo::uno::Any getValue(OUString const&) override { return {}; }
 
-    bool hasMethod(OUString const&) override { return true; }
+    bool hasMethod(OUString const& name) override
+    {
+        if (!m_registration || !m_registration->source || name == u"getTypes"
+            || name == u"getImplementationId")
+            return true;
+        try
+        {
+            (void)sourceMethod(m_interfaceType, name);
+            return true;
+        }
+        catch (cpo::uno::RuntimeException const&)
+        {
+            return false;
+        }
+    }
 
     bool hasProperty(OUString const&) override { return false; }
 
@@ -3440,72 +3871,165 @@ private:
     std::shared_ptr<OwnedRegistration> m_registration;
 };
 
-JSValue internalCreateProxy(JSContext* ctx, JSValueConst, [[maybe_unused]] int argc, JSValueConst* argv)
+JSValue internalCreateProxy(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
 {
-    assert(argc >= 2);
-    return callFromJs(ctx, [ctx, argv] {
-        if (!getRuntimeData(ctx)->proxyCallHook && !getRuntimeData(ctx)->proxyOwner)
+    return callFromJs(
+        ctx,
+        [ctx, argc, argv]
         {
-            JS_ThrowTypeError(ctx, "Proxy callbacks are unavailable for this execution");
-            throw JsException();
-        }
-        if (JS_GetClassID(argv[0]) != getRuntimeData(ctx)->interfaceClassId)
-        {
-            JS_ThrowTypeError(
-                ctx, "$internal.createProxy: first argument must be a UNO interface type");
-            throw JsException();
-        }
-        cpo::uno::Type const interfaceType(static_cast<typelib_TypeDescriptionReference*>(
-            JS_GetOpaque(argv[0], getRuntimeData(ctx)->interfaceClassId)));
-        if (!JS_IsString(argv[1]))
-        {
-            JS_ThrowTypeError(ctx,
-                              "$internal.createProxy: second argument must be a string id");
-            throw JsException();
-        }
-        std::size_t idLen = 0;
-        UniqueCString16 const idStr(ctx, JS_ToCStringLenUTF16(ctx, &idLen, argv[1]));
-        if (idStr.get() == nullptr)
-        {
-            throw JsException();
-        }
-        OUString const id(idStr.get(), idLen);
-        auto const owner = getRuntimeData(ctx)->proxyOwner;
-        auto registration = owner ? registerOwnedAdapter(owner) : nullptr;
-        cpo::uno::Reference<css::script::XInvocation> invocation(new ProxyInvocation(
-            interfaceType, id, getRuntimeData(ctx)->proxyCallHook, std::move(registration)));
-        cpo::uno::Reference<css::script::XInvocationAdapterFactory> factory
-            = css::script::InvocationAdapterFactory::create(
-                comphelper::getProcessComponentContext());
-        //TODO: Ideally, XInvocationAdapterFactory::createAdapter would automatically add
-        // XTypeProvider support:
-        cpo::uno::Reference<cpo::uno::XInterface> adapter(
-            factory->createAdapter(
-                invocation, { cppu::UnoType<css::lang::XTypeProvider>::get(), interfaceType }),
-            cpo::uno::UNO_SET_THROW);
-        if (owner)
-        {
-            bool inserted = false;
+            if (argc < 2)
+                throw cpo::uno::RuntimeException(u"Proxy interface and ID are required"_ustr);
+            if (!getRuntimeData(ctx)->proxyCallHook && !getRuntimeData(ctx)->proxyOwner)
             {
-                std::lock_guard lock(owner->mutex);
-                if (!owner->revoked)
-                    inserted = owner->adapters.try_emplace(id, adapter).second;
-            }
-            if (!inserted)
-                throw cpo::uno::RuntimeException(u"Owned proxy ID unavailable"_ustr);
-        }
-        else
-        {
-            std::lock_guard lock(g_proxyMapMutex);
-            auto const [it, inserted] = g_proxyMap.try_emplace(id, adapter);
-            if (!inserted)
-            {
-                JS_ThrowReferenceError(ctx, "$internal.createProxy: id is already in use");
+                JS_ThrowTypeError(ctx, "Proxy callbacks are unavailable for this execution");
                 throw JsException();
             }
-        }
-        return wrapUnoObject(ctx, adapter);
-    });
+            if (JS_GetClassID(argv[0]) != getRuntimeData(ctx)->interfaceClassId)
+            {
+                JS_ThrowTypeError(
+                    ctx, "$internal.createProxy: first argument must be a UNO interface type");
+                throw JsException();
+            }
+            cpo::uno::Type const interfaceType(static_cast<typelib_TypeDescriptionReference*>(
+                JS_GetOpaque(argv[0], getRuntimeData(ctx)->interfaceClassId)));
+            if (!JS_IsString(argv[1]))
+            {
+                JS_ThrowTypeError(ctx,
+                                  "$internal.createProxy: second argument must be a string id");
+                throw JsException();
+            }
+            std::size_t idLen = 0;
+            UniqueCString16 const idStr(ctx, JS_ToCStringLenUTF16(ctx, &idLen, argv[1]));
+            if (idStr.get() == nullptr)
+            {
+                throw JsException();
+            }
+            OUString const id(idStr.get(), idLen);
+            auto const owner = getRuntimeData(ctx)->proxyOwner;
+            std::shared_ptr<jsuno::detail::SourceRegistration> source;
+            if (owner && owner->sourceHandlers)
+            {
+                if (argc != 4 || !JS_IsString(argv[2]))
+                    throw cpo::uno::RuntimeException(
+                        u"Source proxy requires source and state"_ustr);
+                {
+                    std::lock_guard lock(owner->mutex);
+                    if (owner->sources.contains(id))
+                        throw cpo::uno::RuntimeException(u"Source proxy ID is reserved"_ustr);
+                    if (owner->sources.size() >= owner->limits.adapters)
+                        throw cpo::uno::RuntimeException(u"Source registration limit reached"_ustr);
+                }
+                source = std::make_shared<jsuno::detail::SourceRegistration>();
+                std::size_t length = 0;
+                UniqueCString8 text(ctx, JS_ToCStringLen(ctx, &length, argv[2]));
+                if (!text.get())
+                    throw JsException();
+                if (length > 64 * 1024)
+                    throw cpo::uno::RuntimeException(u"Proxy source byte limit reached"_ustr);
+                source->source = OString(text.get(), length).trim();
+                if (!source->source.startsWith("function"))
+                    throw cpo::uno::RuntimeException(
+                        u"Proxy source requires a function expression"_ustr);
+                source->state = serialiseSourceState(ctx, argv[3]);
+                executeImpl(
+                    {}, u"<source-validation>"_ustr, 1, [](auto const&, auto const&) {}, {},
+                    nullptr, std::chrono::milliseconds::zero(), owner->active->cancelled.get(), {},
+                    {}, owner,
+                    [&](JSContext* validation)
+                    {
+                        getRuntimeData(validation)->proxyOwner.reset();
+                        auto previousOwner = executingOwner;
+                        executingOwner = nullptr;
+                        comphelper::ScopeGuard restoreOwner([&]
+                                                            { executingOwner = previousOwner; });
+                        ValueRef global(validation, JS_GetGlobalObject(validation));
+                        ValueRef constructor(validation,
+                                             JS_GetPropertyStr(validation, global, "Function"));
+                        ValueRef prototype(validation,
+                                           JS_GetPropertyStr(validation, constructor, "prototype"));
+                        ValueRef toString(validation,
+                                          JS_GetPropertyStr(validation, prototype, "toString"));
+                        auto expression = "(" + source->source + "\n)";
+                        ValueRef function(validation,
+                                          JS_Eval(validation, expression.getStr(),
+                                                  expression.getLength(), "<source-validation>",
+                                                  JS_EVAL_TYPE_GLOBAL));
+                        if (JS_IsException(function))
+                            throw JsException();
+                        if (!JS_IsFunction(validation, function))
+                            throw cpo::uno::RuntimeException(
+                                u"Proxy source must be a function"_ustr);
+                        ValueRef canonical(validation,
+                                           JS_Call(validation, toString, function, 0, nullptr));
+                        UniqueCString8 code(validation, JS_ToCString(validation, canonical));
+                        if (!code.get() || source->source != code.get())
+                            throw cpo::uno::RuntimeException(
+                                u"Proxy source must be one function expression"_ustr);
+                    });
+            }
+            auto registration = owner ? registerOwnedAdapter(owner) : nullptr;
+            if (registration)
+                registration->source = source;
+            cpo::uno::Reference<css::script::XInvocation> invocation(new ProxyInvocation(
+                interfaceType, id, getRuntimeData(ctx)->proxyCallHook, std::move(registration)));
+            cpo::uno::Reference<css::script::XInvocationAdapterFactory> factory
+                = css::script::InvocationAdapterFactory::create(
+                    comphelper::getProcessComponentContext());
+            //TODO: Ideally, XInvocationAdapterFactory::createAdapter would automatically add
+            // XTypeProvider support:
+            cpo::uno::Reference<cpo::uno::XInterface> adapter(
+                factory->createAdapter(
+                    invocation, { cppu::UnoType<css::lang::XTypeProvider>::get(), interfaceType }),
+                cpo::uno::UNO_SET_THROW);
+            if (owner)
+            {
+                bool inserted = false;
+                {
+                    std::lock_guard lock(owner->mutex);
+                    if (!owner->revoked && (!source || !owner->sources.contains(id)))
+                    {
+                        if (source
+                            && sourceOwnerBytes(*owner) + source->source.getLength()
+                                       + source->state.getLength()
+                                   > 1024 * 1024)
+                            throw cpo::uno::RuntimeException(
+                                u"Proxy owner byte limit reached"_ustr);
+                        if (source)
+                        {
+                            source->accountedBytes
+                                = source->source.getLength() + source->state.getLength();
+                            source->retainedBytes = owner->retainedSourceBytes;
+                            source->retainedBytes->fetch_add(source->accountedBytes,
+                                                             std::memory_order_relaxed);
+                            owner->sources.emplace(id, source);
+                        }
+                        try
+                        {
+                            inserted = owner->adapters.try_emplace(id, adapter).second;
+                        }
+                        catch (...)
+                        {
+                            if (source)
+                                owner->sources.erase(id);
+                            throw;
+                        }
+                    }
+                }
+                if (!inserted)
+                    throw cpo::uno::RuntimeException(u"Owned proxy ID unavailable"_ustr);
+            }
+            else
+            {
+                std::lock_guard lock(g_proxyMapMutex);
+                auto const [it, inserted] = g_proxyMap.try_emplace(id, adapter);
+                if (!inserted)
+                {
+                    JS_ThrowReferenceError(ctx, "$internal.createProxy: id is already in use");
+                    throw JsException();
+                }
+            }
+            return wrapUnoObject(ctx, adapter);
+        });
 }
 
 JSValue internalTakeProxy(JSContext* ctx, JSValueConst, [[maybe_unused]] int argc, JSValueConst* argv)
@@ -3545,6 +4069,75 @@ JSValue internalTakeProxy(JSContext* ctx, JSValueConst, [[maybe_unused]] int arg
         }
         return wrapUnoObject(ctx, adapter);
     });
+}
+
+JSValue internalSourceProxyState(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+{
+    return callFromJs(
+        ctx,
+        [&]
+        {
+            auto owner = getRuntimeData(ctx)->proxyOwner;
+            if (!owner || !owner->sourceHandlers || argc != 1 || !JS_IsString(argv[0]))
+                throw cpo::uno::RuntimeException(u"Source proxy state unavailable"_ustr);
+            std::size_t length = 0;
+            UniqueCString16 id(ctx, JS_ToCStringLenUTF16(ctx, &length, argv[0]));
+            if (!id.get())
+                throw JsException();
+            OString state;
+            unsigned completed, failed;
+            {
+                std::lock_guard lock(owner->mutex);
+                auto it = owner->sources.find(OUString(id.get(), length));
+                if (owner->revoked || it == owner->sources.end())
+                    throw cpo::uno::RuntimeException(u"Source proxy ID unavailable"_ustr);
+                state = it->second->state;
+                completed = it->second->completed;
+                failed = it->second->failed;
+            }
+            ValueRef result(ctx, JS_NewObject(ctx));
+            if (JS_SetPropertyStr(
+                    ctx, result, "state",
+                    JS_ParseJSON(ctx, state.getStr(), state.getLength(), "<proxy-state>"))
+                    < 0
+                || JS_SetPropertyStr(ctx, result, "completed", JS_NewUint32(ctx, completed)) < 0
+                || JS_SetPropertyStr(ctx, result, "failed", JS_NewUint32(ctx, failed)) < 0)
+                throw JsException();
+            return result.release();
+        });
+}
+JSValue internalDisposeSourceProxy(JSContext* ctx, JSValueConst, int argc, JSValueConst* argv)
+{
+    return callFromJs(
+        ctx,
+        [&]
+        {
+            auto owner = getRuntimeData(ctx)->proxyOwner;
+            if (!owner || !owner->sourceHandlers || argc != 1 || !JS_IsString(argv[0]))
+                throw cpo::uno::RuntimeException(u"Source proxy disposal unavailable"_ustr);
+            std::size_t length = 0;
+            UniqueCString16 text(ctx, JS_ToCStringLenUTF16(ctx, &length, argv[0]));
+            if (!text.get())
+                throw JsException();
+            OUString id(text.get(), length);
+            cpo::uno::Reference<cpo::uno::XInterface> adapter;
+            {
+                std::lock_guard lock(owner->mutex);
+                auto source = owner->sources.find(id);
+                if (source == owner->sources.end())
+                    throw cpo::uno::RuntimeException(u"Source proxy ID unavailable"_ustr);
+                source->second->disposed = true;
+                owner->sources.erase(source);
+                auto found = owner->adapters.find(id);
+                if (found != owner->adapters.end())
+                {
+                    adapter = std::move(found->second);
+                    owner->adapters.erase(found);
+                }
+            }
+            // Release the retrievable adapter on the engine thread, outside the owner lock.
+            return JS_UNDEFINED;
+        });
 }
 
 JSValue internalEvalWithSource(JSContext * ctx, JSValueConst, int argc, JSValueConst* argv) {
@@ -3760,16 +4353,6 @@ jsuno::Exception extractException(JSContext* ctx, ValueRef const& err)
 }
 }
 
-namespace
-{
-OUString executeImpl(OUString const& script, OUString const& source, int line,
-                     std::function<void(OUString const&, OUString const&)> consoleHook,
-                     std::function<void(OUString const&)> proxyCallHook, bool* usedLegacyUnoApi,
-                     std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
-                     cpo::uno::Reference<css::lang::XComponent> const& document,
-                     cpo::uno::Reference<css::frame::XController> const& controller,
-                     std::shared_ptr<OwnedState> const& owner);
-}
 
 jsuno::Exception::~Exception() = default;
 
@@ -3824,13 +4407,16 @@ OUString executeImpl(OUString const& script, OUString const& source, int line,
                      std::chrono::milliseconds timeout, std::atomic<bool> const* cancelled,
                      cpo::uno::Reference<css::lang::XComponent> const& document,
                      cpo::uno::Reference<css::frame::XController> const& controller,
-                     std::shared_ptr<OwnedState> const& owner)
+                     std::shared_ptr<OwnedState> const& owner,
+                     std::function<void(JSContext*)> nativeBody)
 {
     ExecutionBudget budget{ owner ? owner->active->deadline
                                   : std::chrono::steady_clock::now() + timeout,
-                            cancelled };
+                            cancelled, false, owner ? owner->active.get() : nullptr };
     auto const rt = JS_NewRuntime();
     JS_SetInterruptHandler(rt, ExecutionBudget::interrupt, &budget);
+    if (nativeBody)
+        JS_SetMemoryLimit(rt, 16 * 1024 * 1024);
     JS_SetMaxStackSize(rt, 4 * 1024 * 1024); // from default 256 KiB to 4 MiB
     JS_SetRuntimeOpaque(
         rt, new RuntimeData(rt, source, line, std::move(consoleHook), std::move(proxyCallHook)));
@@ -3984,6 +4570,10 @@ OUString executeImpl(OUString const& script, OUString const& source, int line,
                           JS_NewCFunction(ctx, internalCreateProxy, "createProxy", 2));
         JS_SetPropertyStr(ctx, internalObj, "takeProxy",
                           JS_NewCFunction(ctx, internalTakeProxy, "takeProxy", 1));
+        JS_SetPropertyStr(ctx, internalObj, "proxyState",
+                          JS_NewCFunction(ctx, internalSourceProxyState, "proxyState", 1));
+        JS_SetPropertyStr(ctx, internalObj, "disposeProxy",
+                          JS_NewCFunction(ctx, internalDisposeSourceProxy, "disposeProxy", 1));
         JS_SetPropertyStr(
             ctx, internalObj, "evalWithSource",
             JS_NewCFunction(ctx, internalEvalWithSource, "evalWithSource", 3));
@@ -4006,8 +4596,14 @@ OUString executeImpl(OUString const& script, OUString const& source, int line,
         auto const input = script.toUtf8();
         auto const sourceUtf8 = source.toUtf8();
         JSEvalOptions opts{JS_EVAL_OPTIONS_VERSION, JS_EVAL_TYPE_GLOBAL, sourceUtf8.getStr(), line};
-        ValueRef const evalRes(
-            ctx, JS_Eval2(ctx, input.getStr(), input.getLength(), &opts));
+        ValueRef const evalRes(ctx, nativeBody
+                                        ? callFromJs(ctx,
+                                                     [&]
+                                                     {
+                                                         nativeBody(ctx);
+                                                         return JS_UNDEFINED;
+                                                     })
+                                        : JS_Eval2(ctx, input.getStr(), input.getLength(), &opts));
         if (JS_IsException(evalRes))
         {
             //TODO: reconstruct UNO exceptions
@@ -4015,7 +4611,7 @@ OUString executeImpl(OUString const& script, OUString const& source, int line,
             assert(!JS_IsException(err)); //TODO?
             exc = extractException(ctx, err);
         }
-        else
+        else if (!nativeBody)
         {
             ValueRef const json(ctx, JS_JSONStringify(ctx, evalRes, JS_UNDEFINED, JS_UNDEFINED));
             if (JS_IsException(json))
@@ -4065,15 +4661,17 @@ OUString executeImpl(OUString const& script, OUString const& source, int line,
 jsuno::ProxyTarget::~ProxyTarget() = default;
 jsuno::ProxyOwner::~ProxyOwner() { revokeOwnedState(state); }
 
-std::shared_ptr<jsuno::ProxyOwner> jsuno::createProxyOwner(std::shared_ptr<ProxyTarget> target,
-                                                           ProxyLimits limits)
+static std::shared_ptr<jsuno::ProxyOwner>
+createProxyOwnerImpl(std::shared_ptr<jsuno::ProxyTarget> target, jsuno::ProxyLimits limits,
+                     bool sourceHandlers)
 {
-    if (!target || limits.adapters == 0 || limits.adapters > 64 || limits.pending == 0
-        || limits.pending > 16 || limits.queuedBytes == 0 || limits.queuedBytes > 1024 * 1024
-        || limits.nesting == 0 || limits.nesting > 8)
+    if ((!target && !sourceHandlers) || limits.adapters == 0 || limits.adapters > 64
+        || limits.pending == 0 || limits.pending > 16 || limits.queuedBytes == 0
+        || limits.queuedBytes > 1024 * 1024 || limits.nesting == 0 || limits.nesting > 8)
         throw cpo::uno::RuntimeException(u"Invalid owned proxy limits"_ustr);
     auto state = std::make_shared<OwnedState>();
     state->target = std::move(target);
+    state->sourceHandlers = sourceHandlers;
     state->limits = limits;
     auto& registry = ownedRegistry();
     {
@@ -4086,7 +4684,7 @@ std::shared_ptr<jsuno::ProxyOwner> jsuno::createProxyOwner(std::shared_ptr<Proxy
     }
     try
     {
-        return std::make_shared<ProxyOwner>(state);
+        return std::make_shared<jsuno::ProxyOwner>(state);
     }
     catch (...)
     {
@@ -4094,9 +4692,24 @@ std::shared_ptr<jsuno::ProxyOwner> jsuno::createProxyOwner(std::shared_ptr<Proxy
         throw;
     }
 }
+std::shared_ptr<jsuno::ProxyOwner> jsuno::createProxyOwner(std::shared_ptr<ProxyTarget> target,
+                                                           ProxyLimits limits)
+{
+    return createProxyOwnerImpl(std::move(target), limits, false);
+}
+std::shared_ptr<jsuno::ProxyOwner> jsuno::createSourceProxyOwner(ProxyLimits limits)
+{
+    return createProxyOwnerImpl({}, limits, true);
+}
 std::shared_ptr<jsuno::ProxyExecution>
 jsuno::createProxyExecution(std::chrono::milliseconds timeout,
                             std::shared_ptr<std::atomic<bool>> cancelled)
+{
+    return createBoundProxyExecution(timeout, std::move(cancelled));
+}
+std::shared_ptr<jsuno::ProxyExecution>
+jsuno::createBoundProxyExecution(std::chrono::milliseconds timeout,
+                                 std::shared_ptr<std::atomic<bool> const> cancelled)
 {
     if (timeout <= std::chrono::milliseconds::zero() || timeout > std::chrono::seconds(30))
         throw cpo::uno::RuntimeException(u"Invalid owned execution timeout"_ustr);
@@ -4115,7 +4728,7 @@ void jsuno::cancelProxyExecution(std::shared_ptr<ProxyExecution> const& executio
 {
     if (!execution)
         return;
-    execution->cancelled->store(true, std::memory_order_relaxed);
+    execution->localCancelled.store(true, std::memory_order_relaxed);
     std::vector<std::shared_ptr<OwnedState>> states;
     {
         auto& registry = ownedRegistry();
@@ -4199,14 +4812,52 @@ std::size_t jsuno::collectProxyOwners()
     {
         decltype(state->adapters) adapters;
         std::shared_ptr<ProxyTarget> target;
+        decltype(state->sources) sources;
+        decltype(state->document) document;
+        decltype(state->controller) controller;
         {
             std::lock_guard lock(state->mutex);
             adapters.swap(state->adapters);
             target.swap(state->target);
+            sources.swap(state->sources);
+            document = std::move(state->document);
+            controller = std::move(state->controller);
         }
         // UNO and target destruction occurs here, outside both registry and owner locks.
     }
     return retired.size();
+}
+bool jsuno::retireProxyOwner(std::shared_ptr<ProxyOwner> const& owner)
+{
+    requireOwnedEngineThread();
+    if (!owner)
+        return true;
+    revokeOwnedState(owner->state);
+    auto const state = owner->state;
+    {
+        auto& registry = ownedRegistry();
+        std::lock_guard registryLock(registry.mutex);
+        std::lock_guard ownerLock(state->mutex);
+        if (state->active)
+            return false;
+        auto found = std::find(registry.owners.begin(), registry.owners.end(), state);
+        if (found != registry.owners.end())
+            registry.owners.erase(found);
+    }
+    decltype(state->adapters) adapters;
+    decltype(state->sources) sources;
+    decltype(state->document) document;
+    decltype(state->controller) controller;
+    std::shared_ptr<ProxyTarget> target;
+    {
+        std::lock_guard lock(state->mutex);
+        adapters.swap(state->adapters);
+        sources.swap(state->sources);
+        target.swap(state->target);
+        document = std::move(state->document);
+        controller = std::move(state->controller);
+    }
+    return true;
 }
 void jsuno::drainProxyOwners()
 {
@@ -4229,8 +4880,17 @@ OUString jsuno::executeOwned(std::shared_ptr<ProxyOwner> const& owner,
                              OUString const& script, OUString const& source, int line,
                              std::function<void(OUString const&, OUString const&)> consoleHook)
 {
+    return executeOwned(owner, execution, script, source, line, std::move(consoleHook), {}, {});
+}
+OUString jsuno::executeOwned(std::shared_ptr<ProxyOwner> const& owner,
+                             std::shared_ptr<ProxyExecution> const& execution,
+                             OUString const& script, OUString const& source, int line,
+                             std::function<void(OUString const&, OUString const&)> consoleHook,
+                             cpo::uno::Reference<css::lang::XComponent> const& document,
+                             cpo::uno::Reference<css::frame::XController> const& controller)
+{
     requireOwnedEngineThread();
-    if (!owner || !execution || execution->cancelled->load(std::memory_order_relaxed)
+    if (!owner || !execution || execution->isCancelled()
         || std::chrono::steady_clock::now() >= execution->deadline)
         throw cpo::uno::RuntimeException(u"Owned proxy execution unavailable"_ustr);
     // Console handlers invoke the hook directly. Omitted output remains valid for owned runs.
@@ -4244,6 +4904,15 @@ OUString jsuno::executeOwned(std::shared_ptr<ProxyOwner> const& owner,
             throw cpo::uno::RuntimeException(u"Owned proxy execution unavailable"_ustr);
         if (state->depth >= state->limits.nesting)
             throw cpo::uno::RuntimeException(u"Owned proxy nesting limit reached"_ustr);
+        if (state->sourceHandlers)
+        {
+            if (state->bound && (state->document != document || state->controller != controller))
+                throw cpo::uno::RuntimeException(u"Source owner binding has changed"_ustr);
+            state->document = document;
+            state->controller = controller;
+            state->bound = true;
+            state->view = KitHelper::getCurrentView();
+        }
         state->active = execution;
         ++state->depth;
     }
@@ -4258,8 +4927,8 @@ OUString jsuno::executeOwned(std::shared_ptr<ProxyOwner> const& owner,
                 state->active.reset();
         });
     return executeImpl(script, source, line, std::move(consoleHook), {}, nullptr,
-                       std::chrono::milliseconds::zero(), execution->cancelled.get(), {}, {},
-                       state);
+                       std::chrono::milliseconds::zero(), execution->cancelled.get(), document,
+                       controller, state);
 }
 
 void jsuno::deliverProxyResult(OUString const& callId, OUString const& jsonValue)
