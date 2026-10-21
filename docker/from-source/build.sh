@@ -101,6 +101,10 @@ if test ! -d online ; then
   git clone --depth=1 --branch "$ONLINE_OFFICE_SOURCE_BRANCH" "$ONLINE_OFFICE_SOURCE_REPOSITORY" online || exit 1
 fi
 
+# Fresh paths prevent an interrupted run's snapshot from being adopted later.
+mtime_work=$(mktemp -d "$CACHE_ROOT/source-mtimes.XXXXXX") || exit 1
+trap 'rm -rf -- "$mtime_work"' EXIT
+
 # BEGIN PINNED CHECKOUT (also exercised by test-build-preparation.sh)
 (
   cd online || exit 1
@@ -140,6 +144,9 @@ fi
     echo "Pinned source revision is not an ancestor of the configured branch." >&2
     exit 1
   }
+  timeout --signal=TERM --kill-after=5s 310s python3 "$SRCDIR/debrand.py" mtime-snapshot \
+    "$BUILDDIR/online" "$CACHE_ROOT/source-mtimes.json" "$mtime_work/snapshot.json" \
+    "$ONLINE_OFFICE_SOURCE_REPOSITORY" || exit 1
   git checkout --detach -f "$ONLINE_OFFICE_SOURCE_REVISION" || exit 1
   git clean -f -d || exit 1
   test "$(git rev-parse HEAD)" = "$ONLINE_OFFICE_SOURCE_REVISION"
@@ -161,9 +168,16 @@ if [ "$DOCKER_HUB_TAG" != "$EXPECTED_DOCKER_HUB_TAG" ]; then
 fi
 echo "Using Docker Hub Repository: '$DOCKER_HUB_REPO' with tag '$DOCKER_HUB_TAG'."
 
-python3 "$SRCDIR/debrand.py" source "$BUILDDIR/online" || exit 1
+# BEGIN SOURCE VALIDATION (also exercised by test-build-preparation.sh)
+python3 "$SRCDIR/debrand.py" source "$BUILDDIR/online" --report "$mtime_work/report.json" || exit 1
 python3 "$SRCDIR/debrand.py" scan-source "$BUILDDIR/online" || exit 1
 python3 "$SRCDIR/debrand.py" validate-po "$BUILDDIR/online" || exit 1
+timeout --signal=TERM --kill-after=5s 310s python3 "$SRCDIR/debrand.py" mtime-complete \
+  "$BUILDDIR/online" "$CACHE_ROOT/source-mtimes.json" "$mtime_work/snapshot.json" \
+  "$mtime_work/report.json" || exit 1
+rm -rf -- "$mtime_work" || exit 1
+trap - EXIT
+# END SOURCE VALIDATION
 
 bash "$SRCDIR/check-builder.sh" "$BUILDDIR/online/configure.ac" || exit 1
 ( cd online && ./autogen.sh ) || exit 1

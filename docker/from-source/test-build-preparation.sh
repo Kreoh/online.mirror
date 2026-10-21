@@ -10,6 +10,7 @@ export GIT_AUTHOR_NAME=Fixture GIT_AUTHOR_EMAIL=fixture@example.invalid
 export GIT_COMMITTER_NAME=Fixture GIT_COMMITTER_EMAIL=fixture@example.invalid
 real_git="$(command -v git)"
 export REAL_GIT="$real_git"
+export SRCDIR="$repo_root/docker/from-source"
 
 # Extract the production code, never a second implementation of the checkout rules.
 awk '/^# BEGIN PINNED CHECKOUT/ {copy=1; next} /^# END PINNED CHECKOUT/ {copy=0; found=1} copy {print} END {if (!found) exit 1}' "$build" > "$fixture/checkout.sh"
@@ -49,6 +50,8 @@ new_cache()
   case_dir="$fixture/$1"
   mkdir "$case_dir"
   "$real_git" clone -q --depth=1 --branch main "$ONLINE_OFFICE_SOURCE_REPOSITORY" "$case_dir/online"
+  export CACHE_ROOT="$case_dir" BUILDDIR="$case_dir" mtime_work="$case_dir/mtime"
+  mkdir "$mtime_work"
   export FETCH_LOG="$case_dir/git.log"
   : > "$FETCH_LOG"
 }
@@ -132,6 +135,40 @@ fi
 test "$("$real_git" -C "$case_dir/online" rev-parse --is-shallow-repository)" = false
 checkout_pin "$old"
 assert_head "$old"
+
+
+# Exercise the production source-validation block between real checkout calls.
+# All inputs and the PO parser are tiny synthetic files; no native command runs.
+awk '/^# BEGIN SOURCE VALIDATION/ {copy=1; next} /^# END SOURCE VALIDATION/ {copy=0; found=1} copy {print} END {if (!found) exit 1}' "$build" > "$fixture/source.sh"
+mkdir -p "$fixture/origin/common" "$fixture/origin/engine/static/emscripten" "$fixture/origin/browser/po" "$fixture/origin/browser/util"
+printf 'Collabora Online\n' > "$fixture/origin/common/shared.hpp"
+printf 'neutral\n' > "$fixture/origin/engine/static/emscripten/favicon.ico"
+printf 'old\n' > "$fixture/origin/favicon.ico"
+printf 'msgid "hello"\nmsgstr "hello"\n' > "$fixture/origin/browser/po/en.po"
+printf 'import sys\nfrom pathlib import Path\nassert all("INVALID" not in Path(p).read_text() for p in sys.argv[2:])\n' > "$fixture/origin/browser/util/po2json.py"
+"$real_git" -C "$fixture/origin" add .
+"$real_git" -C "$fixture/origin" commit -qm 'source fixture'
+source_tip="$("$real_git" -C "$fixture/origin" rev-parse HEAD)"
+new_cache timestamp-round-trip
+checkout_pin "$source_tip"
+bash "$fixture/source.sh" > "$case_dir/source.log" 2>&1
+test -f "$case_dir/source-mtimes.json"
+before_mtime="$(stat -c %y "$case_dir/online/common/shared.hpp")"
+mkdir "$mtime_work"
+checkout_pin "$source_tip"
+bash "$fixture/source.sh" >> "$case_dir/source.log" 2>&1
+test "$(stat -c %y "$case_dir/online/common/shared.hpp")" = "$before_mtime"
+grep -Fq 'pre-build debranding scan passed' "$case_dir/source.log"
+grep -Fq 'browser PO catalogues passed' "$case_dir/source.log"
+grep -Fq 'Source timestamps: restored 1 files.' "$case_dir/source.log"
+# A failed real validation must prevent completion and record publication.
+mkdir "$mtime_work"
+checkout_pin "$source_tip"
+printf 'INVALID\n' >> "$case_dir/online/browser/po/en.po"
+if bash "$fixture/source.sh" >> "$case_dir/source.log" 2>&1; then
+  echo 'Invalid PO source passed preparation' >&2; exit 1
+fi
+test ! -e "$case_dir/source-mtimes.json"
 
 # Exercise the exact export here-document with text placeholders, never native code.
 export ONLINE_OFFICE_SOURCE_REVISION="$tip"
