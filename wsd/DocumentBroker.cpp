@@ -387,15 +387,30 @@ void DocumentBroker::handleAgentRecoveryRequest(const std::shared_ptr<StreamSock
         // Completed retries must never fence a newer epoch.
         if (!retired)
             fenceAgentRetirement(record.renderId);
+        if (!retired)
+        {
+            // The broker owns the socket; completion is sent by agentretiredkit.
+            record.recoveryReplies.erase(
+                std::remove_if(record.recoveryReplies.begin(), record.recoveryReplies.end(),
+                               [](const auto& pending) { return pending.expired(); }),
+                record.recoveryReplies.end());
+            if (record.recoveryReplies.size() >= 8)
+            {
+                HttpHelper::sendErrorAndShutdown(http::StatusCode::ServiceUnavailable, socket);
+                return;
+            }
+            record.recoveryReplies.emplace_back(socket);
+            return;
+        }
         Poco::JSON::Object result;
         result.set("epoch", record.epoch);
         result.set("requestid", record.requestId);
         result.set("viewid", record.viewId);
         result.set("renderid", record.renderId);
-        result.set("phase", retired ? "retired" : "retiring");
+        result.set("phase", "retired");
         std::ostringstream body;
         result.stringify(body);
-        http::Response response(retired ? http::StatusCode::OK : http::StatusCode::Accepted);
+        http::Response response(http::StatusCode::OK);
         response.set("Content-Type", "application/json");
         response.set("Cache-Control", "no-store");
         response.setBody(body.str());
@@ -1801,6 +1816,26 @@ bool DocumentBroker::handleAgentRetirementKit(const std::string& message)
         if (const auto reply = record.reply.lock())
             reply->sendTextFrame(record.result);
     }
+    for (const auto& pending : record.recoveryReplies)
+    {
+        if (const auto socket = pending.lock())
+        {
+            Poco::JSON::Object result;
+            result.set("epoch", record.epoch);
+            result.set("requestid", record.requestId);
+            result.set("viewid", record.viewId);
+            result.set("renderid", record.renderId);
+            result.set("phase", "retired");
+            std::ostringstream body;
+            result.stringify(body);
+            http::Response response(http::StatusCode::OK);
+            response.set("Content-Type", "application/json");
+            response.set("Cache-Control", "no-store");
+            response.setBody(body.str());
+            socket->sendAndShutdown(response);
+        }
+    }
+    record.recoveryReplies.clear();
     return true;
 }
 

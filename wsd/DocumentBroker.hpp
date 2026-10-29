@@ -2249,6 +2249,7 @@ private:
         bool stopDispatched = false;
         std::weak_ptr<ClientSession> transport;
         std::weak_ptr<ClientSession> reply;
+        std::vector<std::weak_ptr<StreamSocket>> recoveryReplies;
     };
 #if !MOBILEAPP
     bool agentRenewalIdentity(const AgentRetirementRecord& record,
