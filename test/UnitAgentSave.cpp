@@ -104,6 +104,47 @@ protected:
     std::shared_ptr<http::WebSocketSession> _agentTransportSocket;
 };
 
+class UnitHeadlessAgentLoad final : public AgentSaveTestBase
+{
+    bool _started = false;
+
+public:
+    UnitHeadlessAgentLoad()
+        : AgentSaveTestBase("UnitHeadlessAgentLoad")
+    {
+        setTimeout(std::chrono::seconds(30));
+    }
+
+    void configure(Poco::Util::LayeredConfiguration& config) override
+    {
+        config.setBool("security.enable_websocket_urp", true);
+    }
+
+    void configCheckFileInfo(const Poco::Net::HTTPRequest&,
+                             Poco::JSON::Object::Ptr& info) override
+    {
+        info->set("EnableWebsocketURP", true);
+    }
+
+    void invokeWSDTest() override
+    {
+        if (!_started)
+        {
+            _started = true;
+            startAgentRenderSession();
+        }
+    }
+
+    void onDocBrokerViewLoaded(const std::string&,
+                               const std::shared_ptr<ClientSession>& session) override
+    {
+        LOK_ASSERT(_started && _agentRenderSocket);
+        LOK_ASSERT(session->isAgentRenderView() && session->isLive());
+        LOK_ASSERT(session->isWritable() && session->getKitViewId() >= 0);
+        passTest("The first WOPI-authorised agent view loads without a browser session");
+    }
+};
+
 class UnitRenewedAgentSave final : public AgentSaveTestBase
 {
     std::atomic<int> _phase{ 0 };
@@ -1092,7 +1133,7 @@ UnitBase** unit_create_wsd_multi(void)
 {
     return new UnitBase* []
     {
-        new UnitAgentSave(), new UnitRenewedAgentSave(), new UnitClosedAgentCannotSave(),
+        new UnitHeadlessAgentLoad(), new UnitAgentSave(), new UnitRenewedAgentSave(), new UnitClosedAgentCannotSave(),
             new UnitWaitDisconnectAgentCannotSave(), new UnitAgentExpiryDuringSave(),
             new UnitAgentCoreSaveFailure(), new UnitAgentUploadFailure(),
             new UnitOrdinarySaveTimeoutRecovery(), new UnitBrowserCannotAgentSave(), nullptr

@@ -134,21 +134,10 @@ ChildSession::ChildSession(const std::shared_ptr<ProtocolHandlerInterface>& prot
     , _clientVisibleArea(0, 0, 0, 0)
     , _urpContext(nullptr)
     , _hasURP(false)
+    , _urpStartPending(enableWebsocketURP)
     , _boundAgentViewId(boundAgentViewId)
 {
-#if !MOBILEAPP
-    if (enableWebsocketURP && isURPEnabled())
-    {
-        LOG_INF("Starting the WOPI-authorised URP tunnel for session ["
-                << getName() << "]");
-
-        _hasURP = startURP(docManager.getLOKit(), docManager.getLOKitDocument(), &_urpContext);
-
-        if (!_hasURP)
-            LOG_INF("Failed to start a URP bridge for this session [" << getName()
-                                                                      << "], disabling URP");
-    }
-#endif
+    startURPBridge();
     LOG_INF("ChildSession ctor [" << getName() << "]. JailRoot: [" << _jailRoot << ']');
 }
 
@@ -191,6 +180,26 @@ ChildSession::~ChildSession()
     {
         _docManager->getLOKit()->cancelProxyCalls();
     }
+}
+
+void ChildSession::startURPBridge()
+{
+#if !MOBILEAPP
+    if (!_urpStartPending || !_docManager || !_docManager->isLoaded())
+        return;
+
+    // A first agent view must load its document before binding the bridge.
+    // Consume the request once, including failed starts and disabled URP.
+    _urpStartPending = false;
+    if (!isURPEnabled() || _agentRetirementFenced)
+        return;
+
+    LOG_INF("Starting the WOPI-authorised URP tunnel for session [" << getName() << "]");
+    _hasURP = startURP(_docManager->getLOKit(), _docManager->getLOKitDocument(), &_urpContext);
+    if (!_hasURP)
+        LOG_INF("Failed to start a URP bridge for this session [" << getName()
+                                                                << "], disabling URP");
+#endif
 }
 
 void ChildSession::stopURPBridge()
@@ -1392,6 +1401,7 @@ bool ChildSession::loadDocument(const StringVector& tokens)
     }
 
     assert(getLOKitDocument() && "Expected valid LOKitDocument instance");
+    startURPBridge();
     LOG_INF("Created new view with viewid: [" << _viewId << "] for username: ["
                                               << getUserNameAnonym() << "] in session: [" << getId()
                                               << "], template: [" << getDocTemplate() << ']');

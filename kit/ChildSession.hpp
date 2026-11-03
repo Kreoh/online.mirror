@@ -223,6 +223,7 @@ public:
     void downloadAsInForeground();
 
 private:
+    void startURPBridge();
     void stopURPBridge();
     /// Parses the "load" command as coolwsd writes it for the kit.
     void parseLoadCommand(const StringVector& tokens, std::string& part);
@@ -495,6 +496,8 @@ private:
 
     /// whether there is a URP session created for this ChildSession
     bool _hasURP;
+    /// A WOPI-authorised bridge request waiting for its document to load.
+    bool _urpStartPending;
     std::string _agentRetirementEpoch;
     bool _agentRetirementFenced = false;
     std::shared_ptr<COKitScriptOwner> _scriptOwner;
